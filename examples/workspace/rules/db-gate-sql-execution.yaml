@@ -1,0 +1,26 @@
+# SQL execution gate — spec §11.4. It intercepts the OPERATION (inner ring,
+# §5.3), not files. In Phase 0 the verdict is recorded passively; real
+# blocking arrives with enforcement (Phase 0c/1).
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: db.gate-sql-execution, version: 1.0.0, author: jhonatan, adrRef: adr:ADR-044, reviewAfter: P12M }
+spec:
+  reversibility: irreversible
+  on: [command.requested]
+  detect:
+    using: builtin:command.classify
+    with: { families: [psql, mysql, prisma, "*/artisan db:*"] }
+  validate:
+    using: tool:sqlglot.classify-statement
+  enforcement:
+    invalid:
+      decision: block
+      report: { message: "DROP/TRUNCATE, DML without WHERE, or DDL outside migrations" }
+    unknown:
+      decision: deny-pending-approval   # runtime-built SQL the parser cannot resolve
+    valid:
+      decision: allow                   # SELECT / scoped DML
+  constraints:
+    environment:
+      allow: [local, docker-dev]
+      deny:  [staging, production]

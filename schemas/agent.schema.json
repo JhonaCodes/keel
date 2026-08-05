@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:keel:schemas:v1alpha1:agent",
+  "title": "Keel Agent (keel/v1alpha1)",
+  "description": "kind: Agent — spec §14: a logical responsibility (e.g. an auditor) executed by an AgentExecutor, possibly a different model than the main session. Minimal Phase-2-seed form: role, the executor it routes to, an output schema its result is validated against, and a hard budget. A semantic verdict NEVER authorizes an irreversible action (§4.7).",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "keel/v1alpha1" },
+    "kind": { "const": "Agent" },
+    "metadata": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" },
+        "author": { "type": "string" },
+        "adrRef": { "type": "string" },
+        "reviewAfter": { "type": "string" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["role", "executor"],
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "enum": ["audit", "review", "implement"],
+          "description": "audit/review return findings without writing (§14.10 auditor mode)."
+        },
+        "executor": { "type": "string", "description": "executor:<id> that runs this agent." },
+        "objective": { "type": "string" },
+        "outputSchema": {
+          "type": "string",
+          "description": "Path (workspace-relative) to the JSON Schema the AgentResult is validated against (invariant 12)."
+        },
+        "budget": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "timeoutMs": { "type": "integer", "minimum": 1 },
+            "maxTokens": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    }
+  }
+}

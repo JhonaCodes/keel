@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:keel:schemas:v1alpha1:rule",
+  "title": "Keel Rule (keel/v1alpha1)",
+  "description": "kind: Rule — spec §11.1/11.3. author, adrRef and reviewAfter are MANDATORY (ADR-023): no rule compiles without provenance and a review window.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "keel/v1alpha1" },
+    "kind": { "const": "Rule" },
+    "metadata": {
+      "type": "object",
+      "required": ["id", "author", "adrRef", "reviewAfter"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" },
+        "author": { "type": "string", "minLength": 1 },
+        "adrRef": { "type": "string", "pattern": "^adr:" },
+        "reviewAfter": {
+          "type": "string",
+          "pattern": "^P",
+          "description": "ISO-8601 duration (P6M, P12M). Feeds keel prune (§7.7)."
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["on", "enforcement"],
+      "additionalProperties": false,
+      "properties": {
+        "reversibility": { "enum": ["reversible", "irreversible"] },
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "languages": { "type": "array", "items": { "type": "string" } },
+            "paths": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "include": { "type": "array", "items": { "type": "string" } },
+                "exclude": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "on": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/eventKind" }
+        },
+        "when": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "any": { "type": "array", "items": { "$ref": "#/$defs/whenCondition" } },
+            "all": { "type": "array", "items": { "$ref": "#/$defs/whenCondition" } }
+          }
+        },
+        "detect": { "$ref": "#/$defs/toolCall" },
+        "preconditions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["using", "onFail"],
+            "additionalProperties": false,
+            "properties": {
+              "using": { "$ref": "#/$defs/toolRef" },
+              "with": {},
+              "onFail": { "enum": ["deny", "block", "review"] }
+            }
+          }
+        },
+        "validate": { "$ref": "#/$defs/toolCall" },
+        "enforcement": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "invalid": { "$ref": "#/$defs/branch" },
+            "unknown": { "$ref": "#/$defs/branch" },
+            "valid": { "$ref": "#/$defs/branch" },
+            "always": { "$ref": "#/$defs/branch" }
+          }
+        },
+        "constraints": { "type": "object" }
+      }
+    }
+  },
+  "$defs": {
+    "eventKind": {
+      "enum": [
+        "session.started", "prompt.submitted", "analysis.started",
+        "context.requested", "file.opened", "file.edited",
+        "command.requested", "command.completed", "dependency.changed",
+        "transition.requested", "implementation.started",
+        "verification.started", "test.completed", "audit.started",
+        "completion.requested", "delivery.requested", "session.ended"
+      ]
+    },
+    "toolRef": {
+      "type": "string",
+      "pattern": "^(builtin|tool):.+"
+    },
+    "toolCall": {
+      "type": "object",
+      "required": ["using"],
+      "additionalProperties": false,
+      "properties": {
+        "using": { "$ref": "#/$defs/toolRef" },
+        "with": {},
+        "inputs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "whenCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "files.touch": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "branch": {
+      "type": "object",
+      "required": ["decision"],
+      "additionalProperties": false,
+      "properties": {
+        "decision": { "enum": ["allow", "review", "block", "deny-pending-approval"] },
+        "load": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "skills": { "type": "array", "items": { "type": "string" } },
+            "capabilities": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "report": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schema": { "type": "string" },
+            "message": { "type": "string" }
+          }
+        },
+        "invoke": {
+          "type": "object",
+          "required": ["agent"],
+          "additionalProperties": false,
+          "properties": {
+            "agent": { "type": "string" },
+            "inputs": { "type": "array", "items": { "type": "string" } },
+            "output": {}
+          }
+        }
+      }
+    }
+  }
+}

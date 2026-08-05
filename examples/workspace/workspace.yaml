@@ -1,0 +1,10 @@
+apiVersion: keel/v1alpha1
+kind: Workspace
+metadata: { id: example-11-4 }
+spec:
+  description: >
+    Example workspace with the spec §11.4 gates RUNNABLE: the prod-write-gate
+    (ADR-022 preconditions), the irreversible SQL gate and the reactive-state
+    rule, with stub external tools in bin/. It is the living demonstration of
+    Phase 0a (the DSL expresses the real gates) and 0b (passive evaluation +
+    ledger).

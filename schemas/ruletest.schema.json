@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:keel:schemas:v1alpha1:ruletest",
+  "title": "Keel RuleTest (keel/v1alpha1)",
+  "description": "Declarative fixture: event → expected result. It is Phase 0a's functional-equivalence criterion (§15.1) and the gate of `keel compile` (§10.2: a snapshot is published only if its tests pass).",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "keel/v1alpha1" },
+    "kind": { "const": "RuleTest" },
+    "metadata": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" },
+        "author": { "type": "string" },
+        "adrRef": { "type": "string" },
+        "reviewAfter": { "type": "string" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["target", "event", "expect"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "type": "string", "pattern": "^rule:.+" },
+        "event": {
+          "type": "object",
+          "required": ["kind"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "session.started", "prompt.submitted", "analysis.started",
+                "context.requested", "file.opened", "file.edited",
+                "command.requested", "command.completed", "dependency.changed",
+                "transition.requested", "implementation.started",
+                "verification.started", "test.completed", "audit.started",
+                "completion.requested", "delivery.requested", "session.ended"
+              ]
+            },
+            "session_id": { "type": "string" },
+            "file": { "type": "string" },
+            "language": { "type": "string" },
+            "content": { "type": "string" },
+            "line": { "type": "integer", "minimum": 0 },
+            "command": { "type": "string" },
+            "env": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
+            "files": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "expect": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "fired": { "type": "boolean" },
+            "verdict": { "enum": ["valid", "invalid", "unknown"] },
+            "decision": {
+              "enum": ["allow", "review", "block", "deny-pending-approval"],
+              "description": "Expected DECLARED decision. Phase 0's passive mode records it but forces the effective one to review (ADR-021)."
+            },
+            "origin": { "enum": ["deterministic", "semantic", "attestation", "human"] }
+          }
+        }
+      }
+    }
+  }
+}

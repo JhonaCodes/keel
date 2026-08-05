@@ -1,0 +1,20 @@
+# Agent + AgentExecutor (spec §14). The executor here is a local STUB that
+# emulates a `claude -p`-style call returning schema-valid JSON, so the demo
+# runs with no network/credentials. A real deployment points `command` at
+# `claude --bare -p --output-format json ...` (§14.8).
+apiVersion: keel/v1alpha1
+kind: Agent
+metadata: { id: architecture.reviewer, version: 1.0.0 }
+spec:
+  role: audit
+  executor: executor:local-stub
+  objective: "Review the material for architectural regressions; report findings."
+  budget: { timeoutMs: 30000 }
+---
+apiVersion: keel/v1alpha1
+kind: AgentExecutor
+metadata: { id: local-stub, version: 0.1.0 }
+spec:
+  command: [python3, bin/stub_reviewer.py]
+  model: stub-model
+  timeoutMs: 30000

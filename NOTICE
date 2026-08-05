@@ -1,0 +1,16 @@
+Keel — Runtime of the Agentic Cognitive Cycle
+Copyright 2026 JhonaCodes
+
+This product includes software and architectural concepts developed by
+JhonaCodes.
+
+The entire repository — the runtime, CLI, engine and adapters (source under
+crates/, schemas/, examples/) and the specification and design documents
+under docs/ (the "Agentic Cognitive Cycle" architecture, referred to in the
+specification by its technical name RCCA) — is licensed under the Apache
+License, Version 2.0 (see LICENSE).
+
+Redistributions and derivative works must retain this attribution.
+
+"Keel" is a trademark of JhonaCodes. The Apache License 2.0 does not grant
+rights to use this name; see TRADEMARK.md.

@@ -1,0 +1,47 @@
+# Keel — workspace root.
+#
+# Crate boundaries (see plan + spec §4.9, §10):
+#   keel-core   — stable vocabulary (Verdict, Decision, canonical hash). Leaf.
+#   keel-dsl    — AUTHORING types (YAML apiVersion/kind/metadata/spec). Leaf.
+#   keel-engine — compiler + snapshot + tools + ledger + runtime (modules with
+#                 forbidden edges verified by the architecture test:
+#                 runtime/snapshot/ledger/tools NEVER import keel-dsl).
+#   keel-cli    — the `keel` binary. Only crate that knows all; no logic.
+#
+# Forbidden edges (plan invariants; the why lives in each crate):
+#   compiler ⇏ runtime · runtime ⇏ dsl · snapshot ⇏ dsl · ledger ⇏ runtime
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/keel-core",
+    "crates/keel-dsl",
+    "crates/keel-engine",
+    "crates/keel-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# serde_yaml is archived/deprecated; serde_yaml_ng is the maintained fork.
+serde_yaml_ng = "0.10"
+thiserror = "2"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+# Local single-writer ledger: static SQLite (bundled) = one binary that runs
+# the same on the dev machine and in CI. sqlx would drag in unneeded async/pool.
+rusqlite = { version = "0.32", features = ["bundled"] }
+# default-features=false: no remote $ref resolution → no HTTP client in the
+# dependency tree (schemas are embedded and self-contained).
+jsonschema = { version = "0.26", default-features = false }
+sha2 = "0.10"
+regex = "1"
+globset = "0.4"
+# jiff: ISO-8601 spans (reviewAfter's "P6M", ADR-023) + RFC3339 timestamps.
+jiff = "0.2"
+ulid = "1"

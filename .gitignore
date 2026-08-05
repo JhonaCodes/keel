@@ -1,0 +1,10 @@
+# Rust build output
+/target/
+
+# Keel execution state (invariant 5: never versioned)
+.keel-state/
+**/.keel-state/
+
+# OS / tooling
+.DS_Store
+.jflow/

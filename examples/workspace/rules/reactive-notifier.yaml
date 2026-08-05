@@ -1,0 +1,39 @@
+# Direct access to notifier state — spec §11.3, the canonical example of
+# "available ≠ applied" (§2.2). A cheap detector opens the door; the external
+# tool gives the real verdict; the unknown branch declares an invoke that in
+# Phase 0 is only RECORDED (the semantic evaluator is Phase 2).
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata:
+  id: reactive-notifier.no-direct-data
+  version: 1.1.0
+  author: jhonatan
+  adrRef: adr:ADR-031
+  reviewAfter: P6M
+spec:
+  reversibility: reversible
+  scope:
+    languages: [dart]
+    paths:
+      include: ["lib/**"]
+      exclude: ["lib/generated/**"]
+  on: [file.edited]
+  detect:
+    using: builtin:text.contains
+    with: { value: ".notifier.data" }
+  validate:
+    using: tool:reactive-notifier.validate-access
+  enforcement:
+    invalid:
+      decision: block
+      load:
+        skills: [skill:reactive-notifier.access-patterns]
+      report:
+        schema: finding.sarif
+        message: "do not read notifier data; use the approved access pattern"
+    unknown:
+      decision: review                  # reversible → review (§4.7)
+      invoke:
+        agent: agent:reactive-notifier.state-auditor
+    valid:
+      decision: allow
