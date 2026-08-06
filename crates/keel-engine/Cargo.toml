@@ -10,6 +10,7 @@ keel-dsl = { path = "../keel-dsl" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml_ng = { workspace = true }
+jsonschema = { workspace = true }
 thiserror = { workspace = true }
 rusqlite = { workspace = true }
 regex = { workspace = true }

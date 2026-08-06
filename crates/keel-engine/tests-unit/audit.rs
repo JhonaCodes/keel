@@ -55,6 +55,7 @@ fn semantic_invalid_maps_to_review_and_records_semantic_origin() {
         &ledger,
         "ev_a1".into(),
         "2026-01-01T00:00:00Z".into(),
+        None,
     );
     assert_eq!(out.verdict, Verdict::Invalid);
     let entry = ledger.get("ev_a1").unwrap().unwrap();

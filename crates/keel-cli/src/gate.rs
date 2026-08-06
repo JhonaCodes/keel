@@ -374,6 +374,22 @@ pub fn audit(
         timeout_ms: executor.timeout_ms,
     };
 
+    // Invariant 12: load the declared outputSchema (if any) so run_audit can
+    // validate the agent result against its contract.
+    let output_schema = match &agent.output_schema {
+        Some(path) => {
+            let raw = std::fs::read_to_string(root.join(path)).with_context(|| {
+                format!(
+                    "agent `{agent_id}` declares outputSchema `{path}`, which could not be read"
+                )
+            })?;
+            let schema: serde_json::Value = serde_json::from_str(&raw)
+                .with_context(|| format!("outputSchema `{path}` is not valid JSON"))?;
+            Some(schema)
+        }
+        None => None,
+    };
+
     let out = run_audit(
         &agent_spec,
         &exec_spec,
@@ -383,6 +399,7 @@ pub fn audit(
         &ledger,
         new_ev_id(),
         now_ts(),
+        output_schema.as_ref(),
     );
 
     println!("agent    {} (role: {})", agent_spec.id, agent_spec.role);

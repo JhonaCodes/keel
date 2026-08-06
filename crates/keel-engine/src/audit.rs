@@ -79,12 +79,33 @@ pub fn run_audit(
     ledger: &Ledger,
     evidence_id: String,
     ts: String,
+    output_schema: Option<&serde_json::Value>,
 ) -> AuditOutcome {
     let prompt = build_prompt(agent, material);
     let timeout = Duration::from_millis(executor.timeout_ms.unwrap_or(agent.timeout_ms));
     let started = Instant::now();
 
-    let (verdict, findings, raw) = run_executor(executor, &prompt, timeout);
+    let (mut verdict, mut findings, raw) = run_executor(executor, &prompt, timeout);
+
+    // Invariant 12: if the agent declares an outputSchema, the result must
+    // conform to it before we trust the verdict. A non-conforming result is
+    // downgraded to `unknown` with an explicit finding — never accepted blindly.
+    if verdict != Verdict::Unknown {
+        if let Some(schema) = output_schema {
+            match schema_check(schema, &raw) {
+                Ok(true) => {}
+                Ok(false) => {
+                    verdict = Verdict::Unknown;
+                    findings =
+                        vec!["agent result did not match outputSchema (invariant 12)".into()];
+                }
+                Err(msg) => {
+                    verdict = Verdict::Unknown;
+                    findings = vec![msg];
+                }
+            }
+        }
+    }
 
     // section 4.7 / ADR-017: a semantic verdict may CONFIRM a concern (review) but
     // never authorizes an irreversible action. `invalid` from an auditor maps
@@ -217,6 +238,23 @@ fn run_executor(
             raw,
         ),
     }
+}
+
+/// Invariant 12: validate the JSON block of the agent result against the
+/// declared `outputSchema`. `Ok(true)` = conforms, `Ok(false)` = does not, and
+/// `Err(msg)` = the result was not JSON or the schema itself does not compile
+/// (both are treated as non-conformance by the caller).
+fn schema_check(schema: &serde_json::Value, raw: &str) -> Result<bool, String> {
+    let start = raw.find('{').ok_or("agent result has no JSON object")?;
+    let end = raw.rfind('}').ok_or("agent result has no JSON object")?;
+    let slice = raw
+        .get(start..=end)
+        .ok_or("agent result JSON is malformed")?;
+    let block: serde_json::Value =
+        serde_json::from_str(slice).map_err(|e| format!("agent result is not valid JSON: {e}"))?;
+    let validator = jsonschema::validator_for(schema)
+        .map_err(|e| format!("outputSchema does not compile: {e}"))?;
+    Ok(validator.is_valid(&block))
 }
 
 fn parse_result(raw: &str) -> Option<(Verdict, Vec<String>)> {
