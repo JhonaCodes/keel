@@ -8,7 +8,7 @@
 //! If the DSL cannot represent a rule from the spec itself, this test fails:
 //! it is the mechanical proof of expressiveness, the passing criterion of 0a.
 
-use keel_dsl::{parse_documents, Document};
+use keel_dsl::{Document, parse_documents};
 
 const CORPUS: &str = include_str!("corpus/rules_11_4.yaml");
 

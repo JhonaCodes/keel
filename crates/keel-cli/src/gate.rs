@@ -20,12 +20,12 @@
 //! decision. The rule logic never lives in the hook.
 
 use anyhow::{Context, Result};
-use keel_core::event::{Event, EventKind};
 use keel_core::Decision;
+use keel_core::event::{Event, EventKind};
 use keel_engine::ledger::Ledger;
 use keel_engine::packet;
-use keel_engine::runtime::{evaluate_event, Mode};
-use keel_engine::session::{deliver_skills, SessionStore};
+use keel_engine::runtime::{Mode, evaluate_event};
+use keel_engine::session::{SessionStore, deliver_skills};
 use keel_engine::snapshot::Snapshot;
 use keel_engine::workspace;
 use std::io::Read;
@@ -47,6 +47,7 @@ pub fn gate(
     client: Client,
     session_flag: Option<String>,
     passive: bool,
+    no_inherit_env: bool,
 ) -> Result<ExitCode> {
     let mut input = String::new();
     std::io::stdin()
@@ -63,9 +64,14 @@ pub fn gate(
 
     // ADR-022: preconditions evaluate the state of the world AT REQUEST TIME.
     // At the gate we are live (not replaying), so capture the real process
-    // environment — event-provided values win over inherited ones.
-    for (k, v) in std::env::vars() {
-        event.env.entry(k).or_insert(v);
+    // environment — event-provided values win over inherited ones. With
+    // --no-inherit-env we skip this and evaluate against ONLY the event's env
+    // (replay semantics): the guarantee that a host var cannot silently flip a
+    // precondition, used by deterministic CI/tests.
+    if !no_inherit_env {
+        for (k, v) in std::env::vars() {
+            event.env.entry(k).or_insert(v);
+        }
     }
     if event.session_id.is_none() {
         event.session_id = session_flag;
@@ -337,7 +343,7 @@ pub fn audit(
     input: &Path,
     session: Option<String>,
 ) -> Result<ExitCode> {
-    use keel_engine::audit::{run_audit, AgentSpec, ExecutorSpec};
+    use keel_engine::audit::{AgentSpec, ExecutorSpec, run_audit};
 
     let files = workspace::load(root)?;
     let snapshot = Snapshot::load(&files.snapshot_path())

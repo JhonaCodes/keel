@@ -8,7 +8,7 @@
 //! executes under `cargo test --workspace`, which builds that binary first.
 
 use keel_core::event::Event;
-use keel_tests::measure::{run, Dataset, Options};
+use keel_tests::measure::{Dataset, Options, run};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 

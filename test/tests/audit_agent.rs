@@ -5,7 +5,7 @@
 //! reach `audit`'s private helpers.
 
 use keel_core::{OriginClass, Verdict};
-use keel_engine::audit::{run_audit, AgentSpec, ExecutorSpec};
+use keel_engine::audit::{AgentSpec, ExecutorSpec, run_audit};
 use keel_engine::ledger::Ledger;
 
 fn agent() -> AgentSpec {

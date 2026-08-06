@@ -144,7 +144,7 @@ fn failed_precondition_yields_invalid_with_detail() {
     rule.validate = None;
     rule.preconditions = vec![crate::snapshot::CompiledPrecondition {
         using: CompiledToolRef::Builtin("env.present".into()),
-        with: Some(serde_json::json!({"name": "NUI_PROD_WRITE"})),
+        with: Some(serde_json::json!({"name": "PROD_WRITE_ENABLED"})),
         on_fail_declared: Decision::Block,
     }];
     let s = snap(vec![rule]);

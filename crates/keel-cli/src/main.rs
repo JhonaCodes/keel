@@ -124,6 +124,12 @@ enum Command {
         /// Shadow mode: evaluate and record, never block (try new rules risk-free).
         #[arg(long)]
         passive: bool,
+        /// Do NOT fold the live process environment into the event: evaluate
+        /// preconditions against ONLY the env the event carries (like replay).
+        /// For deterministic CI/tests where an inherited host var must not flip
+        /// a precondition. Production default (unset) captures live env per ADR-022.
+        #[arg(long)]
+        no_inherit_env: bool,
     },
     /// Invoke a specialized agent (spec section 14) on some material. Records an
     /// advisory semantic verdict (section 6.4/section 4.7) — findings, never a block.
@@ -242,6 +248,7 @@ fn main() -> ExitCode {
             client,
             session,
             passive,
+            no_inherit_env,
         } => {
             let client = match client.as_deref() {
                 None => gate::Client::Native,
@@ -251,7 +258,7 @@ fn main() -> ExitCode {
                     return ExitCode::FAILURE;
                 }
             };
-            gate::gate(&workspace, client, session, passive)
+            gate::gate(&workspace, client, session, passive, no_inherit_env)
         }
         Command::Audit {
             agent,

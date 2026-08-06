@@ -88,25 +88,25 @@ fn evaluate_rule(
     mode: Mode,
 ) -> Option<Evaluation> {
     // 1. Scope: the rule does not apply outside its coverage (D1 of section 7.4).
-    if let Some(scope) = &rule.scope {
-        if !scope.matches(event.file.as_deref(), event.language.as_deref()) {
-            return None;
-        }
+    if let Some(scope) = &rule.scope
+        && !scope.matches(event.file.as_deref(), event.language.as_deref())
+    {
+        return None;
     }
 
     // 2. When: additional activation condition (cognitive activation).
-    if let Some(when) = &rule.when {
-        if !when.matches(&event.files) {
-            return None;
-        }
+    if let Some(when) = &rule.when
+        && !when.matches(&event.files)
+    {
+        return None;
     }
 
     // 3. Detect: economical prefilter. A miss = the rule does not fire = no
     //    entry (the detector never decides NOR generates evidence, section 4.5).
-    if let Some(detect) = &rule.detect {
-        if !tools::run_detector(detect, event) {
-            return None;
-        }
+    if let Some(detect) = &rule.detect
+        && !tools::run_detector(detect, event)
+    {
+        return None;
     }
 
     let started = std::time::Instant::now();

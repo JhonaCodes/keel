@@ -9,8 +9,8 @@
 
 use crate::snapshot::CompiledRule;
 use crate::snapshot::Snapshot;
-use keel_core::event::EventKind;
 use keel_core::Decision;
+use keel_core::event::EventKind;
 use std::collections::BTreeSet;
 
 /// What a client adapter can enforce (section 12.1). Minimal Phase-1 form: the set of

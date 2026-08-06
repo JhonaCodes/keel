@@ -20,7 +20,7 @@
 
 use keel_core::event::EventKind;
 use keel_core::{Decision, OriginClass, Verdict};
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 

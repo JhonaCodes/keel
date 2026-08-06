@@ -93,11 +93,11 @@ fn validate_builtin_match_is_invalid_absent_content_is_unknown() {
 #[test]
 fn precondition_env_and_flag_read_the_event_not_the_process() {
     let mut ev = event_with(None, Some("psql --allow-production-write -c 'SELECT 1'"));
-    ev.env.insert("NUI_PROD_WRITE".into(), "1".into());
+    ev.env.insert("PROD_WRITE_ENABLED".into(), "1".into());
 
     let env_pre = CompiledPrecondition {
         using: CompiledToolRef::Builtin("env.present".into()),
-        with: Some(serde_json::json!({"name": "NUI_PROD_WRITE"})),
+        with: Some(serde_json::json!({"name": "PROD_WRITE_ENABLED"})),
         on_fail_declared: keel_core::Decision::Block,
     };
     let flag_pre = CompiledPrecondition {

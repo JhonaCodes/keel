@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::workspace::WorkspaceFiles;
-use keel_dsl::{parse_documents, Document};
+use keel_dsl::{Document, parse_documents};
 
 fn files_from_yaml(yaml: &str) -> WorkspaceFiles {
     let mut files = WorkspaceFiles::empty(std::path::PathBuf::from("/tmp/ws"));

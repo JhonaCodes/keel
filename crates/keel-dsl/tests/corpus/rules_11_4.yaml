@@ -109,7 +109,7 @@ spec:
     with: { families: [mysql-toolkit, psql, mysql] }
   preconditions:
     - using: builtin:env.present
-      with: { name: NUI_PROD_WRITE }
+      with: { name: PROD_WRITE_ENABLED }
       onFail: deny
     - using: builtin:flag.present
       with: { flag: --allow-production-write }

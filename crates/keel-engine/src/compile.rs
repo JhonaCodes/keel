@@ -51,7 +51,9 @@ pub struct CompileOutcome {
 
 #[derive(Debug, thiserror::Error)]
 pub enum CompileError {
-    #[error("duplicate id `{0}`: two components at the same authority level (section 7.6) — resolution required, never silent")]
+    #[error(
+        "duplicate id `{0}`: two components at the same authority level (section 7.6) — resolution required, never silent"
+    )]
     DuplicateId(String),
     #[error("rule `{rule}`: unresolvable reference `{reference}` — {hint}")]
     UnresolvedTool {
@@ -59,7 +61,9 @@ pub enum CompileError {
         reference: String,
         hint: String,
     },
-    #[error("agent `{agent}` routes to executor `{executor}`, which is not declared in agents/ — a governed agent must resolve to a known executor (invariant 11)")]
+    #[error(
+        "agent `{agent}` routes to executor `{executor}`, which is not declared in agents/ — a governed agent must resolve to a known executor (invariant 11)"
+    )]
     UnresolvedExecutor { agent: String, executor: String },
     #[error("rule `{rule}`: invalid regex in detect/validate: {source}")]
     InvalidRegex {
@@ -67,7 +71,9 @@ pub enum CompileError {
         #[source]
         source: regex::Error,
     },
-    #[error("rule `{rule}`: external detect not supported in Phase 0 (the section 11.4 corpus uses builtin detectors only); use a builtin or move the tool to validate")]
+    #[error(
+        "rule `{rule}`: external detect not supported in Phase 0 (the section 11.4 corpus uses builtin detectors only); use a builtin or move the tool to validate"
+    )]
     ExternalDetect { rule: String },
     #[error("rule `{rule}`: reviewAfter `{value}` is not a valid ISO-8601 duration")]
     BadReviewAfter { rule: String, value: String },
@@ -237,7 +243,7 @@ fn compile_rule(
         Some(call) => {
             match &call.using {
                 ToolRef::External(_) => {
-                    return Err(CompileError::ExternalDetect { rule: id.clone() })
+                    return Err(CompileError::ExternalDetect { rule: id.clone() });
                 }
                 ToolRef::Builtin(bid) => {
                     if !BUILTIN_DETECTORS.contains(&bid.as_str()) {
@@ -349,15 +355,14 @@ fn compile_rule(
 
     // Rule debt (section 6.5/section 10.4): a block with neither message nor skills
     // produces findings open to interpretation — declared as a warning.
-    if let Some(inv) = &enforcement.invalid {
-        if inv.decision >= Decision::Block
-            && inv.report_message.is_none()
-            && inv.load_skills.is_empty()
-        {
-            warnings.push(format!(
+    if let Some(inv) = &enforcement.invalid
+        && inv.decision >= Decision::Block
+        && inv.report_message.is_none()
+        && inv.load_skills.is_empty()
+    {
+        warnings.push(format!(
                 "rule `{id}`: invalid branch with decision block but no report.message or load.skills — rule debt (section 6.5): an ambiguous block reproduces the failure mode the system fights"
             ));
-        }
     }
 
     Ok(CompiledRule {

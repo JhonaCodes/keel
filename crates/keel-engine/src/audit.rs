@@ -94,19 +94,18 @@ pub fn run_audit(
     // Invariant 12: if the agent declares an outputSchema, the result must
     // conform to it before we trust the verdict. A non-conforming result is
     // downgraded to `unknown` with an explicit finding — never accepted blindly.
-    if verdict != Verdict::Unknown {
-        if let Some(schema) = output_schema {
-            match schema_check(schema, &raw) {
-                Ok(true) => {}
-                Ok(false) => {
-                    verdict = Verdict::Unknown;
-                    findings =
-                        vec!["agent result did not match outputSchema (invariant 12)".into()];
-                }
-                Err(msg) => {
-                    verdict = Verdict::Unknown;
-                    findings = vec![msg];
-                }
+    if verdict != Verdict::Unknown
+        && let Some(schema) = output_schema
+    {
+        match schema_check(schema, &raw) {
+            Ok(true) => {}
+            Ok(false) => {
+                verdict = Verdict::Unknown;
+                findings = vec!["agent result did not match outputSchema (invariant 12)".into()];
+            }
+            Err(msg) => {
+                verdict = Verdict::Unknown;
+                findings = vec![msg];
             }
         }
     }
@@ -119,16 +118,16 @@ pub fn run_audit(
     // time; this bounds cost. maxDepth/cross-cost stay for Phase 2 (they need
     // the delegation graph).
     let reported_tokens = parse_tokens(&raw).unwrap_or(0);
-    if let Some(limit) = agent.max_tokens {
-        if reported_tokens > limit {
-            verdict = Verdict::Unknown;
-            // Append, don't replace: if the schema check (inv 12) already
-            // recorded a finding, a simultaneous budget breach must not erase
-            // it — the ledger should show BOTH reasons the result was rejected.
-            findings.push(format!(
-                "exceeded declared maxTokens (invariant 13): reported {reported_tokens} > limit {limit}"
-            ));
-        }
+    if let Some(limit) = agent.max_tokens
+        && reported_tokens > limit
+    {
+        verdict = Verdict::Unknown;
+        // Append, don't replace: if the schema check (inv 12) already
+        // recorded a finding, a simultaneous budget breach must not erase
+        // it — the ledger should show BOTH reasons the result was rejected.
+        findings.push(format!(
+            "exceeded declared maxTokens (invariant 13): reported {reported_tokens} > limit {limit}"
+        ));
     }
 
     // section 4.7 / ADR-017: a semantic verdict may CONFIRM a concern (review) but
@@ -209,7 +208,7 @@ fn run_executor(
                 Verdict::Unknown,
                 vec![format!("executor not runnable: {e}")],
                 String::new(),
-            )
+            );
         }
     };
     if let Some(mut stdin) = child.stdin.take() {
@@ -237,7 +236,7 @@ fn run_executor(
                     Verdict::Unknown,
                     vec![format!("wait failed: {e}")],
                     String::new(),
-                )
+                );
             }
         }
     }

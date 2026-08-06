@@ -275,7 +275,7 @@ pub fn run_external(def: &ExternalToolDef, event: &Event, ctx: ExecContext<'_>) 
                     def.id
                 ),
                 started,
-            )
+            );
         }
     };
 
@@ -311,7 +311,7 @@ pub fn run_external(def: &ExternalToolDef, event: &Event, ctx: ExecContext<'_>) 
                 return unknown(
                     format!("tool `{}` failed while waiting: {e}", def.id),
                     started,
-                )
+                );
             }
         }
     };
@@ -342,7 +342,7 @@ pub fn run_external(def: &ExternalToolDef, event: &Event, ctx: ExecContext<'_>) 
                 return unknown(
                     format!("tool `{}`: unparseable verdict-json output", def.id),
                     started,
-                )
+                );
             }
         },
         OutputKind::Sarif => match parse_sarif(&stdout) {
