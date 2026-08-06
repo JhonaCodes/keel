@@ -78,9 +78,26 @@ pub fn gate(
     }
 
     let files = workspace::load(root)?;
+    std::fs::create_dir_all(files.state_dir())?;
+
+    // Session-layer signal (section 6.5): the client's context was compacted, so
+    // skills it had loaded are gone. Reset the delivered-skill state for this
+    // session so the next matching rule re-delivers them. It governs no action
+    // and needs no snapshot — reset and return.
+    if event.kind == EventKind::ContextCompacted {
+        let store = SessionStore::new(&files.state_dir());
+        let session_id = event
+            .session_id
+            .clone()
+            .unwrap_or_else(|| "anonymous".into());
+        let mut state = store.load(&session_id);
+        state.loaded_skills.clear();
+        store.save(&session_id, &state, &now_ts())?;
+        return Ok(ExitCode::SUCCESS);
+    }
+
     let snapshot = Snapshot::load(&files.snapshot_path())
         .context("no published snapshot — run `keel compile` first")?;
-    std::fs::create_dir_all(files.state_dir())?;
     let ledger = Ledger::open(&files.ledger_path())?;
 
     // `--passive` = shadow mode: evaluate and record, never block. For trying

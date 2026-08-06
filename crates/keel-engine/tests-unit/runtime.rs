@@ -195,6 +195,44 @@ fn unknown_branch_invoke_is_recorded_not_executed() {
     assert_eq!(evs[0].tokens, 0, "no tokens in Phase 0");
 }
 
+/// Agents are NOT skills (orthogonal paths). On the SAME branch, a `load.skills`
+/// ref travels as L2 context to deliver (`eval.load_skills`, pure text, no
+/// process), while an `invoke.agent` is only RECORDED as not-executed — the L3
+/// executor is spawned solely by the explicit `keel audit` path, never during
+/// gate/observe. Neither spawns anything here.
+#[test]
+fn skills_and_agents_are_orthogonal_paths() {
+    let mut rule = blocking_rule();
+    rule.validate = Some(CompiledToolCall {
+        using: CompiledToolRef::External("missing.tool".into()),
+        with: None,
+    });
+    rule.enforcement.unknown = Some(CompiledBranch {
+        decision: Decision::Review,
+        load_skills: vec!["skill:access-patterns#compact".into()],
+        load_capabilities: vec![],
+        report_message: None,
+        invoke_agent: Some("agent:auditor".into()),
+    });
+    let s = snap(vec![rule]);
+    let evs = evaluate_event(
+        &s,
+        &edited("lib/a.dart", "x // TODO"),
+        Path::new("."),
+        Mode::Passive,
+    );
+    // L2: the skill ref is carried as context to deliver — no process.
+    assert_eq!(
+        evs[0].load_skills,
+        vec!["skill:access-patterns#compact".to_string()]
+    );
+    // L3: the agent invoke is only recorded as NOT executed during evaluation.
+    assert!(
+        evs[0].detail.as_deref().unwrap().contains("NOT executed"),
+        "invoke.agent must be recorded-not-executed in gate/observe"
+    );
+}
+
 /// A declared `load.capabilities` is a forward-declared field: not yet
 /// activated by the runtime, but surfaced in the evidence so it is never a
 /// silent no-op (like `invoke`, it is recorded honestly).
