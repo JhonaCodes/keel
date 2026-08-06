@@ -14,6 +14,10 @@
 //!                                          along)
 //! tools     → keel-core                  (⇏ dsl)
 //! ledger    → keel-core                  (⇏ dsl, ⇏ runtime: it is a sink)
+//! resolution → dsl + workspace + lock    (config-side, pre-compile: selects
+//!                                          which layers apply by repo identity,
+//!                                          section 7.1 — like compile, it may
+//!                                          see the DSL; it is not runtime-side)
 //! runtime   → snapshot + tools           (⇏ dsl: the runtime NEVER sees
 //!                                          configuration, only the snapshot —
 //!                                          structural guarantee of ADR-004)
@@ -35,6 +39,7 @@ pub mod compile;
 pub mod ledger;
 pub mod lock;
 pub mod packet;
+pub mod resolution;
 pub mod runtime;
 pub mod sarif;
 pub mod session;

@@ -84,7 +84,7 @@ RuleTest, RepositoryRegistry, Profile, Exception. Commands: `workspace init`, `c
 
 | Item | Status | Evidence |
 |---|---|---|
-| 7.1 resolution by repo identity | ✅ | `keel bind` derives `project:org/repo` from the git remote → `.keel/project.yaml` |
+| 7.1 resolution by repo identity | ✅ | `keel bind` derives `project:org/repo` from the git remote → `.keel/project.yaml`; `resolution::resolve` selects the chain (global + org + project) and verifies identity vs `repositories.yaml` (local advisory) |
 | 7.2 composition order | 🟡 | layer LOADING landed (`workspace::load_layered`, section 8.5 dirs in the fixed 7.2 order); composing them + monotonicity still a stub (7.4) |
 | 7.3 inheritance types | 🟡 | authoring vocabulary parses + round-trips (`locked`/`overridable`/`merge` on `RuleSpec`); monotonicity runtime still a stub (see 7.4) |
 | 7.4 monotonicity D1–D4 | ⏭ | documented stub; lattice ready in `keel-core::Decision` |
@@ -111,7 +111,7 @@ RuleTest, RepositoryRegistry, Profile, Exception. Commands: `workspace init`, `c
 | 12.4 compatible vs governed mode | 🟡 | compatible only (no proxy) |
 | 13.1 security baseline | 🟡 | env hygiene relied on; secret-ref/allowlists/sandbox pending |
 | 13.2 adversarial content delimited | ✅ | `audit.rs` |
-| 13.3 repository identity | ⏭ | compliance-plane concern |
+| 13.3 repository identity | 🟡 | `resolution` checks the repo vs `repositories.yaml` and degrades to advisory on mismatch (local); recording the advisory to the ledger + hard CI enforcement land with the install-story wiring |
 
 ## section 14 Specialized agents & cross-model
 
