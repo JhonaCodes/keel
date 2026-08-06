@@ -39,7 +39,7 @@ Leyenda, sin zona gris:
 | # | Qué | Estado real | file:line | Falta | Tamaño | Fase |
 |---|---|---|---|---|---|---|
 | **F1** | `constraints` (`environment.allow/deny`) | ✅ **HECHO (Fase C, PR pendiente)**: tipado a `CompiledConstraints` en compile (shape malformado → error, no silent) y evaluado en runtime (`runtime::env_violation`): deny bloquea siempre, allow no-vacío = allowlist estricta. Fluye por el branch `invalid`. | `runtime.rs env_violation`; `snapshot.rs CompiledConstraints`; `compile.rs BadConstraints` | — | C ✅ |
-| **G1/G2** | ContextPacket: campos + `source`+snapshot hash | ✅ **HECHO (Fase D)**: `render` emite línea `source: rule=… snapshot=sha256:…`; hash threadeado desde el snapshot | `packet.rs render` | — | D ✅ |
+| **G1/G2** | ContextPacket: línea `source` + snapshot hash (forma transcript, no objeto tipado) | ✅ **HECHO (Fase D)**: `render` emite línea `source: rule=… snapshot=sha256:…`; hash threadeado desde el snapshot | `packet.rs render` | — | D ✅ |
 | **G4** | Exemplar garantizado en `block` + rule-debt | ✅ **HECHO (Fase D)**: `deliver_skills(force_exemplar)` re-adjunta el par en block aunque el skill esté cargado; warning de compile si un branch block carga skills sin exemplar | `session.rs deliver_skills`; `compile.rs` (rule-debt) | — | D ✅ |
 | **Cov** | Cobertura e2e del packet | ✅ **HECHO (Fase D)**: `test/tests/packet_content.rs` asserta el packet en stderr del binario real (verdict+finding+source+snapshot+evidence) | `packet_content.rs` | — | D ✅ |
 | **#12** | Aislamiento de tests vs config del usuario | `gate.rs:64-69` inyecta el env real → una precondición `env.present` puede voltearse por una var del host/CI | `gate.rs:64-69`, `tools.rs:141-149` | Flag `--no-inherit-env` + harness hermético (env scrub, clock/id fijos) | Chico-Medio | B |
@@ -50,7 +50,7 @@ Leyenda, sin zona gris:
 
 ## ⏭ Phase 2 — unidades enteras, gated (NO son "a medias")
 
-Unidades ENTERAS no empezadas, cada una con su **propia** precondición (no todas por el mismo gate): la mayoría por la corrida REAL de Phase 0c (la spec gatea el crecimiento); Mono por una 2ª capa de autoridad; MCP por el diferido de ADR-005/006. Se consolidarán en `PHASE2_INITIATIVE.md` (se crea en Fase F); mientras, el detalle vive en [`PROGRAMA_DE_TRABAJO.md`](PROGRAMA_DE_TRABAJO.md) (T4-T11) y [`ROADMAP.md`](ROADMAP.md).
+Unidades ENTERAS no empezadas, cada una con su **propia** precondición (no todas por el mismo gate): la mayoría por la corrida REAL de Phase 0c (la spec gatea el crecimiento); Mono por una 2ª capa de autoridad; MCP por el diferido de ADR-005/006. Se consolidan en [`PHASE2_INITIATIVE.md`](PHASE2_INITIATIVE.md); el detalle también en [`PROGRAMA_DE_TRABAJO.md`](PROGRAMA_DE_TRABAJO.md) (T4-T11) y [`ROADMAP.md`](ROADMAP.md).
 
 | # | Unidad | Precondición | Estado real | file:line | Doc |
 |---|---|---|---|---|---|
@@ -73,16 +73,16 @@ Unidades ENTERAS no empezadas, cada una con su **propia** precondición (no toda
 | # | Consideración | Estado | Dónde |
 |---|---|---|---|
 | 1 | agents ≠ skills (ortogonalidad) | ✅ **HECHO (Fase E)**: test `skills_and_agents_are_orthogonal_paths` | Fase E2 |
-| 1-exec | agente con proveedor/modelo seleccionable (codex/claude/haiku) | ⏭ Phase 2 | PHASE2_INITIATIVE (Fase F) |
+| 1-exec | agente con proveedor/modelo seleccionable (codex/claude/haiku) | ⏭ Phase 2 | PHASE2_INITIATIVE |
 | 2 | tests de que el runtime funciona | 🔨 suite e2e | Fases B/D/E |
 | 3 | gate bloquea + entrega contexto/condiciones | 🔨 | Fase D |
 | 4 | skill-on-action (leer skill antes de escribir) | ⏭ (mecanismo listo, falta emisor de fase) | PHASE2 / Fase E3 |
 | 5 | formatos que el LLM necesita | 🔨 | Fase D |
-| 6 | scheduler máx agentes paralelos + cola sqlite | ⏭ Phase 2 | PHASE2_INITIATIVE (Fase F) |
+| 6 | scheduler máx agentes paralelos + cola sqlite | ⏭ Phase 2 | PHASE2_INITIATIVE |
 | 7 | no recargar skill salvo pérdida por compact | 🔨 | Fase E1 |
-| 8 | guardrails al agotar límites | ⏭ Phase 2 | PHASE2_INITIATIVE (Fase F) |
+| 8 | guardrails al agotar límites | ⏭ Phase 2 | PHASE2_INITIATIVE |
 | 9 | script/tool en frío > IA (0 tokens) | 🔨 doctrina | Fase F1 |
 | 10 | ML en procesos específicos | ⏭ investigación | Fase F3 |
 | 11 | ~~bug anzco~~ | descartado (no es Keel) | — |
 | 12 | aislar tests de las configs del usuario | 🔨 | Fase B |
-| 13 | backlog de tareas en SQLite por proyecto (sale de la cola al claim/complete) | ⏭ Phase 2 (substrate de #6) | PHASE2_INITIATIVE (Fase F) |
+| 13 | backlog de tareas en SQLite por proyecto (sale de la cola al claim/complete) | ⏭ Phase 2 (substrate de #6) | PHASE2_INITIATIVE |
