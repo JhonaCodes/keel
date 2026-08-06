@@ -1,0 +1,17 @@
+# Inner-ring rule (spec section 5.3): a `command.requested` that runs psql is
+# irreversible; a DROP in its content is a blocking violation. detect classifies
+# the command family, validate inspects the content — so a clean psql command
+# fires the rule and resolves `valid` (exercises the no-false-positive path),
+# while a DROP resolves `invalid` and is PREVENTABLE (pre-action, exit 2).
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: db.psql-no-drop, version: 1.0.0, author: phase0c, adrRef: adr:ADR-001, reviewAfter: P6M }
+spec:
+  reversibility: irreversible
+  on: [command.requested]
+  detect:   { using: builtin:command.classify, with: { families: ["psql"] } }
+  validate: { using: builtin:text.contains, with: { value: "DROP" } }
+  enforcement:
+    invalid: { decision: block, report: { message: "no DROP in a psql command" } }
+    unknown: { decision: deny-pending-approval }
+    valid:   { decision: allow }

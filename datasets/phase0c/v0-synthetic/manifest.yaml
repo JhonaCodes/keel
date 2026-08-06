@@ -1,0 +1,14 @@
+# Phase 0c dataset manifest (spec section 15.1). A dataset is a COMPLETE keel
+# workspace (fixing "the same underlying rules") plus a set of recorded tasks
+# replayed in both passive and enforce modes.
+id: phase0c-v0-synthetic
+description: Synthetic v0 dataset — proves the Phase 0c harness end-to-end with builtin-only rules (portable, no external tools).
+kind: synthetic
+keel_version_floor: 0.1.0
+task_count: 5
+notes: >
+  v0 is SYNTHETIC. It proves the measurement harness is correct and reproducible
+  and exercises the inner-ring block that produces the enforcement delta. The
+  REAL Phase 0c decision requires capturing real agent sessions in a real repo
+  with the same model and client; that step only adds tasks/*.jsonl plus their
+  labels in expected.yaml — nothing else. See README.md and spec section 15.1.
