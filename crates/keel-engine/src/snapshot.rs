@@ -192,11 +192,31 @@ pub struct CompiledRule {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validate: Option<CompiledToolCall>,
     pub enforcement: CompiledEnforcement,
-    /// Constraints preserved from the DSL (section 11.4). Recorded and hashed;
-    /// the runtime evaluator is tracked as F1 in docs/PARCIALES.md (pending,
-    /// not yet wired).
+    /// Environment constraints (section 11.4): `allow`/`deny` evaluated at runtime
+    /// against the event's connection context (see `runtime::env_violation`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub constraints: Option<serde_json::Value>,
+    pub constraints: Option<CompiledConstraints>,
+}
+
+/// Compiled `constraints` block (section 11.4). Typed at compile time so a
+/// malformed shape fails the build instead of silently doing nothing at eval.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompiledConstraints {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment: Option<EnvConstraint>,
+}
+
+/// Environment allow/deny (section 11.4). `deny` blocks ALWAYS; a non-empty
+/// `allow` is a strict allowlist — the action must name an allowed environment,
+/// classified from the event's connection context (command + content).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EnvConstraint {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allow: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deny: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

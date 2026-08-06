@@ -41,10 +41,10 @@ pub struct RuleSpec {
     pub validate: Option<ToolCall>,
     pub enforcement: Enforcement,
     /// Additional constraints (e.g. `environment.allow/deny` from the section 11.4
-    /// SQL gate). Parsed, compiled and hashed into the snapshot; the runtime
-    /// evaluator is tracked as F1 in docs/PARCIALES.md (pending, not yet wired).
-    /// Keeping them loose here is deliberate: losing them in the round-trip
-    /// would violate the Phase 0a criterion.
+    /// SQL gate). Kept loose in the DSL for round-trip fidelity; the compiler
+    /// types them (`CompiledConstraints`) and the runtime EVALUATES them
+    /// (`runtime::env_violation`): `deny` blocks always, a non-empty `allow` is a
+    /// strict allowlist.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub constraints: Option<serde_json::Value>,
 }

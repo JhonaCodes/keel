@@ -154,6 +154,27 @@ spec:
     ));
 }
 
+/// F1 (section 11.4): a malformed `constraints` shape is a BUILD error, never a
+/// silently-ignored field at eval — `allow` must be a list of strings.
+#[test]
+fn malformed_constraints_fails_compile() {
+    let yaml = r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: r1, author: t, adrRef: "adr:ADR-1", reviewAfter: P6M }
+spec:
+  on: [command.requested]
+  validate: { using: "builtin:text.contains", with: { value: "x" } }
+  enforcement: { invalid: { decision: review } }
+  constraints: { environment: { allow: "not-a-list" } }
+"#;
+    let files = files_from_yaml(yaml);
+    assert!(matches!(
+        compile(&files, "t".into()).unwrap_err(),
+        CompileError::BadConstraints { .. }
+    ));
+}
+
 /// Mismo workspace compilado dos veces → mismo hash (invariante 9).
 #[test]
 fn same_workspace_same_hash() {

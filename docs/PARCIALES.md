@@ -38,7 +38,7 @@ Leyenda, sin zona gris:
 
 | # | Qué | Estado real | file:line | Falta | Tamaño | Fase |
 |---|---|---|---|---|---|---|
-| **F1** | `constraints` (`environment.allow/deny`) | **Parcial OCULTO**: se parsea, compila y entra al hash del snapshot, pero **nunca se evalúa** | `rule.rs:49` → `compile.rs:392` → `snapshot.rs:196` (sin lector) | Evaluador en runtime (espejar `run_precondition`, `tools.rs:131-169`) | Chico | C |
+| **F1** | `constraints` (`environment.allow/deny`) | ✅ **HECHO (Fase C, PR pendiente)**: tipado a `CompiledConstraints` en compile (shape malformado → error, no silent) y evaluado en runtime (`runtime::env_violation`): deny bloquea siempre, allow no-vacío = allowlist estricta. Fluye por el branch `invalid`. | `runtime.rs env_violation`; `snapshot.rs CompiledConstraints`; `compile.rs BadConstraints` | — | C ✅ |
 | **G1** | ContextPacket estructurado | Texto plano; `constraints`/`requiredActions`/`source` colapsan en el `report.message` | `packet.rs:23-61` vs spec §10.4:822-838 | Campos etiquetados en `render` | Medio | D |
 | **G2** | `source.snapshot` en el packet | Ausente; el hash existe pero no se threadea | `packet.rs:26-60` vs `snapshot.rs:25` | Pasar `snapshot.hash` a `render` | Chico | D |
 | **G4** | Exemplar mandatorio en `block` + rule-debt | El par rechazado/aceptado NO se re-manda si el skill ya estaba cargado; no hay check de deuda por exemplar faltante | `session.rs:135,164-168`; `compile.rs:350-361` vs §10.4:840, §6.5:490 | Re-adjuntar exemplar en block + warning en compile | Chico-Medio | D |
