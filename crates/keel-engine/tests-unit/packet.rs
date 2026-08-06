@@ -26,18 +26,28 @@ fn eval(effective: Decision) -> Evaluation {
 }
 
 #[test]
-fn blocked_packet_carries_constraint_and_evidence() {
-    let p = render(&eval(Decision::Block), "ev_1", &[]);
+fn blocked_packet_carries_constraint_evidence_and_source() {
+    let p = render(&eval(Decision::Block), "ev_1", &[], "sha256:abc123");
     assert!(p.starts_with("BLOCKED (db.gate-sql-execution)"));
     assert!(p.contains("DROP is destructive"));
     assert!(p.contains("Evidence: ev_1 logged"));
+    // section 10.4 `source`: pins the packet to the rule + immutable snapshot.
+    assert!(
+        p.contains("source: rule=db.gate-sql-execution snapshot=sha256:abc123"),
+        "the packet must name its source rule and snapshot: {p}"
+    );
 }
 
 /// section 4.7: the deny-pending packet tells the model NOT to retry — a human
 /// decides, never the model.
 #[test]
 fn deny_pending_packet_escalates_to_human() {
-    let p = render(&eval(Decision::DenyPendingApproval), "ev_2", &[]);
+    let p = render(
+        &eval(Decision::DenyPendingApproval),
+        "ev_2",
+        &[],
+        "sha256:x",
+    );
     assert!(p.contains("pending approval"));
     assert!(p.contains("human approval"));
 }

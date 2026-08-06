@@ -20,7 +20,12 @@ use keel_core::Decision;
 /// `skill_payload` is the L2 cognitive-activation content (compact/full skill
 /// text + exemplar), delivered once per session by the Session Manager; empty
 /// when the skill is already loaded or the rule loads nothing.
-pub fn render(eval: &Evaluation, ev_id: &str, skill_payload: &[String]) -> String {
+pub fn render(
+    eval: &Evaluation,
+    ev_id: &str,
+    skill_payload: &[String],
+    snapshot_hash: &str,
+) -> String {
     let mut lines = Vec::new();
 
     let header = match eval.effective_decision {
@@ -57,6 +62,13 @@ pub fn render(eval: &Evaluation, ev_id: &str, skill_payload: &[String]) -> Strin
         lines.push(chunk.clone());
     }
 
+    // Source (section 10.4 `source: {rule, snapshot}`): pins the packet to the
+    // exact rule and the immutable snapshot that produced it — reproducible and
+    // citable, without ever exposing the rule body or workspace paths (ADR-004).
+    lines.push(format!(
+        "source: rule={} snapshot={snapshot_hash}",
+        eval.rule_id
+    ));
     lines.push(format!("Evidence: {ev_id} logged"));
     lines.join("\n")
 }

@@ -371,6 +371,27 @@ fn compile_rule(
             ));
     }
 
+    // Rule debt (section 10.4:840): a `block` branch that loads skills but none of
+    // them provide an exemplar pair — the mandatory rejected/accepted companion
+    // of a block is missing, so the packet can only say "don't", not "do this".
+    if let Some(inv) = &enforcement.invalid
+        && inv.decision >= Decision::Block
+        && !inv.load_skills.is_empty()
+        && !inv.load_skills.iter().any(|skill_ref| {
+            let sid = skill_ref
+                .strip_prefix("skill:")
+                .unwrap_or(skill_ref)
+                .split('#')
+                .next()
+                .unwrap_or_default();
+            skills.get(sid).is_some_and(|s| !s.examples.is_empty())
+        })
+    {
+        warnings.push(format!(
+            "rule `{id}`: block branch loads skills but none provide an exemplar pair — rule debt (section 10.4): a block should carry a rejected/accepted example"
+        ));
+    }
+
     // Type the loose DSL `constraints` Value at compile: a malformed shape is a
     // build error, never a silently-ignored field at eval (section 11.4).
     let constraints = match &spec.constraints {
