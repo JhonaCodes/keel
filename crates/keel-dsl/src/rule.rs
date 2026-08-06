@@ -217,6 +217,9 @@ pub struct Branch {
 pub struct Load {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skills: Vec<String>,
+    /// Context-economy capabilities to activate for the agent (spec §11.3,
+    /// future §9). Forward-declared: compiled into the snapshot and surfaced in
+    /// the evidence, but the runtime does not yet activate/limit them (Phase 2).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub capabilities: Vec<String>,
 }
