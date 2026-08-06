@@ -14,7 +14,7 @@ the run over **real agent sessions in a real repo** has **not been done**; that
 measurement, not the code, is what the spec makes the gate for growing further.
 
 Snapshot of the tree: 4 crates (`keel-core`, `keel-dsl`, `keel-engine`,
-`keel-cli`), **94 tests green**. Kinds: Workspace, Rule, Tool, Skill,
+`keel-cli`), **107 tests green**. Kinds: Workspace, Rule, Tool, Skill,
 Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 `observe`, `gate`, `audit`, `adapter` (+`--check` preflight), `bind`, `lock`,
 `ci resolve`/`ci run`, `explain`, `prune`, `test`, `doctor`.

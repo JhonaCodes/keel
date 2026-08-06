@@ -38,7 +38,7 @@ Leyenda, sin zona gris:
 
 | # | Qué | Estado real | file:line | Falta | Tamaño | Fase |
 |---|---|---|---|---|---|---|
-| **F1** | `constraints` (`environment.allow/deny`) | ✅ **HECHO (Fase C, PR pendiente)**: tipado a `CompiledConstraints` en compile (shape malformado → error, no silent) y evaluado en runtime (`runtime::env_violation`): deny bloquea siempre, allow no-vacío = allowlist estricta. Fluye por el branch `invalid`. | `runtime.rs env_violation`; `snapshot.rs CompiledConstraints`; `compile.rs BadConstraints` | — | C ✅ |
+| **F1** | `constraints` (`environment.allow/deny`) | ✅ **HECHO (Fase C)**: tipado a `CompiledConstraints` en compile (shape malformado → error, no silent) y evaluado en runtime (`runtime::env_violation`): deny bloquea siempre, allow no-vacío = allowlist estricta. Fluye por el branch `invalid`. | `runtime.rs env_violation`; `snapshot.rs CompiledConstraints`; `compile.rs BadConstraints` | — | C ✅ |
 | **G1/G2** | ContextPacket: línea `source` + snapshot hash (forma transcript, no objeto tipado) | ✅ **HECHO (Fase D)**: `render` emite línea `source: rule=… snapshot=sha256:…`; hash threadeado desde el snapshot | `packet.rs render` | — | D ✅ |
 | **G4** | Exemplar garantizado en `block` + rule-debt | ✅ **HECHO (Fase D)**: `deliver_skills(force_exemplar)` re-adjunta el par en block aunque el skill esté cargado; warning de compile si un branch block carga skills sin exemplar | `session.rs deliver_skills`; `compile.rs` (rule-debt) | — | D ✅ |
 | **Cov** | Cobertura e2e del packet | ✅ **HECHO (Fase D)**: `test/tests/packet_content.rs` asserta el packet en stderr del binario real (verdict+finding+source+snapshot+evidence) | `packet_content.rs` | — | D ✅ |
