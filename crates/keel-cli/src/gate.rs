@@ -360,6 +360,130 @@ pub fn adapter_print_claude_code(root: &Path) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+/// `keel adapter claude-code --install [--global] [--uninstall]` — wires (or
+/// removes) the hook INTO the client's settings.json, so the operator never
+/// hand-edits it (and it works the same on any machine — the logic lives here,
+/// not in a paste-in snippet). Merge-safe: preserves every other key and hook,
+/// backs up first, and is idempotent (installing twice does not duplicate).
+///
+/// keel's own hook blocks are identified by their command (`gate --client
+/// claude-code`), so removing/deduping them never touches the operator's other
+/// hooks. `--global` targets `~/.claude/settings.json` (governs sessions from
+/// anywhere); otherwise `<workspace>/.claude/settings.json`.
+pub fn adapter_install_claude_code(root: &Path, global: bool, uninstall: bool) -> Result<ExitCode> {
+    let settings_path = if global {
+        let home = std::env::var("HOME").context("HOME is not set — cannot locate ~/.claude")?;
+        Path::new(&home).join(".claude").join("settings.json")
+    } else {
+        root.join(".claude").join("settings.json")
+    };
+
+    // Load existing settings (or start empty). A corrupt file is an error — we
+    // never overwrite what we cannot parse.
+    let mut settings: serde_json::Value = if settings_path.exists() {
+        let raw = std::fs::read_to_string(&settings_path)
+            .with_context(|| format!("could not read {}", settings_path.display()))?;
+        serde_json::from_str(&raw)
+            .with_context(|| format!("{} is not valid JSON", settings_path.display()))?
+    } else {
+        serde_json::json!({})
+    };
+    if !settings.is_object() {
+        anyhow::bail!("{} root is not a JSON object", settings_path.display());
+    }
+
+    // Back up before touching anything.
+    if settings_path.exists() {
+        let bak = settings_path.with_extension("json.keel-bak");
+        std::fs::copy(&settings_path, &bak)?;
+    }
+
+    let exe = std::env::current_exe().context("cannot resolve the keel binary path")?;
+    let ws = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let cmd = format!(
+        "{} gate --client claude-code --workspace {}",
+        exe.display(),
+        ws.display()
+    );
+
+    let hooks = settings
+        .as_object_mut()
+        .unwrap()
+        .entry("hooks")
+        .or_insert_with(|| serde_json::json!({}));
+    let hooks = hooks
+        .as_object_mut()
+        .context("`hooks` in settings.json is not an object")?;
+
+    // A block is "ours" if any of its commands invoke keel's gate. This never
+    // matches the operator's own hooks (they don't run `gate --client`).
+    let is_keel_block = |block: &serde_json::Value| -> bool {
+        block
+            .get("hooks")
+            .and_then(|h| h.as_array())
+            .map(|arr| {
+                arr.iter().any(|h| {
+                    h.get("command")
+                        .and_then(|c| c.as_str())
+                        .map(|c| c.contains("gate --client claude-code"))
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(false)
+    };
+
+    // Remove any existing keel blocks first (idempotent install + the uninstall path).
+    for event in ["PreToolUse", "PostToolUse", "Stop"] {
+        if let Some(arr) = hooks.get_mut(event).and_then(|a| a.as_array_mut()) {
+            arr.retain(|b| !is_keel_block(b));
+        }
+    }
+
+    if !uninstall {
+        let block = |matcher: Option<&str>| {
+            let mut o = serde_json::Map::new();
+            if let Some(m) = matcher {
+                o.insert("matcher".into(), serde_json::json!(m));
+            }
+            o.insert(
+                "hooks".into(),
+                serde_json::json!([{"type":"command","command":cmd}]),
+            );
+            serde_json::Value::Object(o)
+        };
+        for (event, matcher) in [
+            ("PreToolUse", Some("Bash|Edit|Write|MultiEdit")),
+            ("PostToolUse", Some("Edit|Write|MultiEdit")),
+            ("Stop", None),
+        ] {
+            let arr = hooks
+                .entry(event)
+                .or_insert_with(|| serde_json::json!([]))
+                .as_array_mut()
+                .with_context(|| format!("`hooks.{event}` is not an array"))?;
+            arr.push(block(matcher));
+        }
+    }
+
+    std::fs::create_dir_all(settings_path.parent().unwrap())?;
+    let mut out = serde_json::to_string_pretty(&settings)?;
+    out.push('\n');
+    std::fs::write(&settings_path, out)?;
+
+    let verb = if uninstall { "removed" } else { "installed" };
+    let scope = if global {
+        "global (~/.claude)"
+    } else {
+        "project (.claude)"
+    };
+    println!("keel hook {verb} — {scope}: {}", settings_path.display());
+    if !uninstall {
+        println!("gate command: {cmd}");
+        println!("open a NEW client session for it to take effect (settings load at start).");
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
 /// `keel audit --agent <id> --input <file>` — invokes a specialized agent
 /// (spec section 14) on the given material. The result is recorded with
 /// origin=semantic (section 6.4) and is advisory (review), never a block (section 4.7).

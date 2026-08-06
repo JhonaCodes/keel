@@ -157,6 +157,18 @@ enum Command {
         /// client cannot prevent. Exit 1 on any unhonorable policy.
         #[arg(long)]
         check: bool,
+        /// Wire the hook INTO the client's settings.json (merge-safe: backs up
+        /// and preserves existing config). Idempotent. Portable — the install
+        /// logic lives in keel, so it works the same on any machine.
+        #[arg(long)]
+        install: bool,
+        /// Remove keel's hook from the client's settings.json (leaves the rest).
+        #[arg(long)]
+        uninstall: bool,
+        /// Target the USER-global settings (~/.claude/settings.json) instead of
+        /// the project's .claude/settings.json — governs sessions from anywhere.
+        #[arg(long)]
+        global: bool,
         #[arg(long, default_value = ".")]
         workspace: PathBuf,
     },
@@ -270,18 +282,21 @@ fn main() -> ExitCode {
             client,
             print: _,
             check,
+            install,
+            uninstall,
+            global,
             workspace,
         } => {
+            if client != "claude-code" && client != "claude" {
+                eprintln!("error: unsupported adapter `{client}` (supported: claude-code)");
+                return ExitCode::FAILURE;
+            }
             if check {
                 commands::adapter_check(&workspace, &client)
+            } else if install || uninstall {
+                gate::adapter_install_claude_code(&workspace, global, uninstall)
             } else {
-                match client.as_str() {
-                    "claude-code" => gate::adapter_print_claude_code(&workspace),
-                    other => {
-                        eprintln!("error: unsupported adapter `{other}` (supported: claude-code)");
-                        return ExitCode::FAILURE;
-                    }
-                }
+                gate::adapter_print_claude_code(&workspace)
             }
         }
         Command::Bind {

@@ -54,13 +54,19 @@ git add .keel/ workspace.yaml rules/ tools/ skills/ agents/ tests/   # versionar
 ```
 
 ### 5. Enganchar el cliente (esto ACTIVA el wrap del LLM)
+**Keel cablea el hook solo** — no editás settings a mano (así funciona igual en
+cualquier PC; la lógica vive en keel, no en un snippet pegado):
 ```sh
-keel adapter claude-code --check    # preflight: rechaza reglas que el cliente no puede hacer cumplir
-keel adapter claude-code --print    # imprime el bloque de hooks para .claude/settings.json
+keel adapter claude-code --check              # preflight: rechaza reglas que el cliente no puede hacer cumplir
+keel adapter claude-code --install            # escribe el hook en <workspace>/.claude/settings.json
+keel adapter claude-code --install --global   # …o en ~/.claude/settings.json → gobierna sesiones DESDE CUALQUIER LUGAR
 ```
-Pegá ese bloque en `.claude/settings.json`. A partir de ahí, cada acción del LLM
-(Bash / Edit / Write / MultiEdit / Stop) pasa por `keel gate` **antes** de
-ejecutarse: exit 2 = bloqueado, exit 0 = permitido.
+`--install` es **merge-safe** (hace backup `.keel-bak`, preserva toda tu config y
+tus otros hooks) e **idempotente** (instalar dos veces no duplica). Abrí una
+sesión **nueva** del cliente para que tome efecto (los settings se leen al iniciar).
+A partir de ahí, cada acción del LLM (Bash / Edit / Write / MultiEdit / Stop) pasa
+por `keel gate` **antes** de ejecutarse: exit 2 = bloqueado, exit 0 = permitido.
+(`--print` sigue disponible si querés ver el bloque sin escribirlo.)
 
 ### (opcional) 6. CI — plano de cumplimiento
 ```sh
@@ -75,8 +81,13 @@ De menos a más agresivo. Los pasos 1–3 dejan `workspace.yaml`, `rules/`,
 `tools/`, `skills/`, `agents/`, `tests/` y `.keel/` **intactos** en el repo.
 
 ### 1. Apagar el wrap (reversible al instante, no toca el repo)
-Quitá el bloque `"hooks"` de Keel de `.claude/settings.json`. El LLM deja de
-pasar por el gate inmediatamente. Nada más cambia.
+```sh
+keel adapter claude-code --uninstall            # quita SOLO el hook de keel del proyecto
+keel adapter claude-code --uninstall --global   # …o del ~/.claude global
+```
+Keel quita **solo sus bloques** (los identifica por su comando `gate --client
+claude-code`) y **deja intactos** tus otros hooks y toda tu config. El LLM deja
+de pasar por el gate al iniciar la próxima sesión.
 
 ### 2. Borrar el estado efímero (opcional)
 ```sh
@@ -100,3 +111,30 @@ el binding ya están en el repo).
 > Nota: un `keel uninstall`/`project detach` automatizado es parte de la
 > installation story de Phase 1 (STATUS section 9). Hoy es manual — y por diseño
 > nunca toca el contenido autorado.
+
+---
+
+## Nota de autoría (para que tu regla SÍ dispare en Claude Code)
+
+El adapter de Claude Code mapea cada acción a un evento:
+- **Bash** → `command.requested` con el campo **`command`** (NO `content`).
+- **Edit/Write/MultiEdit** → `file.edited` con **`content`** (lo que se escribe).
+- **Stop** → `completion.requested`.
+
+Consecuencia práctica: una regla que gobierna **comandos** debe detectar con
+`builtin:command.classify` (lee `command`), **no** con `text.contains`/`text.regex`
+(esos leen `content`, que en un Bash viene vacío → la regla no dispararía). Para
+**ediciones** sí usás `text.*` sobre `content`. Ejemplo de regla de comando que
+funciona en vivo (bloquea `rm`):
+
+```yaml
+spec:
+  reversibility: irreversible
+  on: [command.requested]
+  detect: { using: builtin:command.classify, with: { families: ["rm"] } }
+  enforcement:
+    unknown: { decision: deny-pending-approval, report: { message: "rm irreversible — requiere aprobación humana" } }
+    valid:   { decision: allow }
+```
+(Sin `validate`, el veredicto es `unknown`; en un irreversible eso escala a
+`deny-pending-approval` → el cliente no ejecuta. Ver sección 4.7.)
