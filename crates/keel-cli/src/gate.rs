@@ -366,6 +366,9 @@ pub fn audit(
         role: agent.role.clone(),
         objective: agent.objective.clone(),
         timeout_ms: agent.timeout_ms.unwrap_or(60_000),
+        // Invariant 13: carry the declared token ceiling from the locked
+        // snapshot so run_audit can enforce it.
+        max_tokens: agent.max_tokens,
     };
     let exec_spec = ExecutorSpec {
         id: executor.id.clone(),

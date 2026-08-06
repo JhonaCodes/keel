@@ -28,6 +28,10 @@ pub struct AgentSpec {
     pub role: String,
     pub objective: Option<String>,
     pub timeout_ms: u64,
+    /// Invariant 13: the declared token ceiling of the agent's budget. A result
+    /// whose reported usage exceeds it is not trusted (see run_audit). `None`
+    /// = no declared ceiling.
+    pub max_tokens: Option<u64>,
 }
 
 pub struct ExecutorSpec {
@@ -107,6 +111,26 @@ pub fn run_audit(
         }
     }
 
+    // Invariant 13: delegation has an explicit token limit. Capture the real
+    // usage the executor reports (0 when it reports none — the documented gap
+    // for non-reporting executors survives, but a reporting one is now bounded)
+    // and, if the declared ceiling is exceeded, the result is not trustworthy:
+    // downgrade to `unknown` with an explicit finding. The timeout above bounds
+    // time; this bounds cost. maxDepth/cross-cost stay for Phase 2 (they need
+    // the delegation graph).
+    let reported_tokens = parse_tokens(&raw).unwrap_or(0);
+    if let Some(limit) = agent.max_tokens {
+        if reported_tokens > limit {
+            verdict = Verdict::Unknown;
+            // Append, don't replace: if the schema check (inv 12) already
+            // recorded a finding, a simultaneous budget breach must not erase
+            // it — the ledger should show BOTH reasons the result was rejected.
+            findings.push(format!(
+                "exceeded declared maxTokens (invariant 13): reported {reported_tokens} > limit {limit}"
+            ));
+        }
+    }
+
     // section 4.7 / ADR-017: a semantic verdict may CONFIRM a concern (review) but
     // never authorizes an irreversible action. `invalid` from an auditor maps
     // to `review` — a human/compliance plane decides; the model does not.
@@ -130,10 +154,10 @@ pub fn run_audit(
         declared_decision: declared,
         effective_decision: declared, // auditor findings are advisory (review)
         latency_ms: started.elapsed().as_millis() as u64,
-        // Semantic evaluators cost tokens — recorded honestly. We do not have
-        // a token count from a generic executor, so 0 is a known gap flagged
-        // in STATUS.md rather than a false precise number.
-        tokens: 0,
+        // Semantic evaluators cost tokens — recorded honestly (invariant 13).
+        // The real count comes from the executor's reported usage; an executor
+        // that reports none records 0 (a documented gap, not a false number).
+        tokens: reported_tokens,
         file: None,
         line: None,
         detail: Some(format!(
@@ -255,6 +279,26 @@ fn schema_check(schema: &serde_json::Value, raw: &str) -> Result<bool, String> {
     let validator = jsonschema::validator_for(schema)
         .map_err(|e| format!("outputSchema does not compile: {e}"))?;
     Ok(validator.is_valid(&block))
+}
+
+/// Invariant 13: extracts the OPTIONAL `tokens` usage the executor reports in
+/// its JSON output. The prompt does not ask the model for it — an executor
+/// wrapper that accounts real usage injects the field; one that does not simply
+/// omits it (and the ledger records 0 for that delegation, the documented gap).
+///
+/// TRUST ASSUMPTION (seed posture): the count is only as trustworthy as the
+/// wrapper that emits it. Reading it from the same JSON blob as the model's
+/// verdict means a raw model could self-report `tokens` — but the safety
+/// envelope holds: inflation only downgrades toward `unknown` (review), and
+/// under-reporting only fails to raise an advisory review; no irreversible
+/// action is ever authorized (section 4.7). A trusted usage channel
+/// (wrapper-emitted, separate from model output) is Phase 2.
+fn parse_tokens(raw: &str) -> Option<u64> {
+    let start = raw.find('{')?;
+    let end = raw.rfind('}')?;
+    let json = raw.get(start..=end)?;
+    let v: serde_json::Value = serde_json::from_str(json).ok()?;
+    v.get("tokens")?.as_u64()
 }
 
 fn parse_result(raw: &str) -> Option<(Verdict, Vec<String>)> {
