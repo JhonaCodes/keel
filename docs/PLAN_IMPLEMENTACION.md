@@ -19,10 +19,11 @@ commits sin `Co-Authored-By`, formato `type: short` + `Closes #N`.
 ## Estado de los PRs
 
 - [x] **PR1 · `ci/base-workflow`** — CI base (build+test requerido, fmt+clippy advisory). Issue #1 · PR #2 · **merged** `a93f78e`.
-- [ ] **PR2 · `docs/implementation-plan`** — este documento + `FUNCIONAMIENTO_INTERNO.md` + `ROADMAP.md`.
-- [ ] **PR3 · `test/harden-intervention-layers`** — #10 gaps de test.
-- [ ] **PR4 · `fix/remove-unconsumed-capabilities`** — #9 stub silencioso.
-- [ ] **PR5 · `feat/finding-v1-schema`** — #11 schema de findings.
+- [x] **PR2 · `docs/implementation-plan`** — este documento + `FUNCIONAMIENTO_INTERNO.md` + `ROADMAP.md`. PR #4 · **merged** `a12d77e`.
+- [x] **PR3 · `test/harden-intervention-layers`** — #10 gaps de test (exit==2, completion-denegado, spawn real) + crate `test/`. PR #6 · **merged** `72ae1a8`.
+- [x] **PR3b · `refactor/move-unit-tests-out-of-src`** — tests inline fuera de `src` vía `#[path]` (15 archivos). PR #8 · **merged** `ab4d119`.
+- [x] **PR4 · `fix/surface-load-capabilities`** — #9: `capabilities` hecho honesto (surfaceado + documentado), NO removido (es forward-declaration de spec §11.3). PR #10 · **merged**.
+- [x] **PR5 · `docs/finding-v1-deprecated-clarification`** — #11: `finding.v1` NO es gap; está **deprecado por diseño** (ADR-016). Corrección de registro.
 - [ ] **PR6 · `feat/repo-binding-lock`** — #2 lock + binding.
 - [ ] **PR7 · `feat/compliance-ci-plane`** — #3 plano CI de cumplimiento (depende de PR6).
 - [ ] **PR8 · `feat/adapter-capability-preflight`** — #5 preflight del adapter.
@@ -57,20 +58,24 @@ contexto; una sola fuente de verdad para seguir la iniciativa entre sesiones.
 **Por qué / para qué:** endurece las tres capas de intervención sin ampliar
 alcance ni tocar features; sube la confianza antes de modificar el runtime.
 
-### PR4 — Eliminar el campo `capabilities` no consumido (#9)
-**Qué:** quitar `load.capabilities` del DSL (`rule.rs`), del schema
-(`rule.schema.json`) y de la compilación (`compile.rs`/`snapshot.rs`).
-**Por qué / para qué:** hoy se parsea/compila/guarda pero **nunca se consume** en
-runtime — un stub silencioso. Principio del proyecto: eliminar/integrar, nunca
-deprecar ni dejar no-ops mudos. Volverá cableado a un consumidor real cuando se
-diseñe el enforcement de capacidades (relacionado con PR8).
+### PR4 — Hacer honesto el campo `capabilities` (#9)  · DESVÍO JUSTIFICADO
+**Qué:** en vez de **eliminarlo** (como decía el plan inicial), se **surfacea** en
+la evidencia del ledger (`branch_detail`) y se **documenta** como forward-declaration.
+**Por qué / para qué:** al investigar, `load.capabilities` resultó ser una
+declaración deliberada del **ejemplo canónico del núcleo (§11.3)** y del futuro
+§9 (economía de contexto), análoga a `invoke.agent` ("recorded, not executed").
+Eliminarlo divergiría de la spec/DSL. La cura del "stub silencioso" es hacerlo
+**visible + documentado** (integrar, no deprecar), no borrarlo. PR8 (#5) es OTRO
+concepto de capabilities (del adapter), no reintroduce éste.
 
-### PR5 — Schema `finding.v1` + emisión (#11)
-**Qué:** `schemas/finding.v1.schema.json` y emitir el finding.v1 junto al SARIF
-actual.
-**Por qué / para qué:** formaliza el contrato de findings además de SARIF
-(§11.6/ADR-016), para que un consumidor pueda validar la forma sin depender solo
-del envoltorio SARIF.
+### PR5 — `finding.v1`: NO es un gap, deprecado por diseño (#11)  · CORRECCIÓN
+**Qué:** corrección de registro en `ROADMAP.md`/este doc. NO se crea ningún
+`finding.v1`.
+**Por qué / para qué:** `finding.v1` está **ausente a propósito** — ADR-016 lo
+**deprecó** en favor de SARIF como formato normativo (`sarif.rs:7`: "finding.v1
+is deprecated and does NOT exist in this code"; spec :1139,:1637). Añadirlo
+revivería un formato muerto (contra "no deprecado en código nuevo"). SARIF ya
+emite todos los findings. El "absent" de STATUS:105 es correcto, no una falta.
 
 ### PR6 — Binding de repo + lock (#2)
 **Qué:** `.keel/project.yaml` (binding del repo) + `keel.lock` (hash canónico
