@@ -407,6 +407,7 @@ pub fn audit(
         command: executor.command.clone(),
         model: executor.model.clone(),
         timeout_ms: executor.timeout_ms,
+        env: executor.env.clone(),
     };
 
     // Invariant 12: load the declared outputSchema (if any) so run_audit can

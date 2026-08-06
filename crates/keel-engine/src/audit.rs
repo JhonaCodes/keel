@@ -39,6 +39,10 @@ pub struct ExecutorSpec {
     pub command: Vec<String>,
     pub model: Option<String>,
     pub timeout_ms: Option<u64>,
+    /// Environment allowlist (section 13.1): the only host env vars passed to the
+    /// subprocess. Empty = none inherited (PATH is always passed so the program
+    /// resolves).
+    pub env: Vec<String>,
 }
 
 pub struct AuditOutcome {
@@ -200,6 +204,21 @@ fn run_executor(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
+
+    // section 13.1: no secret inheritance to child sessions by default. Clear the
+    // environment and pass ONLY what the executor declared — plus PATH, which is
+    // infrastructure (needed to resolve the program), not a secret. An executor
+    // that needs a credential names it in its `env` allowlist; everything else
+    // (the parent's tokens, config, host state) never reaches the sub-model.
+    cmd.env_clear();
+    if let Ok(path) = std::env::var("PATH") {
+        cmd.env("PATH", path);
+    }
+    for key in &executor.env {
+        if let Ok(val) = std::env::var(key) {
+            cmd.env(key, val);
+        }
+    }
 
     let mut child = match cmd.spawn() {
         Ok(c) => c,

@@ -246,6 +246,13 @@ pub struct AgentExecutorSpec {
     pub model: Option<String>,
     #[serde(default, rename = "timeoutMs", skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,
+    /// Environment allowlist (section 13.1: "no secret inheritance to child sessions
+    /// by default"). The executor subprocess receives ONLY these host env vars
+    /// (plus PATH, needed to resolve the program) — everything else is scrubbed.
+    /// Empty (the default) = no inheritance: an executor that needs a credential
+    /// must name it here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub env: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

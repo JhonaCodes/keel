@@ -436,6 +436,10 @@ pub struct CompiledExecutor {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,
+    /// Environment allowlist (section 13.1): the only host env vars the executor
+    /// subprocess inherits. Empty = none (no secret inheritance by default).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub env: Vec<String>,
 }
 
 #[cfg(test)]
