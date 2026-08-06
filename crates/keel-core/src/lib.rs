@@ -61,9 +61,7 @@ pub enum OriginClass {
 /// reorder them. This is the single definition of the ordering: the compiler
 /// uses it (D3 monotonicity check, Phase 1+) and so does the runtime (Phase 0
 /// passive forcing). Two definitions could diverge; that is why it lives here.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Decision {
     Allow,

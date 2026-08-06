@@ -14,7 +14,8 @@ const CORPUS: &str = include_str!("corpus/rules_11_4.yaml");
 
 #[test]
 fn corpus_11_4_parses_completely() {
-    let docs = parse_documents(CORPUS).expect("the section 11.3–11.5 corpus must parse without loss");
+    let docs =
+        parse_documents(CORPUS).expect("the section 11.3–11.5 corpus must parse without loss");
     // 9 rules: section 11.3 (1) + section 11.4 (7) + section 11.5 (1).
     assert_eq!(docs.len(), 9, "the full corpus must be present");
     for doc in &docs {
@@ -59,7 +60,10 @@ fn corpus_preserves_the_hard_parts() {
         gate.preconditions[0].using.to_string(),
         "builtin:env.present"
     );
-    assert_eq!(gate.preconditions[2].using.to_string(), "tool:awsume.session-active");
+    assert_eq!(
+        gate.preconditions[2].using.to_string(),
+        "tool:awsume.session-active"
+    );
 
     // Environment constraints of the SQL gate (section 11.4): preserved, not swallowed.
     let sql = rule("db.gate-sql-execution");

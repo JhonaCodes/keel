@@ -166,11 +166,15 @@ fn evaluate_rule(
 
     // 6. Enforcement branch according to the verdict.
     let branch = pick_branch(rule, verdict);
-    let declared = branch.map(|b| b.decision).unwrap_or_else(|| default_decision(verdict));
+    let declared = branch
+        .map(|b| b.decision)
+        .unwrap_or_else(|| default_decision(verdict));
     let detail = branch.and_then(|b| branch_detail(b, verdict));
     let load_skills = branch.map(|b| b.load_skills.clone()).unwrap_or_default();
 
-    let mut eval = finish(rule, verdict, origin, declared, latency_ms, findings, detail, mode);
+    let mut eval = finish(
+        rule, verdict, origin, declared, latency_ms, findings, detail, mode,
+    );
     eval.load_skills = load_skills;
     Some(eval)
 }

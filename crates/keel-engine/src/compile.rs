@@ -243,7 +243,9 @@ fn compile_rule(
                         return Err(CompileError::UnresolvedTool {
                             rule: id.clone(),
                             reference: call.using.to_string(),
-                            hint: "in validate only text.contains/text.regex are allowed as builtins".into(),
+                            hint:
+                                "in validate only text.contains/text.regex are allowed as builtins"
+                                    .into(),
                         });
                     }
                     validate_regex_param(id, bid, call.with.as_ref())?;
@@ -316,21 +318,21 @@ fn compile_rule(
         reversibility: spec.reversibility,
         scope: spec.scope.as_ref().map(|s| CompiledScope {
             languages: s.languages.clone(),
-            include: s.paths.as_ref().map(|p| p.include.clone()).unwrap_or_default(),
-            exclude: s.paths.as_ref().map(|p| p.exclude.clone()).unwrap_or_default(),
+            include: s
+                .paths
+                .as_ref()
+                .map(|p| p.include.clone())
+                .unwrap_or_default(),
+            exclude: s
+                .paths
+                .as_ref()
+                .map(|p| p.exclude.clone())
+                .unwrap_or_default(),
         }),
         on: spec.on.clone(),
         when: spec.when.as_ref().map(|w| CompiledWhen {
-            any_files_touch: w
-                .any
-                .iter()
-                .filter_map(|c| c.files_touch.clone())
-                .collect(),
-            all_files_touch: w
-                .all
-                .iter()
-                .filter_map(|c| c.files_touch.clone())
-                .collect(),
+            any_files_touch: w.any.iter().filter_map(|c| c.files_touch.clone()).collect(),
+            all_files_touch: w.all.iter().filter_map(|c| c.files_touch.clone()).collect(),
         }),
         detect,
         preconditions,
@@ -354,10 +356,12 @@ fn validate_regex_param(
         .and_then(|w| w.get("pattern"))
         .and_then(|p| p.as_str())
         .unwrap_or("");
-    regex::Regex::new(pattern).map(|_| ()).map_err(|source| CompileError::InvalidRegex {
-        rule: rule.to_string(),
-        source,
-    })
+    regex::Regex::new(pattern)
+        .map(|_| ())
+        .map_err(|source| CompileError::InvalidRegex {
+            rule: rule.to_string(),
+            source,
+        })
 }
 
 fn compile_enforcement(
@@ -405,7 +409,11 @@ fn compile_enforcement(
 fn to_compiled_branch(b: &Branch) -> CompiledBranch {
     CompiledBranch {
         decision: b.decision,
-        load_skills: b.load.as_ref().map(|l| l.skills.clone()).unwrap_or_default(),
+        load_skills: b
+            .load
+            .as_ref()
+            .map(|l| l.skills.clone())
+            .unwrap_or_default(),
         load_capabilities: b
             .load
             .as_ref()

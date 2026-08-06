@@ -326,7 +326,7 @@ impl Ledger {
                  )
                ORDER BY e.ts"#,
         )?;
-        let rows = stmt.query_map(rusqlite::params![session_id], |row| row_to_entry(row))?;
+        let rows = stmt.query_map(rusqlite::params![session_id], row_to_entry)?;
         rows.collect()
     }
 
@@ -344,14 +344,13 @@ fn json_str<T: Serialize>(v: &T) -> String {
 }
 
 fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<LedgerEntry> {
-    fn parse<T: for<'de> Deserialize<'de>>(idx: usize, row: &rusqlite::Row<'_>) -> rusqlite::Result<T> {
+    fn parse<T: for<'de> Deserialize<'de>>(
+        idx: usize,
+        row: &rusqlite::Row<'_>,
+    ) -> rusqlite::Result<T> {
         let raw: String = row.get(idx)?;
         serde_json::from_str(&raw).map_err(|e| {
-            rusqlite::Error::FromSqlConversionFailure(
-                idx,
-                rusqlite::types::Type::Text,
-                Box::new(e),
-            )
+            rusqlite::Error::FromSqlConversionFailure(idx, rusqlite::types::Type::Text, Box::new(e))
         })
     }
     Ok(LedgerEntry {

@@ -41,21 +41,29 @@ pub struct Metadata {
     #[serde(default, rename = "adrRef", skip_serializing_if = "Option::is_none")]
     pub adr_ref: Option<String>,
     /// ISO-8601 review window (e.g. "P6M"). Feeds `keel prune` (section 7.7).
-    #[serde(default, rename = "reviewAfter", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "reviewAfter",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub review_after: Option<String>,
 }
 
 /// An Keel document, discriminated by `kind`.
+/// Parsed authoring document. Each variant is boxed so the enum stays small and
+/// uniform regardless of how big a single spec grows (a Rule spec dwarfs a
+/// Workspace one); the enum is a short-lived parse result immediately drained
+/// into per-kind vectors by the workspace loader.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum Document {
-    Workspace(WorkspaceDoc),
-    Rule(RuleDoc),
-    Tool(ToolDoc),
-    Skill(SkillDoc),
-    Agent(AgentDoc),
-    AgentExecutor(AgentExecutorDoc),
-    RuleTest(RuleTestDoc),
+    Workspace(Box<WorkspaceDoc>),
+    Rule(Box<RuleDoc>),
+    Tool(Box<ToolDoc>),
+    Skill(Box<SkillDoc>),
+    Agent(Box<AgentDoc>),
+    AgentExecutor(Box<AgentExecutorDoc>),
+    RuleTest(Box<RuleTestDoc>),
 }
 
 impl Document {
@@ -201,7 +209,11 @@ pub struct AgentSpec {
     pub executor: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub objective: Option<String>,
-    #[serde(default, rename = "outputSchema", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        rename = "outputSchema",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub output_schema: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub budget: Option<AgentBudget>,
