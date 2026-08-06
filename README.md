@@ -12,7 +12,18 @@ verdicts, at the exact turn where they apply.
 
 Full specification: [`docs/RCCA_reference_architecture_v0_9_1_EN.md`](docs/RCCA_reference_architecture_v0_9_1_EN.md)
 (Spanish version available in `docs/`). Deferred organizational-scale material:
-[`docs/RCCA_future_EN.md`](docs/RCCA_future_EN.md). Conformance map: [`STATUS.md`](STATUS.md).
+[`docs/RCCA_future_EN.md`](docs/RCCA_future_EN.md).
+
+**Docs index:**
+- [`STATUS.md`](STATUS.md) — point-by-point conformance map (invariants, sections, ADRs).
+- [`docs/INSTALL.md`](docs/INSTALL.md) — install / data-preserving uninstall.
+- [`docs/FUNCIONAMIENTO_INTERNO.md`](docs/FUNCIONAMIENTO_INTERNO.md) — how it works (the three layers, agents vs skills).
+- [`docs/PARCIALES.md`](docs/PARCIALES.md) — every partial by state; nothing hidden.
+- [`docs/INVENTARIO.md`](docs/INVENTARIO.md) — what's left, grouped by precondition.
+- [`docs/PHASE2_INITIATIVE.md`](docs/PHASE2_INITIATIVE.md) — the deferred Phase-2 units (planned, not started).
+- [`docs/DOCTRINA.md`](docs/DOCTRINA.md) — cold tools before AI (0 tokens).
+- [`docs/PLAN_PRUEBAS.md`](docs/PLAN_PRUEBAS.md) — living test checklist.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) · [`docs/PROGRAMA_DE_TRABAJO.md`](docs/PROGRAMA_DE_TRABAJO.md) — roadmap + task-by-task backlog.
 
 ## Why
 
@@ -91,7 +102,14 @@ keel explain <ev_id>               # full traceability for one evidence entry
 keel prune                         # lifecycle proposals backed by data (section 7.7)
 keel test                          # run RuleTests against a staged snapshot
 keel doctor                        # end-to-end read-only health checks
+
+# wire the client — keel edits the settings.json itself (merge-safe, portable):
+keel adapter claude-code --install --global   # governs sessions from anywhere
+#   keel adapter claude-code --install         # …or just this project's .claude/
+#   keel adapter claude-code --uninstall       # remove keel's hook (leaves the rest)
 ```
+
+Install & uninstall in depth (data-preserving): [`docs/INSTALL.md`](docs/INSTALL.md).
 
 Or try the runnable demo of the spec's own gates:
 
