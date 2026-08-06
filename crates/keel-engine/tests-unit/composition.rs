@@ -26,6 +26,7 @@ fn ws(yaml: &str) -> WorkspaceFiles {
             Document::Skill(s) => f.skills.push(*s),
             Document::Agent(a) => f.agents.push(*a),
             Document::AgentExecutor(x) => f.executors.push(*x),
+            Document::Exception(e) => f.exceptions.push(*e),
             _ => {}
         }
     }
@@ -52,6 +53,13 @@ fn compile_chain(
 }
 
 fn compile_labeled(layers: &[(&str, &WorkspaceFiles)]) -> Result<CompileOutcome, CompileError> {
+    compile_labeled_at(layers, "t")
+}
+
+fn compile_labeled_at(
+    layers: &[(&str, &WorkspaceFiles)],
+    created_at: &str,
+) -> Result<CompileOutcome, CompileError> {
     let chain: Vec<CompileLayer> = layers
         .iter()
         .map(|(label, files)| CompileLayer {
@@ -59,7 +67,7 @@ fn compile_labeled(layers: &[(&str, &WorkspaceFiles)]) -> Result<CompileOutcome,
             files,
         })
         .collect();
-    compile_layered(&chain, "t".to_string())
+    compile_layered(&chain, created_at.to_string())
 }
 
 fn violation(res: Result<CompileOutcome, CompileError>) -> MonotonicityViolation {
@@ -523,6 +531,186 @@ spec:
             .unwrap()
             .decision,
         Decision::Block
+    );
+}
+
+#[test]
+fn a_lower_layer_cannot_re_grant_overridability_a_higher_lock_withheld() {
+    // global NON-overridable block; org locks block but marks it overridable;
+    // project drops to allow. org must NOT be able to widen the exemption the
+    // non-overridable global lock withheld — project's allow < block is caught.
+    let global = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: r, author: g, adrRef: adr:ADR-1, reviewAfter: P6M }
+spec:
+  locked: true
+  on: [file.edited]
+  enforcement: { invalid: { decision: block }, valid: { decision: allow } }
+"#);
+    let org = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: r, author: o, adrRef: adr:ADR-2, reviewAfter: P6M }
+spec:
+  locked: true
+  overridable: true
+  on: [file.edited]
+  enforcement: { invalid: { decision: block }, valid: { decision: allow } }
+"#);
+    let project = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: r, author: t, adrRef: adr:ADR-3, reviewAfter: P6M }
+spec:
+  on: [file.edited]
+  enforcement: { invalid: { decision: allow }, valid: { decision: allow } }
+"#);
+    let v = violation(compile_labeled(&[
+        ("global", &global),
+        ("organization:nui", &org),
+        ("project:demo", &project),
+    ]));
+    assert_eq!(
+        v.dimension,
+        Dimension::Consequence,
+        "allow < block must be caught"
+    );
+}
+
+#[test]
+fn a_valid_exception_relaxes_a_locked_rule() {
+    // global locks block on src/** AND owns an Exception allowing the relaxation.
+    let global = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: sec.no-raw, author: g, adrRef: adr:ADR-1, reviewAfter: P6M }
+spec:
+  locked: true
+  scope: { paths: { include: ["src/**"] } }
+  on: [file.edited]
+  enforcement: { invalid: { decision: block }, valid: { decision: allow } }
+---
+apiVersion: keel/v1alpha1
+kind: Exception
+metadata: { id: reports-waiver }
+spec:
+  rule: rule:sec.no-raw
+  owner: global
+  reason: "Legacy reporting migrates next quarter."
+  scope: { paths: { include: ["src/reports/**"] } }
+  expiry: "2026-12-31"
+"#);
+    let project = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: sec.no-raw, author: t, adrRef: adr:ADR-2, reviewAfter: P6M }
+spec:
+  scope: { paths: { include: ["src/**"] } }
+  on: [file.edited]
+  enforcement: { invalid: { decision: review }, valid: { decision: allow } }
+"#);
+    let outcome = compile_labeled_at(
+        &[("global", &global), ("project:demo", &project)],
+        "2026-06-01T00:00:00Z",
+    )
+    .expect("a valid exception permits the relaxation");
+    assert_eq!(
+        rule_of(&outcome, "sec.no-raw")
+            .enforcement
+            .invalid
+            .as_ref()
+            .unwrap()
+            .decision,
+        Decision::Review,
+        "the relaxed (weaker) definition composes"
+    );
+    assert_eq!(
+        outcome.applied_exceptions.len(),
+        1,
+        "the exception is recorded"
+    );
+    assert_eq!(outcome.applied_exceptions[0].owner, "global");
+}
+
+#[test]
+fn an_expired_exception_does_not_relax() {
+    let global = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: sec.no-raw, author: g, adrRef: adr:ADR-1, reviewAfter: P6M }
+spec:
+  locked: true
+  on: [file.edited]
+  enforcement: { invalid: { decision: block }, valid: { decision: allow } }
+---
+apiVersion: keel/v1alpha1
+kind: Exception
+metadata: { id: stale-waiver }
+spec:
+  rule: rule:sec.no-raw
+  owner: global
+  reason: "expired long ago"
+  scope: { paths: { include: ["src/**"] } }
+  expiry: "2025-01-01"
+"#);
+    let project = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: sec.no-raw, author: t, adrRef: adr:ADR-2, reviewAfter: P6M }
+spec:
+  on: [file.edited]
+  enforcement: { invalid: { decision: review }, valid: { decision: allow } }
+"#);
+    // created_at is AFTER the expiry → the exception is dead.
+    let v = violation(compile_labeled_at(
+        &[("global", &global), ("project:demo", &project)],
+        "2026-06-01T00:00:00Z",
+    ));
+    assert_eq!(v.dimension, Dimension::Consequence);
+    assert!(
+        v.detail.contains("expired"),
+        "the error notes the expired exception"
+    );
+}
+
+#[test]
+fn an_exception_with_the_wrong_owner_does_not_relax() {
+    let global = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: sec.no-raw, author: g, adrRef: adr:ADR-1, reviewAfter: P6M }
+spec:
+  locked: true
+  on: [file.edited]
+  enforcement: { invalid: { decision: block }, valid: { decision: allow } }
+---
+apiVersion: keel/v1alpha1
+kind: Exception
+metadata: { id: wrong-owner }
+spec:
+  rule: rule:sec.no-raw
+  owner: organization:nui
+  reason: "owner does not match the locking scope (global)"
+  scope: { paths: { include: ["src/**"] } }
+  expiry: "2026-12-31"
+"#);
+    let project = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: sec.no-raw, author: t, adrRef: adr:ADR-2, reviewAfter: P6M }
+spec:
+  on: [file.edited]
+  enforcement: { invalid: { decision: review }, valid: { decision: allow } }
+"#);
+    let v = violation(compile_labeled_at(
+        &[("global", &global), ("project:demo", &project)],
+        "2026-06-01T00:00:00Z",
+    ));
+    assert_eq!(
+        v.dimension,
+        Dimension::Consequence,
+        "an exception owned by the wrong scope is ignored"
     );
 }
 

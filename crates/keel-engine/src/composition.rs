@@ -18,6 +18,14 @@
 //!   at least as restrictive as the ancestor (verified D1–D4), then replaces it.
 //! - otherwise (no `locked` ancestor) — the lower layer replaces freely.
 //!
+//! A weakening that would otherwise be rejected is ALLOWED only when a governed
+//! `Exception` (section 7.4) authorizes it — matching the rule and owned by the
+//! locking scope, unexpired as of a caller-supplied reference date. Applied
+//! exceptions are returned so the CLI records them as `human` decisions
+//! (audited, never silent). `overridable` is monotonically non-increasing as
+//! authority descends: a lower layer can drop the exemption, never grant one a
+//! higher lock withheld.
+//!
 //! The comparator reasons over the COMPILED rule (`snapshot::CompiledRule`), so
 //! decisions are already floor-normalized (section 4.7) before D3 runs.
 //!
@@ -87,6 +95,31 @@ pub struct Inheritance {
     pub merge: Option<Merge>,
 }
 
+/// A governed exception (spec section 7.4), reduced to what composition needs.
+/// `rule_id` is the bare rule id (no `rule:` prefix); `owner` is the scope that
+/// declared the lock (must equal the violation's `locked_at`); `expiry` is an
+/// ISO date (`YYYY-MM-DD`).
+#[derive(Debug, Clone)]
+pub struct ExceptionInput {
+    pub rule_id: String,
+    pub owner: String,
+    pub reason: String,
+    pub expiry: String,
+}
+
+/// An exception that was actually applied during composition — surfaced so the
+/// CLI can record it in the ledger as a `human` decision (section 7.4: audited,
+/// never silent).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppliedException {
+    pub rule: String,
+    pub owner: String,
+    pub reason: String,
+    pub expiry: String,
+    pub dimension: Dimension,
+    pub violated_by: String,
+}
+
 /// One composition layer's compiled rules, tagged with the layer label used in
 /// violation reports (e.g. `global`, `organization:nui`, `project:con-app`).
 pub struct ComposeLayer {
@@ -94,10 +127,22 @@ pub struct ComposeLayer {
     pub rules: Vec<(Inheritance, CompiledRule)>,
 }
 
+/// The effective rules plus the governed exceptions that were applied.
+pub struct Composed {
+    pub rules: Vec<CompiledRule>,
+    pub applied_exceptions: Vec<AppliedException>,
+}
+
 /// Folds the layers (highest authority first) into the effective rule set,
-/// verifying `locked` monotonicity (section 7.4). Output is sorted by rule id
-/// (invariant 9: the snapshot hash must not depend on layer/file order).
-pub fn compose(chain: &[ComposeLayer]) -> Result<Vec<CompiledRule>, MonotonicityViolation> {
+/// verifying `locked` monotonicity (section 7.4). A weakening is rejected UNLESS
+/// a valid governed `Exception` (matching rule + owner, not expired as of
+/// `reference_date`, an ISO `YYYY-MM-DD`) authorizes it (section 7.4). Output is
+/// sorted by rule id (invariant 9: the hash must not depend on layer/file order).
+pub fn compose(
+    chain: &[ComposeLayer],
+    exceptions: &[ExceptionInput],
+    reference_date: Option<&str>,
+) -> Result<Composed, MonotonicityViolation> {
     use std::collections::BTreeMap;
 
     // rule id -> the layer stack for that id, in composition order.
@@ -111,16 +156,94 @@ pub fn compose(chain: &[ComposeLayer]) -> Result<Vec<CompiledRule>, Monotonicity
         }
     }
 
-    let mut out = Vec::with_capacity(by_id.len());
+    let mut rules = Vec::with_capacity(by_id.len());
+    let mut applied_exceptions = Vec::new();
     for (_id, stack) in by_id {
-        out.push(fold_rule(&stack)?);
+        rules.push(fold_rule(
+            &stack,
+            exceptions,
+            reference_date,
+            &mut applied_exceptions,
+        )?);
     }
-    Ok(out)
+    Ok(Composed {
+        rules,
+        applied_exceptions,
+    })
+}
+
+/// Consults the governed exceptions for a would-be violation `v`. Records and
+/// suppresses it if a valid (matching, unexpired) exception exists; otherwise
+/// returns the violation (annotated if a matching exception was expired or
+/// unverifiable). Section 7.4: relaxation is legitimate only via an Exception.
+fn govern(
+    v: MonotonicityViolation,
+    exceptions: &[ExceptionInput],
+    reference_date: Option<&str>,
+    applied: &mut Vec<AppliedException>,
+) -> Result<(), MonotonicityViolation> {
+    let Some(exc) = exceptions
+        .iter()
+        .find(|e| e.rule_id == v.rule && e.owner == v.locked_at)
+    else {
+        return Err(v);
+    };
+    match exception_active(&exc.expiry, reference_date) {
+        Some(true) => {
+            applied.push(AppliedException {
+                rule: v.rule.clone(),
+                owner: exc.owner.clone(),
+                reason: exc.reason.clone(),
+                expiry: exc.expiry.clone(),
+                dimension: v.dimension,
+                violated_by: v.violated_by.clone(),
+            });
+            Ok(())
+        }
+        Some(false) => Err(MonotonicityViolation {
+            detail: format!(
+                "{} (a matching Exception exists but expired on {})",
+                v.detail, exc.expiry
+            ),
+            ..v
+        }),
+        None => Err(MonotonicityViolation {
+            detail: format!(
+                "{} (a matching Exception exists but its expiry could not be verified)",
+                v.detail
+            ),
+            ..v
+        }),
+    }
+}
+
+/// `Some(true/false)` when both dates are ISO `YYYY-MM-DD` and comparable;
+/// `None` when either cannot be verified (then the exception is NOT applied —
+/// an unverifiable exception must never relax a `locked` rule).
+fn exception_active(expiry: &str, reference_date: Option<&str>) -> Option<bool> {
+    let today = reference_date?;
+    if !is_iso_date(today) || !is_iso_date(expiry) {
+        return None;
+    }
+    Some(today <= expiry)
+}
+
+fn is_iso_date(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() == 10
+        && b[4] == b'-'
+        && b[7] == b'-'
+        && b[..4].iter().all(u8::is_ascii_digit)
+        && b[5..7].iter().all(u8::is_ascii_digit)
+        && b[8..].iter().all(u8::is_ascii_digit)
 }
 
 /// Folds one rule id's layer stack (highest authority first) into `R'`.
 fn fold_rule(
     stack: &[(&str, &Inheritance, &CompiledRule)],
+    exceptions: &[ExceptionInput],
+    reference_date: Option<&str>,
+    applied: &mut Vec<AppliedException>,
 ) -> Result<CompiledRule, MonotonicityViolation> {
     let (first_label, first_inh, first_rule) = stack[0];
     let mut effective = first_rule.clone();
@@ -147,7 +270,10 @@ fn fold_rule(
             if inh.locked {
                 locked_base = Some(effective.clone());
                 locked_at = Some(label.to_string());
-                overridable = inh.overridable;
+                // `overridable` is monotonically NON-increasing as authority
+                // descends: a lower layer may keep or drop the exemption, never
+                // grant one a higher lock withheld (section 7.4).
+                overridable = overridable && inh.overridable;
             }
         } else if locked_at.is_none() {
             // No locked ancestor: a lower layer replaces freely.
@@ -162,19 +288,22 @@ fn fold_rule(
             effective_label = label;
             locked_base = inh.locked.then(|| rule.clone());
             locked_at = inh.locked.then(|| label.to_string());
-            overridable = inh.overridable;
+            // The exemption can only narrow as authority descends, never widen.
+            overridable = overridable && inh.overridable;
         } else {
             // Locked, not overridable: the lower definition must be at least as
-            // restrictive as the ancestor (section 7.4).
+            // restrictive as the ancestor (section 7.4) — unless a governed
+            // Exception authorizes the relaxation.
             let base = locked_base.as_ref().expect("locked_at implies locked_base");
             if let Err((dimension, detail)) = at_least_as_restrictive(rule, base) {
-                return Err(MonotonicityViolation {
+                let v = MonotonicityViolation {
                     rule: rule.id.clone(),
                     locked_at: locked_at.clone().expect("locked_at set"),
                     violated_by: label.to_string(),
                     dimension,
                     detail,
-                });
+                };
+                govern(v, exceptions, reference_date, applied)?;
             }
             effective = rule.clone();
             effective_label = label;
@@ -185,7 +314,9 @@ fn fold_rule(
             if inh.locked {
                 locked_base = Some(rule.clone());
                 locked_at = Some(label.to_string());
-                overridable = inh.overridable;
+                // Exemption is non-increasing: a non-overridable ancestor stays
+                // non-overridable no matter what a lower lock declares (7.4).
+                overridable = overridable && inh.overridable;
             }
         }
     }

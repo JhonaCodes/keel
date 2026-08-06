@@ -23,8 +23,8 @@
 //! produced them. XDG paths arrive with the installation story (Phase 1).
 
 use keel_dsl::{
-    AgentDoc, AgentExecutorDoc, Document, DslError, RuleDoc, RuleTestDoc, SkillDoc, ToolDoc,
-    WorkspaceDoc, parse_documents,
+    AgentDoc, AgentExecutorDoc, Document, DslError, ExceptionDoc, RuleDoc, RuleTestDoc, SkillDoc,
+    ToolDoc, WorkspaceDoc, parse_documents,
 };
 use std::path::{Path, PathBuf};
 
@@ -43,6 +43,9 @@ pub struct WorkspaceFiles {
     pub agents: Vec<AgentDoc>,
     pub executors: Vec<AgentExecutorDoc>,
     pub tests: Vec<RuleTestDoc>,
+    /// Governed exceptions (section 7.4): the only route to relax a `locked`
+    /// rule, owned at the locking scope with reason, bounded scope and expiry.
+    pub exceptions: Vec<ExceptionDoc>,
 }
 
 impl WorkspaceFiles {
@@ -56,6 +59,7 @@ impl WorkspaceFiles {
             agents: Vec::new(),
             executors: Vec::new(),
             tests: Vec::new(),
+            exceptions: Vec::new(),
         }
     }
 
@@ -151,6 +155,7 @@ pub fn load_components(dir: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
         ("skills", "Skill"),
         ("agents", "Agent"),
         ("tests", "RuleTest"),
+        ("exceptions", "Exception"),
     ] {
         let dir_path = dir.join(sub);
         if !dir_path.is_dir() {
@@ -166,6 +171,7 @@ pub fn load_components(dir: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
                     // Executors live alongside agents in agents/.
                     (Document::AgentExecutor(x), "Agent") => files.executors.push(*x),
                     (Document::RuleTest(t), "RuleTest") => files.tests.push(*t),
+                    (Document::Exception(e), "Exception") => files.exceptions.push(*e),
                     (other, _) => {
                         return Err(WorkspaceError::MisplacedKind {
                             path: path.clone(),
@@ -196,6 +202,9 @@ pub fn load_components(dir: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
         .sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
     files
         .tests
+        .sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
+    files
+        .exceptions
         .sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
 
     Ok(files)

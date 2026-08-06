@@ -5,21 +5,20 @@
 //! Parse                → workspace.rs (YAML → Document, schema-validated)
 //! Schema validation    → keel-dsl::schema (ADR-023 active)
 //! Reference resolution → every tool ref resolves to a builtin or a manifest
-//! Composition          → *** DOCUMENTED STUB *** (see below)
+//! Composition          → composition.rs (fold layers + verify locked
+//!                        monotonicity D1–D4, section 7.4; governed Exceptions)
 //! Conflict detection   → duplicate IDs at the same level (section 7.6)
 //! Tool validation      → compilable regexes, detect builtin-only in Phase 0
 //! Index generation     → event → candidate rules
 //! Snapshot creation    → immutable artifact with a canonical hash
 //! ```
 //!
-//! ── Composition: why it is a no-op in Phase 0 ───────────────────────────
-//! The `locked` monotonicity check (spec section 7.4, D1–D4) operates on the
-//! COMPOSITION of layers (org → platform → project → team → profile).
-//! Phase 0 has ONE workspace and ONE project: there is no second authority
-//! layer against which to verify that nothing gets weakened. The step exists
-//! here as an explicit function — not silently omitted — and activates when
-//! the second layer arrives (Phase 1+). The lattice it will use (D3) already
-//! lives in keel-core::Decision.
+//! ── Composition ─────────────────────────────────────────────────────────
+//! When a rule id appears across composition layers (section 7.2), [`compose`]
+//! folds them into one effective rule and, against any `locked` ancestor,
+//! verifies the composed rule is at least as restrictive (D1–D4). A weakening
+//! is a compile error unless a governed `Exception` (section 7.4) authorizes it.
+//! A flat workspace is one layer, so composition is an identity there.
 //!
 //! The compiler is a PURE FUNCTION config → snapshot: it does not import the
 //! runtime (forbidden edge compiler ⇏ runtime), does not evaluate events,
@@ -27,7 +26,7 @@
 //! code over the same workspace, produce bit-for-bit the same hash
 //! (invariant 9).
 
-use crate::composition::{ComposeLayer, Inheritance, compose};
+use crate::composition::{AppliedException, ComposeLayer, ExceptionInput, Inheritance, compose};
 use crate::snapshot::{
     CompiledAgent, CompiledBranch, CompiledEnforcement, CompiledExecutor, CompiledPrecondition,
     CompiledRule, CompiledScope, CompiledSkill, CompiledToolCall, CompiledToolRef, CompiledWhen,
@@ -48,6 +47,10 @@ pub struct CompileOutcome {
     /// section 4.7 floors applied by normalization). The rule ledger starts here:
     /// debt is declared, not swallowed.
     pub warnings: Vec<String>,
+    /// Governed exceptions applied during composition (section 7.4). Surfaced so
+    /// the CLI records each as a `human` decision in the ledger — a relaxation of
+    /// a `locked` rule is audited, never silent.
+    pub applied_exceptions: Vec<AppliedException>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -247,12 +250,45 @@ pub fn compile_layered(
         });
     }
 
+    // ── Governed exceptions (section 7.4): the only route to relax a locked
+    //    rule. Collected across the chain; expiry is checked against the
+    //    snapshot's own creation date (deterministic — no wall clock). ──
+    let mut exceptions = Vec::new();
+    for layer in chain {
+        for exc in &layer.files.exceptions {
+            exceptions.push(ExceptionInput {
+                rule_id: exc
+                    .spec
+                    .rule
+                    .strip_prefix("rule:")
+                    .unwrap_or(&exc.spec.rule)
+                    .to_string(),
+                owner: exc.spec.owner.clone(),
+                reason: exc.spec.reason.clone(),
+                expiry: exc.spec.expiry.clone(),
+            });
+        }
+    }
+    let reference_date = created_at.get(0..10);
+
     // ── Composition + monotonicity verification (section 7.4) ──
-    let rules = compose(&compose_layers)?;
+    let composed = compose(&compose_layers, &exceptions, reference_date)?;
+    for exc in &composed.applied_exceptions {
+        warnings.push(format!(
+            "governed exception applied (human decision, section 7.4): rule `{}` relaxed on {} by `{}`, owned by `{}`, expires {} — {}",
+            exc.rule, exc.dimension, exc.violated_by, exc.owner, exc.expiry, exc.reason
+        ));
+    }
+    let applied_exceptions = composed.applied_exceptions;
 
     // ── Index generation + Snapshot creation (canonical hash, invariant 9) ──
-    let snapshot = Snapshot::build_full(rules, tools, skills, agents, executors, created_at)?;
-    Ok(CompileOutcome { snapshot, warnings })
+    let snapshot =
+        Snapshot::build_full(composed.rules, tools, skills, agents, executors, created_at)?;
+    Ok(CompileOutcome {
+        snapshot,
+        warnings,
+        applied_exceptions,
+    })
 }
 
 /// The composition inheritance a rule declares (spec section 7.3).
