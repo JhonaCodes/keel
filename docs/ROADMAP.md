@@ -27,7 +27,7 @@ mide ya existe: `declared` vs `effective` en el ledger
 **Hecho cuando:** hay un dataset de sesiones reales y un reporte con el delta
 medido y su criterio de continuación.
 
-### 2 · Lock + binding (inv 4 / inv 9)  · ❌  · CÓDIGO
+### 2 · Lock + binding (inv 4 / inv 9)  · ✅ HECHO  · CÓDIGO
 **Qué:** `.keel/project.yaml` (binding del repo) + `keel.lock` (hash canónico
 fijado), con la ceremonia de generación/validación.
 **Por qué importa:** sin esto no existe el plano CI y `locked` **no llega a ser
@@ -37,7 +37,7 @@ de hash única (`crates/keel-engine/src/hash.rs`), sin fichero lock.
 **Hecho cuando:** `keel` genera y valida el lock, y local + CI comparten el mismo
 hash/lock (inv 9).
 
-### 3 · Plano CI / cumplimiento  · ❌  · CÓDIGO + INFRA
+### 3 · Plano CI / cumplimiento  · ✅ HECHO  · CÓDIGO + INFRA
 **Qué:** el mismo engine corriendo en CI (runtime efímero, resuelve capabilities
 por configuración), que falla el job antes de ejecutar si el binding/lock no
 resuelve.
@@ -58,7 +58,7 @@ lattice D3 ya vive en `keel-core/src/lib.rs:53-94`. Spec líneas 521-562, ADR-01
 **Hecho cuando:** existe una 2ª capa de autoridad y el compilador rechaza toda
 composición no monótona.
 
-### 5 · Capability manifest + preflight del adapter (inv 8, §12.1)  · 🟡  · CÓDIGO
+### 5 · Capability manifest + preflight del adapter (inv 8, §12.1)  · ✅ HECHO  · CÓDIGO
 **Qué:** que el adapter declare un manifiesto de capacidades y el compilador haga
 **preflight**: rechazar una policy bloqueante que el cliente no puede honrar, en
 vez de asumirla.

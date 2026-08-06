@@ -13,9 +13,10 @@ repo — has **not been run**; that measurement, not the code, is what the spec
 makes the gate for growing further.
 
 Snapshot of the tree: 4 crates (`keel-core`, `keel-dsl`, `keel-engine`,
-`keel-cli`), ~5.9k LoC, **61 tests green**. Kinds: Workspace, Rule, Tool, Skill,
+`keel-cli`), **82 tests green**. Kinds: Workspace, Rule, Tool, Skill,
 Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
-`observe`, `gate`, `audit`, `adapter`, `explain`, `prune`, `test`, `doctor`.
+`observe`, `gate`, `audit`, `adapter` (+`--check` preflight), `bind`, `lock`,
+`ci resolve`/`ci run`, `explain`, `prune`, `test`, `doctor`.
 
 ---
 
@@ -44,12 +45,12 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 | **inv 1** unique id + owner | ✅ | component ids; duplicate-id compile error |
 | **inv 2** never copied between scopes | ✅ | references only |
 | **inv 3** reusable in versioned packages | ⏭ | single workspace, no packages yet |
-| **inv 4** repo holds binding/lock/CI only | ❌ | no `.keel/project.yaml` + lock ceremony yet |
+| **inv 4** repo holds binding/lock/CI only | ✅ | `keel bind` → `.keel/project.yaml`; `keel lock` → `.keel/keel.lock`; `lock.rs` |
 | **inv 5** local paths/secrets never versioned | ✅ | `.keel-state/` gitignored; commands stay relative |
 | **inv 6** snapshot published only if compile+tests pass | ✅ | atomic compile (`commands.rs::compile`) |
 | **inv 7** last valid snapshot retained | ✅ | `snapshot.prev.json` |
-| **inv 8** blocking policy needs adapter control (preflight) | 🟡 | adapter is thin; capability-manifest preflight not yet modeled |
-| **inv 9** local & CI same lock/hash | 🟡 | single canonical hash authority (`hash.rs`); CI plane & lock file pending |
+| **inv 8** blocking policy needs adapter control (preflight) | ✅ | `adapter.rs` capability manifest + `keel adapter --check` preflight rejects unhonorable blocks |
+| **inv 9** local & CI same lock/hash | ✅ | `keel.lock` pins the snapshot hash; `keel lock --verify` / `keel ci resolve` fail on drift |
 | **inv 10** secrets by reference | ⏭ | no secrets in scope yet |
 | **inv 11** Agent declares what, Executor how/where | ✅ | `kind: Agent` / `kind: AgentExecutor` |
 | **inv 12** child result schema-validated | 🟡 | `audit.rs` validates verdict-json shape; full JSON-Schema of AgentResult pending |
@@ -65,7 +66,7 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 | Item | Status | Evidence |
 |---|---|---|
 | 5.1 honest local threat model (cooperative) | ✅ | README + packets never claim inviolable local enforcement |
-| 5.2 guarantee matrix by plane | 🟡 | local plane implemented; CI plane pending |
+| 5.2 guarantee matrix by plane | ✅ | local plane + compliance CI plane (`keel ci`) reusing the same engine over the lock |
 | 5.3 interception rings (inner pre-action / outer post-hoc) | ✅ | `gate.rs` `preventable` = inner ring + completion; file.edited = feedback |
 
 ## §6 Model & lifecycle
@@ -82,7 +83,7 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 
 | Item | Status | Evidence |
 |---|---|---|
-| 7.1 resolution by repo identity | ❌ | repo binding pending |
+| 7.1 resolution by repo identity | ✅ | `keel bind` derives `project:org/repo` from the git remote → `.keel/project.yaml` |
 | 7.2 composition order | ⏭ | single layer |
 | 7.3 inheritance types | ⏭ | — |
 | 7.4 monotonicity D1–D4 | ⏭ | documented stub; lattice ready in `keel-core::Decision` |
@@ -103,7 +104,7 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 | 11 DSL | ✅ | envelope + all Phase kinds + JSON Schemas in `schemas/` |
 | 11.4 preconditions (ADR-022) | ✅ | `env.present`/`flag.present` + external, live env at gate |
 | 11.6 SARIF findings (ADR-016) | ✅ | `sarif.rs`; `finding.v1` absent |
-| 12.1 adapter contract / manifest | 🟡 | claude-code adapter; capability manifest + preflight pending |
+| 12.1 adapter contract / manifest | ✅ | `AdapterManifest` (claude-code) + `keel adapter --check` compile-time preflight |
 | 12.2 one logical integration | ✅ | hook transports, runtime decides |
 | 12.3 completion authorization | ✅ | completion gate |
 | 12.4 compatible vs governed mode | 🟡 | compatible only (no proxy) |
@@ -131,14 +132,14 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 | 15.1 Phase 0a — DSL expressiveness | ✅ | corpus §11.3–11.5 parses + round-trips (`keel-dsl/tests/corpus.rs`) |
 | 15.1 Phase 0b — passive telemetry | ✅ built / 🟡 unproven | `keel observe` + ledger; needs real-session data |
 | 15.1 Phase 0c — enforcement experiment | ❌ | the measurement gating further growth — **not run** |
-| Phase 1 — local core | 🟡 | engine + enforcement done; lock/binding/monotonicity/preflight pending |
+| Phase 1 — local core | 🟡 | engine + enforcement + lock/binding + CI plane + preflight done; monotonicity (§7.4) still a stub |
 | Phase 2 — full cycle & cross-model | 🟡 | audit seed + completion; broker/routing/full phases pending |
 | §16 limitations | ✅ | acknowledged in README + here (cooperative local plane, etc.) |
 
 ## ADRs 1–23
 
-001 ✅ · 002 ✅ · 003 ✅ · 004 ✅ · 005 ⏭(no MCP yet) · 006 ⏭ · 007 🟡(hash yes, lock file no) ·
-008 🟡 · 009 ✅ · 010 ✅(ephemeral) · 011 ✅ · 012 🟡 · 013 🟡 · 014 🟡 · 015 ✅ ·
+001 ✅ · 002 ✅ · 003 ✅ · 004 ✅ · 005 ⏭(no MCP yet) · 006 ⏭ · 007 ✅(lock file + verify) ·
+008 ✅(adapter preflight) · 009 ✅ · 010 ✅(ephemeral) · 011 ✅ · 012 🟡 · 013 🟡 · 014 🟡 · 015 ✅ ·
 016 ✅ · 017 ✅ · 018 🟡 · 019 ✅ · 020 ✅(this doc honors it) · 021 ✅ · 022 ✅ · 023 ✅
 
 ## `RCCA_future.md`
@@ -150,11 +151,16 @@ workflow certification, web panel. None started.
 
 ## What to do next, in the spec's own order
 
+Done since the first pass: **lock + binding (inv 4/9)** (`keel bind`/`keel lock`),
+the **compliance CI plane (§5.2)** (`keel ci resolve`/`run` + `examples/ci/`),
+and the **adapter capability preflight (inv 8, §12.1)** (`keel adapter --check`).
+See `docs/ROADMAP.md` and `docs/PLAN_IMPLEMENTACION.md` for the full record.
+
+Still open, in the spec's own order:
+
 1. **Run Phase 0c** — capture real agent sessions, compare violations-to-review
    with/without `keel gate`. This is the decision point, not more features.
-2. **Lock + binding (inv 4/9)** — `.keel/project.yaml` + `keel.lock`; the CI
-   plane reuses the same engine so `locked` finally becomes a guarantee.
-3. **Composition + monotonicity (§7.4)** — activate the stub once a second
+2. **Composition + monotonicity (§7.4)** — activate the stub once a second
    authority layer exists.
-4. **Adapter capability manifest + preflight (inv 8, §12.1)** — reject a
-   blocking policy the client cannot honor, instead of assuming it.
+3. **Phase 2 (§14.4+)** — agent broker/routing + full phase machine, gated by
+   the Phase 0c result.

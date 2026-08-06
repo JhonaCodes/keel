@@ -24,9 +24,14 @@ commits sin `Co-Authored-By`, formato `type: short` + `Closes #N`.
 - [x] **PR3b · `refactor/move-unit-tests-out-of-src`** — tests inline fuera de `src` vía `#[path]` (15 archivos). PR #8 · **merged** `ab4d119`.
 - [x] **PR4 · `fix/surface-load-capabilities`** — #9: `capabilities` hecho honesto (surfaceado + documentado), NO removido (es forward-declaration de spec §11.3). PR #10 · **merged**.
 - [x] **PR5 · `docs/finding-v1-deprecated-clarification`** — #11: `finding.v1` NO es gap; está **deprecado por diseño** (ADR-016). Corrección de registro.
-- [ ] **PR6 · `feat/repo-binding-lock`** — #2 lock + binding.
-- [ ] **PR7 · `feat/compliance-ci-plane`** — #3 plano CI de cumplimiento (depende de PR6).
-- [ ] **PR8 · `feat/adapter-capability-preflight`** — #5 preflight del adapter.
+- [x] **PR6 · `feat/repo-binding-lock`** — #2 lock + binding (`keel bind`/`keel lock`). PR #14 · **merged** `2cb8b12`.
+- [x] **PR7 · `feat/compliance-ci-plane`** — #3 plano CI (`keel ci resolve`/`run` + `examples/ci/`). PR #16 · **merged** `103e5a8`.
+- [x] **PR8 · `feat/adapter-capability-preflight`** — #5 preflight (`keel adapter --check`). PR #18 · **merged** `01a867f`.
+
+**TODOS los PRs accionables están mergeados.** Quedan (por diseño, fuera de esta
+iniciativa): Phase 0c (medición), monotonicidad D1–D4 (§7.4, hasta 2ª capa),
+broker/routing agentes + máquina de fases (Phase 2), MCP gateway. Ver la sección
+"Deliberadamente DIFERIDO".
 
 ---
 
