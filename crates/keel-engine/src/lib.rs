@@ -9,6 +9,9 @@
 //! ```text
 //! audit     → ledger (keel-core)        (section 14: runs an executor, files origin=semantic)
 //! compile   → keel-dsl + snapshot        (config → artifact; PURE)
+//! composition → snapshot + keel-dsl       (folds layers + verifies locked
+//!                                          monotonicity, section 7.4; PURE,
+//!                                          compile-side)
 //! snapshot  → keel-core                  (⇏ dsl: the compiled artifact does
 //!                                          not drag authoring vocabulary
 //!                                          along)
@@ -36,6 +39,7 @@
 pub mod adapter;
 pub mod audit;
 pub mod compile;
+pub mod composition;
 pub mod ledger;
 pub mod lock;
 pub mod packet;

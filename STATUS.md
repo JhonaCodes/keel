@@ -57,7 +57,7 @@ RuleTest, RepositoryRegistry, Profile, Exception. Commands: `workspace init`, `c
 | **inv 12** child result schema-validated | ✅ | `audit.rs::schema_check` validates the AgentResult against the agent's declared `outputSchema` (jsonschema); non-conformance → unknown |
 | **inv 13** delegation limits (depth/time/cost/permissions) | 🟡 | timeout + maxTokens enforced (over budget → unknown + finding, real tokens in ledger); maxDepth/cross-cost deferred (need delegation graph, Phase 2); permissions: executor env isolation done (env_clear + allowlist, section 13.1 "no secret inheritance by default"); OS sandbox (network/fs) + secret-ref still open (PROGRAMA T3) |
 | **inv 14** executor/model change in provenance | ✅ | agents/executors are in the snapshot hash + `keel.lock`; a model/command change is drift `keel lock --verify`/`keel ci resolve` catch |
-| **inv 15** composition monotonicity | ⏭ | one authority layer — documented stub (`compile.rs::composition_stub`) |
+| **inv 15** composition monotonicity | ✅ | `composition::compose` verifies D1–D4 across layers; a `locked` rule cannot be weakened (only an `Exception` may relax it — see 7.4) |
 | **inv 16** session append-only, non-authoritative | ✅ | `session.rs` only records deliveries; ledger has no UPDATE/DELETE |
 | **inv 17** phases owned by runtime, artifact-gated | 🟡 | completion gate exists; full phase machine section 6.2 pending |
 | **inv 18** adversarial input delimited as data | ✅ | `audit.rs` DATA markers (section 13.2) |
@@ -87,7 +87,7 @@ RuleTest, RepositoryRegistry, Profile, Exception. Commands: `workspace init`, `c
 | 7.1 resolution by repo identity | ✅ | `keel bind` derives `project:org/repo` from the git remote → `.keel/project.yaml`; `resolution::resolve` selects the chain (global + org + project) and verifies identity vs `repositories.yaml` (local advisory) |
 | 7.2 composition order | 🟡 | layer LOADING landed (`workspace::load_layered`, section 8.5 dirs in the fixed 7.2 order); composing them + monotonicity still a stub (7.4) |
 | 7.3 inheritance types | 🟡 | authoring vocabulary parses + round-trips (`locked`/`overridable`/`merge` on `RuleSpec`); monotonicity runtime still a stub (see 7.4) |
-| 7.4 monotonicity D1–D4 | ⏭ | documented stub; lattice ready in `keel-core::Decision` |
+| 7.4 monotonicity D1–D4 | ✅ | `composition::compose` folds layers by rule id and verifies D1 coverage / D2 sensitivity / D3 decision / D4 load against the `locked` ancestor; a weakening is a `MonotonicityViolation` compile error with the dimension + offending layer. `merge: append` join + `overridable` exemption implemented |
 | 7.5 session append-only | ✅ | see inv 16 |
 | 7.6 conflicts not silently resolved | ✅ | duplicate-id compile error |
 | 7.7 rule lifecycle / prune | ✅ | `keel prune` with ledger evidence + human decisions |
@@ -133,7 +133,7 @@ RuleTest, RepositoryRegistry, Profile, Exception. Commands: `workspace init`, `c
 | 15.1 Phase 0a — DSL expressiveness | ✅ | corpus section 11.3–11.5 parses + round-trips (`keel-dsl/tests/corpus.rs`) |
 | 15.1 Phase 0b — passive telemetry | ✅ built / 🟡 unproven | `keel observe` + ledger; needs real-session data |
 | 15.1 Phase 0c — enforcement experiment | 🟡 | harness BUILT (`keel-measure` + synthetic v0 dataset, `test/src/measure.rs`, `datasets/phase0c/`); the real-session run gating further growth is **not run yet** |
-| Phase 1 — local core | 🟡 | engine + enforcement + lock/binding + CI plane + preflight done; monotonicity (section 7.4) still a stub |
+| Phase 1 — local core | 🟡 | engine + enforcement + lock/binding + CI plane + preflight + layered composition & monotonicity (section 7.4) done; CLI wiring of the layered compile (project attach) pending |
 | Phase 2 — full cycle & cross-model | 🟡 | audit seed + completion; broker/routing/full phases pending |
 | section 16 limitations | ✅ | acknowledged in README + here (cooperative local plane, etc.) |
 
@@ -162,7 +162,9 @@ Still open, in the spec's own order:
 1. **Run Phase 0c over real sessions** — the harness exists (`keel-measure`);
    what remains is capturing real agent sessions and running the passive-vs-enforce
    comparison over them. This is the decision point, not more features.
-2. **Composition + monotonicity (section 7.4)** — activate the stub once a second
-   authority layer exists.
+2. **Wire the layered compile into the CLI** — `composition::compose` +
+   `resolution::resolve` + `workspace::load_layered` exist; `project attach`
+   and the layered `keel compile` that drive them are the remaining install-story
+   step (section 9).
 3. **Phase 2 (section 14.4+)** — agent broker/routing + full phase machine, gated by
    the Phase 0c result.

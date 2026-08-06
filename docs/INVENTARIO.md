@@ -48,7 +48,7 @@ Leyenda: **NO-EMPEZADO** · **PARCIAL** (scaffolding inerte) · **stub** (no-op 
 
 | Ítem | Precondición |
 |---|---|
-| Monotonicidad de composición D1–D4 §7.4 (stub) | una 2ª capa de autoridad |
+| ~~Monotonicidad de composición D1–D4 §7.4~~ ✅ HECHO (Fase 4: `composition.rs` + capas del workspace §8.5) | — |
 | MCP gateway §14.12 | ADR-005/006 diferidos |
 | Sandbox OS del executor (network-deny/read-only) + secret-ref — resto de T3 | sandboxing por SO + subsistema de secretos (inv 10 / D4) |
 | Packages versionados (inv 3), hot reload §10.3, identidad fuerte §13.3, instalador firmado §9 | decisiones de diseño / Phase 1+ |
@@ -60,6 +60,6 @@ Leyenda: **NO-EMPEZADO** · **PARCIAL** (scaffolding inerte) · **stub** (no-op 
 1. **Correr Phase 0c real (T1)** — desbloquea todo (B); es tu decisión (medición, no código).
 2. **T3 — aislar el env del executor** — único código desbloqueado ahora.
 3. Con delta material de 0c → Phase 2 por orden de spec: **#1-exec** → **#6+#13** → **#8** → capabilities/fases/resto.
-4. Aparte, por su precondición: monotonicidad (2ª capa) · MCP (ADR-005/006).
+4. Aparte, por su precondición: MCP (ADR-005/006). (Monotonicidad §7.4: HECHA en Fase 4.)
 
 **Nada de esto está a medias fingiendo estar hecho**: cada ítem tiene estado real y precondición explícita en las docs enlazadas arriba.

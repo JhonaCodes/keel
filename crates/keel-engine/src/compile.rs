@@ -27,6 +27,7 @@
 //! code over the same workspace, produce bit-for-bit the same hash
 //! (invariant 9).
 
+use crate::composition::{ComposeLayer, Inheritance, compose};
 use crate::snapshot::{
     CompiledAgent, CompiledBranch, CompiledEnforcement, CompiledExecutor, CompiledPrecondition,
     CompiledRule, CompiledScope, CompiledSkill, CompiledToolCall, CompiledToolRef, CompiledWhen,
@@ -36,7 +37,7 @@ use crate::tools::{BUILTIN_DETECTORS, BUILTIN_PRECONDITIONS};
 use crate::workspace::WorkspaceFiles;
 use keel_core::{Decision, Reversibility};
 use keel_dsl::{Branch, Enforcement, OnFail, RuleDoc, ToolDoc, ToolRef};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 const DEFAULT_TOOL_TIMEOUT_MS: u64 = 10_000;
 
@@ -85,129 +86,183 @@ pub enum CompileError {
     },
     #[error("snapshot not serializable: {0}")]
     Snapshot(#[from] serde_json::Error),
+    #[error(transparent)]
+    Monotonicity(#[from] crate::composition::MonotonicityViolation),
 }
 
-/// Compiles the loaded workspace into an immutable snapshot.
-pub fn compile(files: &WorkspaceFiles, created_at: String) -> Result<CompileOutcome, CompileError> {
-    let mut warnings = Vec::new();
+/// One composition layer to compile: its rules/tools/etc. and the label used in
+/// monotonicity reports (`global`, `organization:nui`, `project:con-app`).
+pub struct CompileLayer<'a> {
+    pub label: String,
+    pub files: &'a WorkspaceFiles,
+}
 
-    // ── Conflict detection (section 7.6): the compiler does not resolve silently ──
-    let mut seen = std::collections::BTreeSet::new();
-    for doc in files.rules.iter().map(|r| &r.metadata.id) {
-        if !seen.insert(doc.clone()) {
-            return Err(CompileError::DuplicateId(doc.clone()));
-        }
-    }
+/// Compiles a single flat workspace into an immutable snapshot. A flat
+/// workspace is one composition layer, so this is `compile_layered` over a
+/// one-element chain — the same code path, no special case.
+pub fn compile(files: &WorkspaceFiles, created_at: String) -> Result<CompileOutcome, CompileError> {
+    compile_layered(
+        &[CompileLayer {
+            label: "project".to_string(),
+            files,
+        }],
+        created_at,
+    )
+}
+
+/// Compiles a composition chain (spec section 7.2, highest authority first) into
+/// one snapshot: unions the components, compiles each layer's rules, composes
+/// them into effective rules while verifying `locked` monotonicity (section 7.4,
+/// [`compose`]), then builds the snapshot.
+pub fn compile_layered(
+    chain: &[CompileLayer],
+    created_at: String,
+) -> Result<CompileOutcome, CompileError> {
+    let mut warnings = Vec::new();
+    // Non-rule component ids are unique across the whole chain (section 7.6:
+    // there is no defined composition for tools/skills/agents/executors, so a
+    // clash is a conflict, never a silent override). Rule ids may recur across
+    // layers — that is composition, handled by `compose`.
+    let mut seen = BTreeSet::new();
 
     // ── Tool manifests ──
     let mut tools: BTreeMap<String, ExternalToolDef> = BTreeMap::new();
-    for tool in &files.tools {
-        if !seen.insert(tool.metadata.id.clone()) {
-            return Err(CompileError::DuplicateId(tool.metadata.id.clone()));
+    for layer in chain {
+        for tool in &layer.files.tools {
+            if !seen.insert(tool.metadata.id.clone()) {
+                return Err(CompileError::DuplicateId(tool.metadata.id.clone()));
+            }
+            tools.insert(tool.metadata.id.clone(), compile_tool(tool));
         }
-        tools.insert(tool.metadata.id.clone(), compile_tool(tool));
     }
 
     // ── Skill manifests (section 14.12): paths validated, content read at delivery ──
     let mut skills: BTreeMap<String, CompiledSkill> = BTreeMap::new();
-    for skill in &files.skills {
-        if !seen.insert(skill.metadata.id.clone()) {
-            return Err(CompileError::DuplicateId(skill.metadata.id.clone()));
+    for layer in chain {
+        for skill in &layer.files.skills {
+            if !seen.insert(skill.metadata.id.clone()) {
+                return Err(CompileError::DuplicateId(skill.metadata.id.clone()));
+            }
+            if !layer.files.root.join(&skill.spec.compact).exists() {
+                warnings.push(format!(
+                    "skill `{}`: compact file `{}` not found in the workspace — delivery will degrade to a reference",
+                    skill.metadata.id, skill.spec.compact
+                ));
+            }
+            skills.insert(
+                skill.metadata.id.clone(),
+                CompiledSkill {
+                    id: skill.metadata.id.clone(),
+                    compact: skill.spec.compact.clone(),
+                    full: skill.spec.full.clone(),
+                    examples: skill
+                        .spec
+                        .examples
+                        .iter()
+                        .map(|e| (e.rejected.clone(), e.accepted.clone()))
+                        .collect(),
+                },
+            );
         }
-        if !files.root.join(&skill.spec.compact).exists() {
-            warnings.push(format!(
-                "skill `{}`: compact file `{}` not found in the workspace — delivery will degrade to a reference",
-                skill.metadata.id, skill.spec.compact
-            ));
-        }
-        skills.insert(
-            skill.metadata.id.clone(),
-            CompiledSkill {
-                id: skill.metadata.id.clone(),
-                compact: skill.spec.compact.clone(),
-                full: skill.spec.full.clone(),
-                examples: skill
-                    .spec
-                    .examples
-                    .iter()
-                    .map(|e| (e.rejected.clone(), e.accepted.clone()))
-                    .collect(),
-            },
-        );
     }
 
     // ── Agent executors (section 14.1/14.8): how/where an agent runs ──
     let mut executors: BTreeMap<String, CompiledExecutor> = BTreeMap::new();
-    for x in &files.executors {
-        if !seen.insert(x.metadata.id.clone()) {
-            return Err(CompileError::DuplicateId(x.metadata.id.clone()));
+    for layer in chain {
+        for x in &layer.files.executors {
+            if !seen.insert(x.metadata.id.clone()) {
+                return Err(CompileError::DuplicateId(x.metadata.id.clone()));
+            }
+            executors.insert(
+                x.metadata.id.clone(),
+                CompiledExecutor {
+                    id: x.metadata.id.clone(),
+                    command: x.spec.command.clone(),
+                    model: x.spec.model.clone(),
+                    timeout_ms: x.spec.timeout_ms,
+                    env: x.spec.env.clone(),
+                },
+            );
         }
-        executors.insert(
-            x.metadata.id.clone(),
-            CompiledExecutor {
-                id: x.metadata.id.clone(),
-                command: x.spec.command.clone(),
-                model: x.spec.model.clone(),
-                timeout_ms: x.spec.timeout_ms,
-                env: x.spec.env.clone(),
-            },
-        );
     }
 
-    // ── Agents (section 14): resolve the executor reference (invariant 11) ──
+    // ── Agents (section 14): resolve the executor reference (invariant 11).
+    //    Resolved after ALL executors so an agent may use one from any layer. ──
     let mut agents: BTreeMap<String, CompiledAgent> = BTreeMap::new();
-    for a in &files.agents {
-        if !seen.insert(a.metadata.id.clone()) {
-            return Err(CompileError::DuplicateId(a.metadata.id.clone()));
+    for layer in chain {
+        for a in &layer.files.agents {
+            if !seen.insert(a.metadata.id.clone()) {
+                return Err(CompileError::DuplicateId(a.metadata.id.clone()));
+            }
+            let executor_id = a
+                .spec
+                .executor
+                .strip_prefix("executor:")
+                .unwrap_or(&a.spec.executor)
+                .to_string();
+            if !executors.contains_key(&executor_id) {
+                return Err(CompileError::UnresolvedExecutor {
+                    agent: a.metadata.id.clone(),
+                    executor: executor_id,
+                });
+            }
+            agents.insert(
+                a.metadata.id.clone(),
+                CompiledAgent {
+                    id: a.metadata.id.clone(),
+                    role: a.spec.role.clone(),
+                    executor: executor_id,
+                    objective: a.spec.objective.clone(),
+                    output_schema: a.spec.output_schema.clone(),
+                    timeout_ms: a.spec.budget.as_ref().and_then(|b| b.timeout_ms),
+                    max_tokens: a.spec.budget.as_ref().and_then(|b| b.max_tokens),
+                },
+            );
         }
-        let executor_id = a
-            .spec
-            .executor
-            .strip_prefix("executor:")
-            .unwrap_or(&a.spec.executor)
-            .to_string();
-        if !executors.contains_key(&executor_id) {
-            return Err(CompileError::UnresolvedExecutor {
-                agent: a.metadata.id.clone(),
-                executor: executor_id,
-            });
-        }
-        agents.insert(
-            a.metadata.id.clone(),
-            CompiledAgent {
-                id: a.metadata.id.clone(),
-                role: a.spec.role.clone(),
-                executor: executor_id,
-                objective: a.spec.objective.clone(),
-                output_schema: a.spec.output_schema.clone(),
-                timeout_ms: a.spec.budget.as_ref().and_then(|b| b.timeout_ms),
-                max_tokens: a.spec.budget.as_ref().and_then(|b| b.max_tokens),
-            },
-        );
     }
 
-    // ── Composition: DOCUMENTED STUB (see module header, section 7.4) ──
-    composition_stub();
-
-    // ── Reference resolution + Tool validation + Policy compilation ──
-    let mut rules = Vec::with_capacity(files.rules.len());
-    for rule in &files.rules {
-        rules.push(compile_rule(rule, &tools, &skills, &mut warnings)?);
+    // ── Reference resolution + Tool validation + Policy compilation, per layer.
+    //    Rules are compiled against the UNIONED tools/skills (a rule may
+    //    reference a tool defined in a higher layer). ──
+    let mut compose_layers = Vec::with_capacity(chain.len());
+    for layer in chain {
+        let mut layer_ids = BTreeSet::new();
+        let mut layer_rules = Vec::with_capacity(layer.files.rules.len());
+        for doc in &layer.files.rules {
+            // Two rules with the same id in ONE layer is a same-level conflict
+            // (section 7.6); the same id ACROSS layers is composition.
+            if !layer_ids.insert(doc.metadata.id.clone()) {
+                return Err(CompileError::DuplicateId(doc.metadata.id.clone()));
+            }
+            // A rule id must not collide with a component id.
+            if seen.contains(&doc.metadata.id) {
+                return Err(CompileError::DuplicateId(doc.metadata.id.clone()));
+            }
+            let compiled = compile_rule(doc, &tools, &skills, &mut warnings)?;
+            layer_rules.push((inheritance_of(doc), compiled));
+        }
+        compose_layers.push(ComposeLayer {
+            label: layer.label.clone(),
+            rules: layer_rules,
+        });
     }
+
+    // ── Composition + monotonicity verification (section 7.4) ──
+    let rules = compose(&compose_layers)?;
 
     // ── Index generation + Snapshot creation (canonical hash, invariant 9) ──
     let snapshot = Snapshot::build_full(rules, tools, skills, agents, executors, created_at)?;
     Ok(CompileOutcome { snapshot, warnings })
 }
 
-/// `Composition` step of the section 10.1 pipeline — deliberate no-op in Phase 0.
-///
-/// HERE is where the D1–D4 `locked` monotonicity check (section 7.4) will live once
-/// there is a second authority layer to compose. It is kept as a named
-/// function so the pipeline declares ALL its steps even when one does not
-/// operate yet: a silently omitted step is the failure mode this system
-/// fights.
-fn composition_stub() {}
+/// The composition inheritance a rule declares (spec section 7.3).
+fn inheritance_of(doc: &RuleDoc) -> Inheritance {
+    Inheritance {
+        locked: doc.spec.locked,
+        overridable: doc.spec.overridable,
+        merge: doc.spec.merge,
+    }
+}
 
 fn compile_tool(tool: &ToolDoc) -> ExternalToolDef {
     // Commands are preserved AS AUTHORED (relative paths included): pinning
