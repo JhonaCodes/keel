@@ -138,7 +138,11 @@ fn run_executor(
     timeout: Duration,
 ) -> (Verdict, Vec<String>, String) {
     if executor.command.is_empty() {
-        return (Verdict::Unknown, vec!["executor has no command".into()], String::new());
+        return (
+            Verdict::Unknown,
+            vec!["executor has no command".into()],
+            String::new(),
+        );
     }
     // Structured argv: `{prompt}` token is replaced; the request also goes on
     // stdin. Never a shell string concatenated with model content (section 14.8).
@@ -156,7 +160,11 @@ fn run_executor(
     let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => {
-            return (Verdict::Unknown, vec![format!("executor not runnable: {e}")], String::new())
+            return (
+                Verdict::Unknown,
+                vec![format!("executor not runnable: {e}")],
+                String::new(),
+            )
         }
     };
     if let Some(mut stdin) = child.stdin.take() {
@@ -171,11 +179,21 @@ fn run_executor(
                 if start.elapsed() > timeout {
                     let _ = child.kill();
                     let _ = child.wait();
-                    return (Verdict::Unknown, vec!["executor timed out".into()], String::new());
+                    return (
+                        Verdict::Unknown,
+                        vec!["executor timed out".into()],
+                        String::new(),
+                    );
                 }
                 std::thread::sleep(Duration::from_millis(20));
             }
-            Err(e) => return (Verdict::Unknown, vec![format!("wait failed: {e}")], String::new()),
+            Err(e) => {
+                return (
+                    Verdict::Unknown,
+                    vec![format!("wait failed: {e}")],
+                    String::new(),
+                )
+            }
         }
     }
 
@@ -193,7 +211,11 @@ fn run_executor(
     // trusting it. Non-conforming output → unknown, never a guessed verdict.
     match parse_result(&raw) {
         Some((v, f)) => (v, f, raw),
-        None => (Verdict::Unknown, vec!["agent result did not validate".into()], raw),
+        None => (
+            Verdict::Unknown,
+            vec!["agent result did not validate".into()],
+            raw,
+        ),
     }
 }
 
@@ -212,7 +234,11 @@ fn parse_result(raw: &str) -> Option<(Verdict, Vec<String>)> {
     let findings = v
         .get("findings")
         .and_then(|f| f.as_array())
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default();
     Some((verdict, findings))
 }

@@ -78,8 +78,7 @@ pub fn run_detector(call: &CompiledToolCall, event: &Event) -> bool {
             event.content.as_deref().is_some_and(|c| c.contains(needle))
         }
         "text.regex" => {
-            let Some(pattern) = with.and_then(|w| w.get("pattern")).and_then(|v| v.as_str())
-            else {
+            let Some(pattern) = with.and_then(|w| w.get("pattern")).and_then(|v| v.as_str()) else {
                 return true;
             };
             let Ok(re) = regex::Regex::new(pattern) else {
@@ -88,7 +87,9 @@ pub fn run_detector(call: &CompiledToolCall, event: &Event) -> bool {
             event.content.as_deref().is_some_and(|c| re.is_match(c))
         }
         "command.classify" => {
-            let Some(families) = with.and_then(|w| w.get("families")).and_then(|v| v.as_array())
+            let Some(families) = with
+                .and_then(|w| w.get("families"))
+                .and_then(|v| v.as_array())
             else {
                 return true;
             };
@@ -218,8 +219,7 @@ fn builtin_validate(id: &str, with: Option<&serde_json::Value>, event: &Event) -
             }
         }
         "text.regex" => {
-            let Some(pattern) = with.and_then(|w| w.get("pattern")).and_then(|v| v.as_str())
-            else {
+            let Some(pattern) = with.and_then(|w| w.get("pattern")).and_then(|v| v.as_str()) else {
                 return Verdict::Unknown;
             };
             let Ok(re) = regex::Regex::new(pattern) else {
@@ -270,7 +270,10 @@ pub fn run_external(def: &ExternalToolDef, event: &Event, ctx: ExecContext<'_>) 
         Ok(c) => c,
         Err(e) => {
             return unknown(
-                format!("tool `{}` not executable ({e}) — `unknown`, never a crash", def.id),
+                format!(
+                    "tool `{}` not executable ({e}) — `unknown`, never a crash",
+                    def.id
+                ),
                 started,
             )
         }
@@ -295,13 +298,21 @@ pub fn run_external(def: &ExternalToolDef, event: &Event, ctx: ExecContext<'_>) 
                     let _ = child.kill();
                     let _ = child.wait();
                     return unknown(
-                        format!("tool `{}` exceeded {}ms — timeout → `unknown`", def.id, def.timeout_ms),
+                        format!(
+                            "tool `{}` exceeded {}ms — timeout → `unknown`",
+                            def.id, def.timeout_ms
+                        ),
                         started,
                     );
                 }
                 std::thread::sleep(Duration::from_millis(10));
             }
-            Err(e) => return unknown(format!("tool `{}` failed while waiting: {e}", def.id), started),
+            Err(e) => {
+                return unknown(
+                    format!("tool `{}` failed while waiting: {e}", def.id),
+                    started,
+                )
+            }
         }
     };
 
@@ -336,9 +347,7 @@ pub fn run_external(def: &ExternalToolDef, event: &Event, ctx: ExecContext<'_>) 
         },
         OutputKind::Sarif => match parse_sarif(&stdout) {
             Some(r) => r,
-            None => {
-                return unknown(format!("tool `{}`: unparseable SARIF", def.id), started)
-            }
+            None => return unknown(format!("tool `{}`: unparseable SARIF", def.id), started),
         },
     };
 
@@ -370,7 +379,11 @@ fn parse_sarif(stdout: &str) -> Option<(Verdict, Vec<Finding>)> {
     let runs = v.get("runs")?.as_array()?;
     let mut findings = Vec::new();
     for run in runs {
-        for result in run.get("results").and_then(|r| r.as_array()).unwrap_or(&vec![]) {
+        for result in run
+            .get("results")
+            .and_then(|r| r.as_array())
+            .unwrap_or(&vec![])
+        {
             let message = result
                 .pointer("/message/text")
                 .and_then(|m| m.as_str())
@@ -384,7 +397,11 @@ fn parse_sarif(stdout: &str) -> Option<(Verdict, Vec<Finding>)> {
                 .pointer("/locations/0/physicalLocation/region/startLine")
                 .and_then(|l| l.as_u64())
                 .map(|l| l as u32);
-            findings.push(Finding { message, file, line });
+            findings.push(Finding {
+                message,
+                file,
+                line,
+            });
         }
     }
     let verdict = if findings.is_empty() {

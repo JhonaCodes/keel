@@ -79,12 +79,19 @@ pub fn gate(
 
     // `--passive` = shadow mode: evaluate and record, never block. For trying
     // new rules without risk; the ledger still captures declared decisions.
-    let mode = if passive { Mode::Passive } else { Mode::Enforce };
+    let mode = if passive {
+        Mode::Passive
+    } else {
+        Mode::Enforce
+    };
     let evals = evaluate_event(&snapshot, &event, &files.root, mode);
 
     // L2 session state: which skills this session already has in context.
     let store = SessionStore::new(&files.state_dir());
-    let session_id = event.session_id.clone().unwrap_or_else(|| "anonymous".into());
+    let session_id = event
+        .session_id
+        .clone()
+        .unwrap_or_else(|| "anonymous".into());
     let mut session_state = store.load(&session_id);
 
     let mut worst = Decision::Allow;
@@ -134,8 +141,7 @@ pub fn gate(
     //   landed. A block here is FEEDBACK, not prevention (exit 0): the file is
     //   reversible and inert; its danger only materializes at execution, which
     //   crosses the inner ring. Emitting exit 2 would be a false promise.
-    let preventable =
-        event.kind.is_inner_ring() || event.kind == EventKind::CompletionRequested;
+    let preventable = event.kind.is_inner_ring() || event.kind == EventKind::CompletionRequested;
 
     // Completion gate (section 12.3, section 6.2 minimal): "done" is not a claim the model
     // makes — it is a transition the runtime authorizes. Live blockers
@@ -161,7 +167,9 @@ pub fn gate(
                     b.id
                 ));
             }
-            lines.push("resolve each finding (a later valid evaluation clears it) before closing".into());
+            lines.push(
+                "resolve each finding (a later valid evaluation clears it) before closing".into(),
+            );
             packets.push(lines.join("\n"));
             worst = worst.max(Decision::Block);
         }
@@ -183,23 +191,19 @@ pub fn gate(
 }
 
 fn is_oscillating(ledger: &Ledger, rule_id: &str, event: &Event) -> bool {
-    ledger
-        .oscillations(3)
-        .unwrap_or_default()
-        .iter()
-        .any(|o| {
-            o.rule_id == rule_id
-                && o.session_id == event.session_id
-                && o.file == event.file
-                && o.line == event.line
-        })
+    ledger.oscillations(3).unwrap_or_default().iter().any(|o| {
+        o.rule_id == rule_id
+            && o.session_id == event.session_id
+            && o.file == event.file
+            && o.line == event.line
+    })
 }
 
 fn parse_event(client: Client, input: &str) -> Result<Option<Event>> {
     match client {
         Client::Native => {
-            let ev: Event = serde_json::from_str(input)
-                .context("gate: stdin is not a valid Keel event")?;
+            let ev: Event =
+                serde_json::from_str(input).context("gate: stdin is not a valid Keel event")?;
             Ok(Some(ev))
         }
         Client::ClaudeCode => Ok(parse_claude_code_hook(input)),
@@ -248,7 +252,10 @@ fn parse_claude_code_hook(input: &str) -> Option<Event> {
                         EventKind::CommandCompleted
                     };
                     let mut ev = mk(kind);
-                    ev.command = ti.get("command").and_then(|c| c.as_str()).map(str::to_string);
+                    ev.command = ti
+                        .get("command")
+                        .and_then(|c| c.as_str())
+                        .map(str::to_string);
                     Some(ev)
                 }
                 "Edit" | "Write" | "MultiEdit" => {
@@ -265,7 +272,9 @@ fn parse_claude_code_hook(input: &str) -> Option<Event> {
                         .and_then(|c| c.as_str())
                         .map(str::to_string)
                         .or_else(|| {
-                            ti.get("new_string").and_then(|c| c.as_str()).map(str::to_string)
+                            ti.get("new_string")
+                                .and_then(|c| c.as_str())
+                                .map(str::to_string)
                         })
                         .or_else(|| {
                             let edits = ti.get("edits")?.as_array()?;
@@ -289,10 +298,11 @@ fn parse_claude_code_hook(input: &str) -> Option<Event> {
 /// hook only transports events and applies our exit code; no rule logic
 /// lives in it (section 12.2, ADR-003).
 pub fn adapter_print_claude_code(root: &Path) -> Result<ExitCode> {
-    let ws = root
-        .canonicalize()
-        .unwrap_or_else(|_| root.to_path_buf());
-    let cmd = format!("keel gate --client claude-code --workspace {}", ws.display());
+    let ws = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    let cmd = format!(
+        "keel gate --client claude-code --workspace {}",
+        ws.display()
+    );
     let snippet = serde_json::json!({
         "hooks": {
             "PreToolUse": [{
@@ -312,14 +322,21 @@ pub fn adapter_print_claude_code(root: &Path) -> Result<ExitCode> {
     println!();
     println!("# Add the block above to your project's .claude/settings.json.");
     println!("# Contract: exit 2 blocks the action (the packet on stderr reaches the model);");
-    println!("# exit 0 allows. Verify the hook schema against your client version (spec section 19).");
+    println!(
+        "# exit 0 allows. Verify the hook schema against your client version (spec section 19)."
+    );
     Ok(ExitCode::SUCCESS)
 }
 
 /// `keel audit --agent <id> --input <file>` — invokes a specialized agent
 /// (spec section 14) on the given material. The result is recorded with
 /// origin=semantic (section 6.4) and is advisory (review), never a block (section 4.7).
-pub fn audit(root: &Path, agent_id: &str, input: &Path, session: Option<String>) -> Result<ExitCode> {
+pub fn audit(
+    root: &Path,
+    agent_id: &str,
+    input: &Path,
+    session: Option<String>,
+) -> Result<ExitCode> {
     use keel_engine::audit::{run_audit, AgentSpec, ExecutorSpec};
 
     let files = workspace::load(root)?;
@@ -342,7 +359,9 @@ pub fn audit(root: &Path, agent_id: &str, input: &Path, session: Option<String>)
         .executors
         .iter()
         .find(|x| x.metadata.id == executor_id)
-        .with_context(|| format!("agent `{agent_id}` routes to executor `{executor_id}`, not found in agents/"))?;
+        .with_context(|| {
+            format!("agent `{agent_id}` routes to executor `{executor_id}`, not found in agents/")
+        })?;
 
     let material = std::fs::read_to_string(input)
         .with_context(|| format!("could not read material {}", input.display()))?;
@@ -351,7 +370,12 @@ pub fn audit(root: &Path, agent_id: &str, input: &Path, session: Option<String>)
         id: agent.metadata.id.clone(),
         role: agent.spec.role.clone(),
         objective: agent.spec.objective.clone(),
-        timeout_ms: agent.spec.budget.as_ref().and_then(|b| b.timeout_ms).unwrap_or(60_000),
+        timeout_ms: agent
+            .spec
+            .budget
+            .as_ref()
+            .and_then(|b| b.timeout_ms)
+            .unwrap_or(60_000),
     };
     let exec_spec = ExecutorSpec {
         id: executor.metadata.id.clone(),
@@ -361,14 +385,24 @@ pub fn audit(root: &Path, agent_id: &str, input: &Path, session: Option<String>)
     };
 
     let out = run_audit(
-        &agent_spec, &exec_spec, &material, &snapshot.hash.to_string(),
-        session.as_deref(), &ledger, new_ev_id(), now_ts(),
+        &agent_spec,
+        &exec_spec,
+        &material,
+        &snapshot.hash.to_string(),
+        session.as_deref(),
+        &ledger,
+        new_ev_id(),
+        now_ts(),
     );
 
     println!("agent    {} (role: {})", agent_spec.id, agent_spec.role);
     println!("executor {}", exec_spec.id);
-    println!("verdict  {} (origin: semantic — a model's opinion, advisory only section 4.7)",
-        serde_json::to_string(&out.verdict).unwrap_or_default().trim_matches('"'));
+    println!(
+        "verdict  {} (origin: semantic — a model's opinion, advisory only section 4.7)",
+        serde_json::to_string(&out.verdict)
+            .unwrap_or_default()
+            .trim_matches('"')
+    );
     for f in &out.findings {
         println!("  - {f}");
     }

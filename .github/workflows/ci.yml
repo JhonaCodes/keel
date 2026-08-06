@@ -1,10 +1,9 @@
 # Base CI pipeline. Purpose: give every PR a correctness gate so auto-merge
-# never lands a broken tree. `test` is the REQUIRED job (build + workspace
-# tests, deterministic against the committed Cargo.lock). `lint` (rustfmt +
-# clippy) runs as ADVISORY (continue-on-error) for now, because the current
-# baseline is not yet fmt/clippy clean and a repo-wide reformat does not belong
-# in this PR; a later chore PR can promote lint to blocking once the tree is
-# normalized. The compliance CI plane (`keel ci`) is added on top of this later.
+# never lands a broken tree. Both jobs are REQUIRED: `test` (build + workspace
+# tests, deterministic against the committed Cargo.lock) and `lint` (rustfmt
+# --check + clippy with -D warnings). The tree is fmt/clippy clean, so lint is
+# a blocking gate. The compliance CI plane (`keel ci`) runs in governed repos,
+# not here (keel is the tool, not a governed workspace).
 name: CI
 
 on:
@@ -27,9 +26,8 @@ jobs:
       - run: cargo test --workspace --locked
 
   lint:
-    name: fmt + clippy (advisory)
+    name: fmt + clippy
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -37,4 +35,4 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets
+      - run: cargo clippy --workspace --all-targets -- -D warnings

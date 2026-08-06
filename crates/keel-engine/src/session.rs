@@ -57,7 +57,13 @@ impl SessionStore {
         // Sanitize: session ids come from external clients (hook payloads).
         let safe: String = session_id
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
             .collect();
         self.dir.join(format!("{safe}.json"))
     }
@@ -114,7 +120,11 @@ pub fn deliver_skills(
             continue;
         };
 
-        let desired = if oscillating { SkillLevel::Full } else { SkillLevel::Compact };
+        let desired = if oscillating {
+            SkillLevel::Full
+        } else {
+            SkillLevel::Compact
+        };
         let current = state.loaded_skills.get(&skill_id).copied();
 
         match current {
@@ -146,7 +156,11 @@ fn render_skill(skill: &CompiledSkill, root: &Path, level: SkillLevel) -> String
     let content = std::fs::read_to_string(root.join(path))
         .unwrap_or_else(|_| format!("(skill file `{path}` missing — see compile warnings)"));
 
-    let mut out = format!("--- skill {} ({label}) ---\n{}", skill.id, content.trim_end());
+    let mut out = format!(
+        "--- skill {} ({label}) ---\n{}",
+        skill.id,
+        content.trim_end()
+    );
     // Exemplar pair (section 10.4): mandatory companion of a block whenever the
     // skill provides pairs — the difference between "don't" and "do this".
     if let Some((rejected, accepted)) = skill.examples.first() {

@@ -34,7 +34,15 @@ fn uses_symbol(source: &str, symbol: &str) -> bool {
 
 #[test]
 fn runtime_side_modules_never_import_the_dsl() {
-    for module in ["runtime.rs", "snapshot.rs", "tools.rs", "ledger.rs", "sarif.rs", "session.rs", "packet.rs"] {
+    for module in [
+        "runtime.rs",
+        "snapshot.rs",
+        "tools.rs",
+        "ledger.rs",
+        "sarif.rs",
+        "session.rs",
+        "packet.rs",
+    ] {
         let source = src(module);
         assert!(
             !uses_symbol(&source, "keel_dsl"),
@@ -84,10 +92,8 @@ fn ledger_has_no_update_or_delete_on_evidence() {
 /// Phase 0: no code path with a model SDK, HTTP, or an async runtime.
 #[test]
 fn no_llm_no_http_no_tokio_in_phase_0() {
-    let manifest = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"),
-    )
-    .unwrap();
+    let manifest =
+        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml")).unwrap();
     for forbidden in ["tokio", "reqwest", "hyper", "anthropic", "openai"] {
         assert!(
             !manifest.contains(forbidden),

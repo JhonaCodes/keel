@@ -27,8 +27,15 @@ pub struct TestReport {
 
 /// Runs all RuleTests against a snapshot (in staging: without a ledger —
 /// test evaluations are not session evidence).
-pub fn run_tests(snapshot: &Snapshot, tests: &[RuleTestDoc], workspace_root: &Path) -> Vec<TestReport> {
-    tests.iter().map(|t| run_one(snapshot, t, workspace_root)).collect()
+pub fn run_tests(
+    snapshot: &Snapshot,
+    tests: &[RuleTestDoc],
+    workspace_root: &Path,
+) -> Vec<TestReport> {
+    tests
+        .iter()
+        .map(|t| run_one(snapshot, t, workspace_root))
+        .collect()
 }
 
 fn run_one(snapshot: &Snapshot, test: &RuleTestDoc, workspace_root: &Path) -> TestReport {
@@ -58,10 +65,7 @@ fn run_one(snapshot: &Snapshot, test: &RuleTestDoc, workspace_root: &Path) -> Te
         (_, Some(eval)) => {
             if let Some(v) = expect.verdict {
                 if eval.verdict != v {
-                    failures.push(format!(
-                        "verdict: expected {v:?}, got {:?}",
-                        eval.verdict
-                    ));
+                    failures.push(format!("verdict: expected {v:?}, got {:?}", eval.verdict));
                 }
             }
             if let Some(d) = expect.decision {

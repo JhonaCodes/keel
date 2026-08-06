@@ -146,7 +146,10 @@ pub fn compile(root: &Path) -> Result<ExitCode> {
     let failed: Vec<_> = reports.iter().filter(|r| !r.passed).collect();
 
     if !failed.is_empty() {
-        eprintln!("staging compilation OK, but {} RuleTest(s) fail:", failed.len());
+        eprintln!(
+            "staging compilation OK, but {} RuleTest(s) fail:",
+            failed.len()
+        );
         for r in &failed {
             eprintln!("  FAIL {} → {}", r.test_id, r.detail);
         }
@@ -181,7 +184,11 @@ pub fn compile(root: &Path) -> Result<ExitCode> {
 /// Phase 0b (ADR-021): passive evaluation. Reads JSONL events, evaluates them
 /// against the published snapshot, forces every effective decision to `review`
 /// and appends to the ledger. NOTHING BLOCKS: the product is the telemetry.
-pub fn observe(root: &Path, events_file: Option<&Path>, session: Option<String>) -> Result<ExitCode> {
+pub fn observe(
+    root: &Path,
+    events_file: Option<&Path>,
+    session: Option<String>,
+) -> Result<ExitCode> {
     let files = workspace::load(root)?;
     let snapshot = Snapshot::load(&files.snapshot_path())
         .context("no published snapshot — run `keel compile` first")?;
@@ -307,7 +314,10 @@ pub fn explain(root: &Path, ev_id: &str, as_sarif: bool) -> Result<ExitCode> {
     };
 
     if as_sarif {
-        println!("{}", serde_json::to_string_pretty(&sarif::to_sarif(&[&entry]))?);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&sarif::to_sarif(&[&entry]))?
+        );
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -353,7 +363,10 @@ pub fn explain(root: &Path, ev_id: &str, as_sarif: bool) -> Result<ExitCode> {
         json_plain(&entry.declared_decision),
         json_plain(&entry.effective_decision)
     );
-    println!("cost        {}ms · {} tokens", entry.latency_ms, entry.tokens);
+    println!(
+        "cost        {}ms · {} tokens",
+        entry.latency_ms, entry.tokens
+    );
     if let Some(d) = &entry.detail {
         println!("detail      {d}");
     }
@@ -383,7 +396,14 @@ pub fn prune(
             bail!("--decision must be keep, adjust or prune");
         }
         let id = format!("hd_{}", ulid::Ulid::new().to_string().to_lowercase());
-        ledger.record_human_decision(&rule_id, &decision, &by, reason.as_deref(), &id, &now_ts())?;
+        ledger.record_human_decision(
+            &rule_id,
+            &decision,
+            &by,
+            reason.as_deref(),
+            &id,
+            &now_ts(),
+        )?;
         println!("human decision recorded ({id}): {rule_id} → {decision} (by {by})");
         if decision == "prune" {
             println!("remember: deleting the rule means editing its file in rules/ — the system proposes, the human executes");
@@ -399,8 +419,8 @@ pub fn prune(
     println!("keel prune — lifecycle backed by evidence (section 7.7)\n");
     for rule in &snapshot.rules {
         let stat = stats.iter().find(|s| s.rule_id == rule.id);
-        print!(
-            "rule: {:<40} adr: {:<12} author: {}\n",
+        println!(
+            "rule: {:<40} adr: {:<12} author: {}",
             rule.id, rule.adr_ref, rule.author
         );
 
@@ -409,10 +429,7 @@ pub fn prune(
             continue;
         };
 
-        let last_invalid = stat
-            .last_invalid_ts
-            .as_deref()
-            .unwrap_or("never");
+        let last_invalid = stat.last_invalid_ts.as_deref().unwrap_or("never");
         println!(
             "  evaluations: {:<6} invalid: {:<5} unknown: {:<5} last invalid: {}",
             stat.evaluations, stat.invalid, stat.unknown, last_invalid
@@ -431,7 +448,10 @@ pub fn prune(
             (true, ..) => "keep (active and healthy)".to_string(),
         };
         println!("  → {proposal}");
-        println!("    record: keel prune --record {} --decision <keep|adjust|prune> --by <who>\n", rule.id);
+        println!(
+            "    record: keel prune --record {} --decision <keep|adjust|prune> --by <who>\n",
+            rule.id
+        );
     }
 
     let decisions = ledger.human_decisions(None)?;
@@ -487,7 +507,11 @@ pub fn test(root: &Path) -> Result<ExitCode> {
         }
     }
     println!("\n{} tests, {} failures", reports.len(), failed);
-    Ok(if failed == 0 { ExitCode::SUCCESS } else { ExitCode::FAILURE })
+    Ok(if failed == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
 }
 
 // ─────────────────────────── doctor ───────────────────────────
@@ -528,7 +552,11 @@ pub fn doctor(root: &Path) -> Result<ExitCode> {
         Ok(o) => {
             check(
                 "compile (staging)",
-                Ok(format!("{} · {} warnings", o.snapshot.hash, o.warnings.len())),
+                Ok(format!(
+                    "{} · {} warnings",
+                    o.snapshot.hash,
+                    o.warnings.len()
+                )),
             );
             Some(o.snapshot)
         }
@@ -540,7 +568,10 @@ pub fn doctor(root: &Path) -> Result<ExitCode> {
 
     // 3. Published snapshot (informational) and verification of its hash.
     match Snapshot::load(&files.snapshot_path()) {
-        Ok(s) => check("published snapshot", Ok(format!("{} ({} rules)", s.hash, s.rules.len()))),
+        Ok(s) => check(
+            "published snapshot",
+            Ok(format!("{} ({} rules)", s.hash, s.rules.len())),
+        ),
         Err(e) => check(
             "published snapshot",
             Err(format!("{e} — run `keel compile`")),
@@ -571,7 +602,9 @@ pub fn doctor(root: &Path) -> Result<ExitCode> {
             if found {
                 Ok(format!("`{program}` available"))
             } else {
-                Err(format!("`{program}` not found (at runtime it would yield `unknown`, not a crash)"))
+                Err(format!(
+                    "`{program}` not found (at runtime it would yield `unknown`, not a crash)"
+                ))
             },
         );
     }
@@ -751,7 +784,11 @@ fn ci_resolve_inner(root: &Path) -> Result<bool> {
     }
     std::fs::create_dir_all(files.state_dir())?;
     outcome.snapshot.save(&files.snapshot_path())?;
-    println!("compiled   {} ({} rules)", outcome.snapshot.hash, outcome.snapshot.rules.len());
+    println!(
+        "compiled   {} ({} rules)",
+        outcome.snapshot.hash,
+        outcome.snapshot.rules.len()
+    );
 
     // 3) The lock must exist and match the fresh compile (invariant 9).
     let lock = match Lock::load(root) {

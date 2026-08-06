@@ -22,7 +22,10 @@
 //! and the dev see the snapshot and ledger right next to the rules that
 //! produced them. XDG paths arrive with the installation story (Phase 1).
 
-use keel_dsl::{parse_documents, AgentDoc, AgentExecutorDoc, Document, DslError, RuleDoc, RuleTestDoc, SkillDoc, ToolDoc, WorkspaceDoc};
+use keel_dsl::{
+    parse_documents, AgentDoc, AgentExecutorDoc, Document, DslError, RuleDoc, RuleTestDoc,
+    SkillDoc, ToolDoc, WorkspaceDoc,
+};
 use std::path::{Path, PathBuf};
 
 pub const STATE_DIR: &str = ".keel-state";
@@ -101,7 +104,7 @@ pub fn load(root: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
 
     for doc in parse_file(&ws_file)? {
         match doc {
-            Document::Workspace(w) => files.workspace = Some(w),
+            Document::Workspace(w) => files.workspace = Some(*w),
             other => {
                 return Err(WorkspaceError::MisplacedKind {
                     path: ws_file.clone(),
@@ -111,7 +114,13 @@ pub fn load(root: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
         }
     }
 
-    for (dir, expect_hint) in [("rules", "Rule"), ("tools", "Tool"), ("skills", "Skill"), ("agents", "Agent"), ("tests", "RuleTest")] {
+    for (dir, expect_hint) in [
+        ("rules", "Rule"),
+        ("tools", "Tool"),
+        ("skills", "Skill"),
+        ("agents", "Agent"),
+        ("tests", "RuleTest"),
+    ] {
         let dir_path = root.join(dir);
         if !dir_path.is_dir() {
             continue;
@@ -119,13 +128,13 @@ pub fn load(root: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
         for path in yaml_files(&dir_path)? {
             for doc in parse_file(&path)? {
                 match (doc, expect_hint) {
-                    (Document::Rule(r), "Rule") => files.rules.push(r),
-                    (Document::Tool(t), "Tool") => files.tools.push(t),
-                    (Document::Skill(k), "Skill") => files.skills.push(k),
-                    (Document::Agent(a), "Agent") => files.agents.push(a),
+                    (Document::Rule(r), "Rule") => files.rules.push(*r),
+                    (Document::Tool(t), "Tool") => files.tools.push(*t),
+                    (Document::Skill(k), "Skill") => files.skills.push(*k),
+                    (Document::Agent(a), "Agent") => files.agents.push(*a),
                     // Executors live alongside agents in agents/.
-                    (Document::AgentExecutor(x), "Agent") => files.executors.push(x),
-                    (Document::RuleTest(t), "RuleTest") => files.tests.push(t),
+                    (Document::AgentExecutor(x), "Agent") => files.executors.push(*x),
+                    (Document::RuleTest(t), "RuleTest") => files.tests.push(*t),
                     (other, _) => {
                         return Err(WorkspaceError::MisplacedKind {
                             path: path.clone(),
@@ -139,12 +148,24 @@ pub fn load(root: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
 
     // Deterministic ordering by id: the snapshot hash must not depend on the
     // filesystem's listing order (invariant 9).
-    files.rules.sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
-    files.tools.sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
-    files.skills.sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
-    files.agents.sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
-    files.executors.sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
-    files.tests.sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
+    files
+        .rules
+        .sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
+    files
+        .tools
+        .sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
+    files
+        .skills
+        .sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
+    files
+        .agents
+        .sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
+    files
+        .executors
+        .sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
+    files
+        .tests
+        .sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
 
     Ok(files)
 }
