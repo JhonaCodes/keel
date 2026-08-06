@@ -64,8 +64,9 @@ mis-specified, and the Phase 0c enforcement experiment can be measured.
 
 **Two modes, one engine:** `keel observe` is passive (records, never blocks —
 telemetry); `keel gate` enforces (the keel holds). See `STATUS.md` for the
-point-by-point conformance map and what is still deferred (composition
-monotonicity, lock/CI plane, control plane).
+point-by-point conformance map and what is still deferred (the org-scale install
+story — signed installer, `project attach`/`bindings.yaml`, control plane —
+which per section 8.3 adds distribution, not new composition semantics).
 
 ## Layout
 
@@ -108,6 +109,20 @@ keel adapter claude-code --install --global   # governs sessions from anywhere
 #   keel adapter claude-code --install         # …or just this project's .claude/
 #   keel adapter claude-code --uninstall       # remove keel's hook (leaves the rest)
 ```
+
+**Layered composition (spec section 7).** The same workspace can hold layers:
+`global/` rules apply to every project; `projects/<name>/` rules apply only to
+that project (the section 8.5 layout — also `organizations/`, `platforms/`,
+`teams/`, `profiles/`). A rule marked `locked` in a higher layer **cannot be
+weakened** by a lower one — `keel compile` composes the layers and verifies
+monotonicity (section 7.4, dimensions coverage/sensitivity/decision/load),
+failing with the exact dimension and offending layer. A lower layer may only
+*strengthen* (or *replace* where the higher layer says `overridable`); the one
+governed way to relax a `locked` rule in a bounded area is an `Exception`
+(owned at the locking scope, with reason, bounded scope and expiry). Bind a repo
+to its project (`keel bind`) and compile resolves the chain by repository
+identity. A flat workspace (just `rules/`) is the single-layer case — unchanged.
+See [`docs/INSTALL.md`](docs/INSTALL.md) for a from-scratch walkthrough.
 
 Install & uninstall in depth (data-preserving): [`docs/INSTALL.md`](docs/INSTALL.md).
 

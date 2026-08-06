@@ -20,6 +20,86 @@ Regla clave: **el "proyecto con todos los datos" (skills/tools/rules/agents + `.
 
 ---
 
+## Composición por capas (section 7) — el modelo
+
+Un mismo workspace tiene **capas** (section 8.5). Lo que pongas en `global/`
+aplica a **todos** los proyectos; lo que pongas en `projects/<nombre>/` aplica
+**solo** a ese proyecto (también existen `organizations/`, `platforms/`,
+`teams/`, `profiles/`). Una regla marcada `locked` en una capa superior **no se
+puede debilitar** desde una inferior: `keel compile` compone las capas y
+verifica monotonicidad (section 7.4 — cobertura/sensibilidad/decisión/carga) y
+falla con la dimensión exacta y la capa culpable. Una capa inferior solo puede
+**endurecer** (o **reemplazar** donde la superior diga `overridable`); la única
+vía gobernada para relajar un `locked` en un área acotada es un `Exception`
+(dueño en la capa que declaró el lock, con razón, scope acotado y expiración).
+
+Un repo se **liga** a su proyecto con `keel bind` (`.keel/project.yaml`), y
+`keel compile` resuelve la cadena por identidad del repo (section 7.1). Un
+workspace plano (solo `rules/`) es el caso de una sola capa — igual que antes.
+
+### De cero (paso a paso)
+
+```sh
+# 1. binario
+cargo build --release            # binario en target/release/keel
+
+# 2. workspace con capas
+WS=~/keel-workspace
+mkdir -p "$WS"/{global/rules,projects/webapp/rules}
+printf 'apiVersion: keel/v1alpha1\nkind: Workspace\nmetadata: { id: mi-ws }\nspec: {}\n' > "$WS/workspace.yaml"
+
+# 3a. una regla GLOBAL, locked (aplica a todo; nadie puede debilitarla)
+cat > "$WS/global/rules/no-raw.yaml" <<'YAML'
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: sec.no-raw, author: yo, adrRef: adr:ADR-1, reviewAfter: P6M }
+spec:
+  locked: true
+  on: [file.edited]
+  detect: { using: builtin:text.regex, with: { pattern: "rawQuery" } }
+  enforcement:
+    invalid: { decision: block, report: { message: "usa el query builder" } }
+    valid:   { decision: allow }
+YAML
+
+# 3b. una regla SOLO del proyecto
+cat > "$WS/projects/webapp/rules/no-todo.yaml" <<'YAML'
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: webapp.no-todo, author: yo, adrRef: adr:ADR-2, reviewAfter: P6M }
+spec:
+  on: [file.edited]
+  detect: { using: builtin:text.contains, with: { text: "TODO" } }
+  enforcement: { invalid: { decision: review }, valid: { decision: allow } }
+YAML
+
+# 4. ligar el proyecto y compilar (compone global + projects/webapp)
+#    OJO: el último segmento de `project:<org>/<nombre>` debe ser el dir bajo projects/
+keel bind --workspace "$WS" --project project:miorg/webapp --org org:local
+keel compile --workspace "$WS"        # publica el snapshot COMPUESTO en .keel-state/
+
+# 5. (demostración) si el proyecto intenta DEBILITAR la regla global locked,
+#    compile FALLA con la dimensión y la capa culpable. Para relajar de forma
+#    gobernada un área acotada, se autora un Exception en la capa dueña (global):
+mkdir -p "$WS/global/exceptions"
+cat > "$WS/global/exceptions/waiver.yaml" <<'YAML'
+apiVersion: keel/v1alpha1
+kind: Exception
+metadata: { id: reports-waiver }
+spec:
+  rule: rule:sec.no-raw
+  owner: global
+  reason: "El módulo de reportes migra el próximo trimestre."
+  scope: { paths: { include: ["src/reports/**"] } }
+  expiry: "2027-01-01"
+YAML
+keel compile --workspace "$WS"        # levanta el lock SOLO en src/reports/**; intacto el resto
+```
+
+Enganchar el cliente y el resto (binario, uninstall) siguen igual — abajo.
+
+---
+
 ## Instalar
 
 ### 1. El binario
