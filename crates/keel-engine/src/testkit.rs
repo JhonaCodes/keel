@@ -12,7 +12,7 @@
 //! `compile` does not call the testkit (the CLI orchestrates compile → test
 //! → publish) and the runtime knows nothing about these types.
 
-use crate::runtime::{evaluate_event, Evaluation, Mode};
+use crate::runtime::{Evaluation, Mode, evaluate_event};
 use crate::snapshot::Snapshot;
 use keel_dsl::RuleTestDoc;
 use std::path::Path;
@@ -63,10 +63,10 @@ fn run_one(snapshot: &Snapshot, test: &RuleTestDoc, workspace_root: &Path) -> Te
             ));
         }
         (_, Some(eval)) => {
-            if let Some(v) = expect.verdict {
-                if eval.verdict != v {
-                    failures.push(format!("verdict: expected {v:?}, got {:?}", eval.verdict));
-                }
+            if let Some(v) = expect.verdict
+                && eval.verdict != v
+            {
+                failures.push(format!("verdict: expected {v:?}, got {:?}", eval.verdict));
             }
             if let Some(d) = expect.decision {
                 // The DECLARED decision is compared: the RuleTest asserts what
@@ -79,10 +79,10 @@ fn run_one(snapshot: &Snapshot, test: &RuleTestDoc, workspace_root: &Path) -> Te
                     ));
                 }
             }
-            if let Some(o) = expect.origin {
-                if eval.origin != o {
-                    failures.push(format!("origin: expected {o:?}, got {:?}", eval.origin));
-                }
+            if let Some(o) = expect.origin
+                && eval.origin != o
+            {
+                failures.push(format!("origin: expected {o:?}, got {:?}", eval.origin));
             }
         }
     }

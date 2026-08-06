@@ -14,7 +14,7 @@
 //! review. The delta is that difference — the value enforcement adds over the
 //! ledger-only baseline.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OpenFlags};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

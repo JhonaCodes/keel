@@ -23,8 +23,8 @@
 //! produced them. XDG paths arrive with the installation story (Phase 1).
 
 use keel_dsl::{
-    parse_documents, AgentDoc, AgentExecutorDoc, Document, DslError, RuleDoc, RuleTestDoc,
-    SkillDoc, ToolDoc, WorkspaceDoc,
+    AgentDoc, AgentExecutorDoc, Document, DslError, RuleDoc, RuleTestDoc, SkillDoc, ToolDoc,
+    WorkspaceDoc, parse_documents,
 };
 use std::path::{Path, PathBuf};
 
@@ -89,7 +89,9 @@ pub enum WorkspaceError {
         #[source]
         source: DslError,
     },
-    #[error("`{path}` contains a `{kind}` — kinds belong in their directory: rules/, tools/, skills/, tests/")]
+    #[error(
+        "`{path}` contains a `{kind}` — kinds belong in their directory: rules/, tools/, skills/, tests/"
+    )]
     MisplacedKind { path: PathBuf, kind: String },
 }
 
@@ -109,7 +111,7 @@ pub fn load(root: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
                 return Err(WorkspaceError::MisplacedKind {
                     path: ws_file.clone(),
                     kind: other.kind_name().to_string(),
-                })
+                });
             }
         }
     }
@@ -139,7 +141,7 @@ pub fn load(root: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
                         return Err(WorkspaceError::MisplacedKind {
                             path: path.clone(),
                             kind: other.kind_name().to_string(),
-                        })
+                        });
                     }
                 }
             }

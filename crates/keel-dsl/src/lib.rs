@@ -331,10 +331,10 @@ fn parse_value(value: serde_json::Value) -> Result<Document, DslError> {
         .ok_or(DslError::MissingKind)?
         .to_string();
 
-    if let Some(api) = value.get("apiVersion").and_then(|v| v.as_str()) {
-        if api != API_VERSION {
-            return Err(DslError::UnsupportedApiVersion(api.to_string()));
-        }
+    if let Some(api) = value.get("apiVersion").and_then(|v| v.as_str())
+        && api != API_VERSION
+    {
+        return Err(DslError::UnsupportedApiVersion(api.to_string()));
     }
 
     // 1) Schema first (Phase 0a deliverable; requires author/adrRef/reviewAfter

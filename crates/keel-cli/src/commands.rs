@@ -2,11 +2,11 @@
 //! Subcommand implementations. Orchestration and presentation; the
 //! logic lives in keel-engine.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use keel_core::event::Event;
 use keel_core::{Decision, Verdict};
 use keel_engine::ledger::{Ledger, LedgerEntry};
-use keel_engine::runtime::{evaluate_event, Evaluation, Mode};
+use keel_engine::runtime::{Evaluation, Mode, evaluate_event};
 use keel_engine::snapshot::Snapshot;
 use keel_engine::{compile as compiler, sarif, testkit, workspace};
 use std::io::BufRead;
@@ -169,7 +169,9 @@ pub fn compile(root: &Path) -> Result<ExitCode> {
     println!("snapshot published  {}", outcome.snapshot.hash);
     println!("rules               {}", outcome.snapshot.rules.len());
     if outcome.snapshot.rules.is_empty() {
-        println!("  (workspace has no rules yet — write the first one in rules/, template at rules/rule.yaml.example)");
+        println!(
+            "  (workspace has no rules yet — write the first one in rules/, template at rules/rule.yaml.example)"
+        );
     }
     println!("external tools      {}", outcome.snapshot.tools.len());
     println!("rule tests          {} (all green)", reports.len());
@@ -406,7 +408,9 @@ pub fn prune(
         )?;
         println!("human decision recorded ({id}): {rule_id} → {decision} (by {by})");
         if decision == "prune" {
-            println!("remember: deleting the rule means editing its file in rules/ — the system proposes, the human executes");
+            println!(
+                "remember: deleting the rule means editing its file in rules/ — the system proposes, the human executes"
+            );
         }
         return Ok(ExitCode::SUCCESS);
     }
@@ -493,7 +497,9 @@ pub fn test(root: &Path) -> Result<ExitCode> {
     let reports = testkit::run_tests(&outcome.snapshot, &files.tests, &files.root);
 
     if reports.is_empty() {
-        println!("no RuleTests in tests/ — Phase 0a requires verifying every gate case by case (section 15.1)");
+        println!(
+            "no RuleTests in tests/ — Phase 0a requires verifying every gate case by case (section 15.1)"
+        );
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -841,7 +847,7 @@ pub(crate) fn ci_run(root: &Path) -> Result<ExitCode> {
 /// `block` the client cannot honor instead of assuming it. Exit 1 on any
 /// unhonorable policy.
 pub(crate) fn adapter_check(root: &Path, client: &str) -> Result<ExitCode> {
-    use keel_engine::adapter::{preflight, AdapterManifest};
+    use keel_engine::adapter::{AdapterManifest, preflight};
 
     let Some(manifest) = AdapterManifest::for_client(client) else {
         eprintln!("error: unknown adapter `{client}` (supported: claude-code)");

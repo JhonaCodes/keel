@@ -159,7 +159,9 @@ pub enum SnapshotError {
     Io(#[from] std::io::Error),
     #[error("corrupt snapshot: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("snapshot hash mismatch (stored {stored}, recomputed {recomputed}): snapshot tampered with or corrupt")]
+    #[error(
+        "snapshot hash mismatch (stored {stored}, recomputed {recomputed}): snapshot tampered with or corrupt"
+    )]
     HashMismatch { stored: String, recomputed: String },
 }
 

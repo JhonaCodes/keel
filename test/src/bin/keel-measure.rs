@@ -7,8 +7,8 @@
 //! Usage:
 //!   keel-measure --dataset <dir> [--out <dir>] [--min-delta-rate <f>] [--keel-bin <path>]
 
-use anyhow::{bail, Context, Result};
-use keel_tests::measure::{run, Dataset, Options};
+use anyhow::{Context, Result, bail};
+use keel_tests::measure::{Dataset, Options, run};
 use std::path::PathBuf;
 
 fn main() -> Result<()> {

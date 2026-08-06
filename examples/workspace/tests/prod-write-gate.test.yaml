@@ -20,7 +20,7 @@ spec:
   event:
     kind: command.requested
     command: "psql -h prod -c \"DELETE FROM orders WHERE id=1\""
-    env: { NUI_PROD_WRITE: "1", AWSUME_EXPIRATION: "2026-12-31" }
+    env: { PROD_WRITE_ENABLED: "1", AWSUME_EXPIRATION: "2026-12-31" }
   expect: { verdict: invalid, decision: block, origin: deterministic }
 ---
 apiVersion: keel/v1alpha1
@@ -31,7 +31,7 @@ spec:
   event:
     kind: command.requested
     command: "psql -h prod --allow-production-write -c \"DELETE FROM orders WHERE id=1\""
-    env: { NUI_PROD_WRITE: "1" }
+    env: { PROD_WRITE_ENABLED: "1" }
   expect: { verdict: invalid, decision: block, origin: deterministic }
 ---
 apiVersion: keel/v1alpha1
@@ -42,7 +42,7 @@ spec:
   event:
     kind: command.requested
     command: "psql -h prod --allow-production-write -c \"DELETE FROM orders\""
-    env: { NUI_PROD_WRITE: "1", AWSUME_EXPIRATION: "2026-12-31" }
+    env: { PROD_WRITE_ENABLED: "1", AWSUME_EXPIRATION: "2026-12-31" }
   expect: { verdict: invalid, decision: block, origin: deterministic }
 ---
 apiVersion: keel/v1alpha1
@@ -53,7 +53,7 @@ spec:
   event:
     kind: command.requested
     command: "psql -h prod --allow-production-write -c \"DELETE FROM orders WHERE created_at < '2020-01-01'\""
-    env: { NUI_PROD_WRITE: "1", AWSUME_EXPIRATION: "2026-12-31" }
+    env: { PROD_WRITE_ENABLED: "1", AWSUME_EXPIRATION: "2026-12-31" }
   expect: { verdict: valid, decision: allow, origin: deterministic }
 ---
 apiVersion: keel/v1alpha1
@@ -64,7 +64,7 @@ spec:
   event:
     kind: command.requested
     command: "mysql --allow-production-write -e \"$DYNAMIC_STATEMENT\""
-    env: { NUI_PROD_WRITE: "1", AWSUME_EXPIRATION: "2026-12-31" }
+    env: { PROD_WRITE_ENABLED: "1", AWSUME_EXPIRATION: "2026-12-31" }
   # section 4.7 / ADR-017: irreversible + unknown → deny-pending-approval (humano,
   # nunca LLM). La decision declarada lo refleja; el pasivo registra.
   expect: { verdict: unknown, decision: deny-pending-approval, origin: deterministic }

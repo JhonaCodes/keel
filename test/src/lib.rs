@@ -6,4 +6,5 @@
 //! spec section 15.1), exposed as a library so both the `keel-measure` binary
 //! and the harness integration test drive the same code path.
 
+pub mod hermetic;
 pub mod measure;
