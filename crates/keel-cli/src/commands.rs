@@ -627,3 +627,93 @@ fn binary_on_path(program: &str) -> bool {
     };
     std::env::split_paths(&paths).any(|dir| dir.join(program).is_file())
 }
+
+// ─────────────────────────── bind / lock ───────────────────────────
+
+/// `keel bind` — writes `.keel/project.yaml` (spec §8.6). The repo holds only
+/// the binding + lock, never the component definitions (invariant 4).
+pub(crate) fn bind(root: &Path, project: Option<String>, org: Option<String>) -> Result<ExitCode> {
+    use keel_engine::lock::ProjectBinding;
+
+    let project = match project {
+        Some(p) => p,
+        None => derive_project_from_git(root).context(
+            "no --project given and could not derive it from the git `origin` remote; pass --project project:org/repo",
+        )?,
+    };
+    let workspace = org.unwrap_or_else(|| "org:local".to_string());
+    let binding = ProjectBinding {
+        project: project.clone(),
+        workspace: workspace.clone(),
+    };
+    binding.write(root)?;
+    println!("bound {project} → {workspace}");
+    println!("wrote {}", ProjectBinding::path(root).display());
+    println!("next: `keel compile` then `keel lock`.");
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `keel lock` — (re)generate or `--verify` the pinned resolution (spec §8.6,
+/// invariant 9). The fingerprint is the snapshot's canonical hash, so the same
+/// configuration locks identically on any machine — the basis of the CI check.
+pub(crate) fn lock(root: &Path, verify: bool) -> Result<ExitCode> {
+    use keel_engine::lock::{Lock, ProjectBinding};
+
+    let files = workspace::load(root)?;
+    let binding = ProjectBinding::load(root)?;
+    let snapshot = Snapshot::load(&files.snapshot_path())
+        .context("no published snapshot — run `keel compile` first")?;
+    let keel_version = env!("CARGO_PKG_VERSION");
+
+    if verify {
+        let existing = Lock::load(root)?;
+        return match existing.verify(&binding, &snapshot, keel_version) {
+            Ok(()) => {
+                println!(
+                    "lock OK — {} resolves to {}",
+                    binding.project, existing.snapshot_hash
+                );
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(reason) => {
+                eprintln!("lock DRIFT: {reason}");
+                eprintln!("review the change, then run `keel lock` to regenerate.");
+                Ok(ExitCode::FAILURE)
+            }
+        };
+    }
+
+    let lock = Lock::generate(&binding, &snapshot, keel_version);
+    lock.write(root)?;
+    println!("locked {} @ {}", binding.project, lock.snapshot_hash);
+    println!("wrote {}", Lock::path(root).display());
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Derives `project:<org>/<repo>` from the git `origin` remote. Best-effort:
+/// returns `None` if git is unavailable or the remote cannot be parsed.
+fn derive_project_from_git(root: &Path) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["remote", "get-url", "origin"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let url = String::from_utf8(out.stdout).ok()?;
+    parse_project_from_remote(url.trim())
+}
+
+/// Parses `git@host:org/repo.git` or `https://host/org/repo(.git)` into
+/// `project:org/repo` (the last two path segments).
+fn parse_project_from_remote(url: &str) -> Option<String> {
+    let segments: Vec<&str> = url.rsplit(['/', ':']).collect();
+    let repo = segments.first()?.trim_end_matches(".git");
+    let org = segments.get(1)?;
+    if repo.is_empty() || org.is_empty() {
+        return None;
+    }
+    Some(format!("project:{org}/{repo}"))
+}
