@@ -19,3 +19,4 @@ path = "src/lib.rs"
 keel-core = { path = "../crates/keel-core" }
 keel-dsl = { path = "../crates/keel-dsl" }
 keel-engine = { path = "../crates/keel-engine" }
+serde_json = { workspace = true }

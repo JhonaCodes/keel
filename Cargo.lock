@@ -700,6 +700,7 @@ version = "0.1.0"
 dependencies = [
  "globset",
  "jiff",
+ "jsonschema",
  "keel-core",
  "keel-dsl",
  "regex",
@@ -718,6 +719,7 @@ dependencies = [
  "keel-core",
  "keel-dsl",
  "keel-engine",
+ "serde_json",
 ]
 
 [[package]]

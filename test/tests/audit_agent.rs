@@ -41,6 +41,7 @@ fn real_executor_invalid_is_semantic_review() {
         &ledger,
         "ev_it1".into(),
         "2026-01-01T00:00:00Z".into(),
+        None,
     );
     assert_eq!(out.verdict, Verdict::Invalid);
     let entry = ledger.get("ev_it1").unwrap().unwrap();
@@ -71,6 +72,7 @@ fn real_executor_unvalidated_output_maps_to_unknown() {
         &ledger,
         "ev_it2".into(),
         "2026-01-01T00:00:00Z".into(),
+        None,
     );
     assert_eq!(out.verdict, Verdict::Unknown);
     assert!(
@@ -80,4 +82,86 @@ fn real_executor_unvalidated_output_maps_to_unknown() {
     );
     let entry = ledger.get("ev_it2").unwrap().unwrap();
     assert_eq!(entry.origin, OriginClass::Semantic);
+}
+
+/// An outputSchema that requires a `findings` array. Feeds the two tests below.
+fn schema_requiring_findings() -> serde_json::Value {
+    serde_json::json!({
+        "type": "object",
+        "required": ["verdict", "findings"],
+        "properties": {
+            "verdict": { "type": "string" },
+            "findings": { "type": "array" }
+        }
+    })
+}
+
+/// Invariant 12: a result that parses as a verdict but VIOLATES the declared
+/// outputSchema (here: missing the required `findings`) is downgraded to
+/// `unknown` with an explicit finding — never trusted.
+#[test]
+fn result_violating_output_schema_maps_to_unknown() {
+    let ledger = Ledger::open_in_memory().unwrap();
+    let executor = ExecutorSpec {
+        id: "echo".into(),
+        // Parses as a verdict, but has no `findings` → violates the schema.
+        command: vec![
+            "sh".into(),
+            "-c".into(),
+            r#"cat >/dev/null; echo '{"verdict":"valid"}'"#.into(),
+        ],
+        model: Some("stub".into()),
+        timeout_ms: Some(2000),
+    };
+    let schema = schema_requiring_findings();
+    let out = run_audit(
+        &agent(),
+        &executor,
+        "some diff",
+        "sha256:x",
+        Some("s1"),
+        &ledger,
+        "ev_it3".into(),
+        "2026-01-01T00:00:00Z".into(),
+        Some(&schema),
+    );
+    assert_eq!(out.verdict, Verdict::Unknown);
+    assert!(
+        out.findings.iter().any(|f| f.contains("outputSchema")),
+        "a schema violation must be reported: {:?}",
+        out.findings
+    );
+}
+
+/// The converse: a result that conforms to the outputSchema keeps its verdict.
+#[test]
+fn result_matching_output_schema_is_trusted() {
+    let ledger = Ledger::open_in_memory().unwrap();
+    let executor = ExecutorSpec {
+        id: "echo".into(),
+        command: vec![
+            "sh".into(),
+            "-c".into(),
+            r#"cat >/dev/null; echo '{"verdict":"invalid","findings":["leak"]}'"#.into(),
+        ],
+        model: Some("stub".into()),
+        timeout_ms: Some(2000),
+    };
+    let schema = schema_requiring_findings();
+    let out = run_audit(
+        &agent(),
+        &executor,
+        "some diff",
+        "sha256:x",
+        Some("s1"),
+        &ledger,
+        "ev_it4".into(),
+        "2026-01-01T00:00:00Z".into(),
+        Some(&schema),
+    );
+    assert_eq!(
+        out.verdict,
+        Verdict::Invalid,
+        "a conforming result keeps its verdict"
+    );
 }
