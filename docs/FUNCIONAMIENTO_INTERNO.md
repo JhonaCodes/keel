@@ -4,7 +4,7 @@
 > sesión de agente LLM. Documento gráfico complementario a
 > [`STATUS.md`](../STATUS.md) (matriz de conformidad) y a la spec
 > [`RCCA_reference_architecture_v0_9_1.md`](RCCA_reference_architecture_v0_9_1.md).
-> Cada afirmación apunta a su evidencia (archivo:línea o §spec).
+> Cada afirmación apunta a su evidencia (archivo:línea o section spec).
 
 ---
 
@@ -33,7 +33,7 @@ flowchart LR
     M -. "el modelo NUNCA lee esto (ADR-004, arch_boundaries.rs)" .-> SNAP
 ```
 
-**Frontera de confianza — anillos (§5.3).** La acción se intercepta en dos
+**Frontera de confianza — anillos (sección 5.3).** La acción se intercepta en dos
 anillos según su reversibilidad:
 
 - **Anillo interior (pre-acción):** `command.requested`, `transition.requested`,
@@ -103,7 +103,7 @@ flowchart TD
     EV["Evento<br/>(command.requested, file.edited, …)"] --> SCOPE{"¿en scope<br/>de la regla?"}
     SCOPE -- no --> ALLOW["Decision::Allow<br/>(la regla no dispara)"]
     SCOPE -- sí --> DET["Detector<br/>(builtin:text.regex, command-classify, …)"]
-    DET -- "hit / no-hit<br/>(NUNCA decide, §4.5)" --> HIT{"¿hit?"}
+    DET -- "hit / no-hit<br/>(NUNCA decide, sección 4.5)" --> HIT{"¿hit?"}
     HIT -- no --> ALLOW
     HIT -- sí --> TOOL["Tool determinista<br/>(código externo, 0 tokens)"]
     TOOL --> V{"Verdict"}
@@ -119,17 +119,17 @@ flowchart TD
 
 Puntos de evidencia:
 
-- **El detector nunca decide** (§4.5): devuelve hit/no-hit, fail-open.
-- **Tres estados del verdict** (§4.6): `Verdict::{Valid, Invalid, Unknown}`.
-- **`unknown` sobre lo irreversible escala a humano, nunca al modelo** (§4.7,
+- **El detector nunca decide** (sección 4.5): devuelve hit/no-hit, fail-open.
+- **Tres estados del verdict** (sección 4.6): `Verdict::{Valid, Invalid, Unknown}`.
+- **`unknown` sobre lo irreversible escala a humano, nunca al modelo** (sección 4.7,
   ADR-017): el compilador normaliza este piso a `deny-pending-approval`.
 - **`exit 2` solo para eventos prevenibles:** `gate.rs:137-138` (define
   `preventable = inner ring + completion.requested`) y `gate.rs:178-182` (emite
   `ExitCode::from(2)` solo si `worst ≥ Block && preventable`; si no, `exit 0`).
-- **ContextPacket** (§10.4): `crates/keel-engine/src/packet.rs` — lleva verdict,
+- **ContextPacket** (sección 10.4): `crates/keel-engine/src/packet.rs` — lleva verdict,
   constraint, exemplar y evidencia; **sin YAML ni rutas** (el modelo no ve
   config). Se renderiza en `gate.rs:122`.
-- **Hook del cliente** (§12.1, adapter delgado): `parse_claude_code_hook`
+- **Hook del cliente** (sección 12.1, adapter delgado): `parse_claude_code_hook`
   (`gate.rs:219-289`) traduce `PreToolUse+Bash → command.requested`,
   `Edit/Write → file.edited`, `Stop → completion.requested`. El hook solo
   transporta; las reglas viven en el runtime.
@@ -156,11 +156,11 @@ Puntos de evidencia:
 
 - Tabla de entrega y lógica: `deliver_skills` en
   `crates/keel-engine/src/session.rs:83-135`.
-- **Escalón compact→full por oscilación** (§6.5): `session.rs:117`
+- **Escalón compact→full por oscilación** (sección 6.5): `session.rs:117`
   (`if oscillating { Full } else { Compact }`); detección con umbral 3 en
   `gate.rs:100` + `gate.rs:185-196` (`is_oscillating`).
 - **No re-envío** cuando ya está en contexto: `session.rs:120-126`.
-- **Exemplar obligatorio** junto a un bloqueo (§10.4): `session.rs:150-154`.
+- **Exemplar obligatorio** junto a un bloqueo (sección 10.4): `session.rs:150-154`.
 - **Estado append-only, no autoritativo** (invariante 16): la sesión solo
   registra qué se entregó; no toca enforcement, scope, validación ni executors
   (`session.rs:1-20`, `SessionStore`).
@@ -172,8 +172,8 @@ Puntos de evidencia:
 ## 4. L3 — cómo se valida (auditor semántico)
 
 El agente auditor evalúa y **devuelve findings; no escribe**, y su opinión
-**nunca autoriza una acción irreversible** (§4.7). Su resultado se archiva como
-`origin = semantic`, jamás mezclado con hechos deterministas (§6.4).
+**nunca autoriza una acción irreversible** (sección 4.7). Su resultado se archiva como
+`origin = semantic`, jamás mezclado con hechos deterministas (sección 6.4).
 
 ```mermaid
 sequenceDiagram
@@ -184,26 +184,26 @@ sequenceDiagram
 
     P->>K: keel audit --agent <id> --input <material>
     K->>K: resuelve Agent → Executor<br/>(strip "executor:" · gate.rs:387-396)
-    K->>K: build_prompt: material DELIMITADO como DATO<br/>(<<<KEEL-MATERIAL-BEGIN … END>>> · §13.2, audit.rs:50-71)
-    K->>X: spawn argv estructurado (NUNCA shell+contenido)<br/>(audit.rs:150-156, §14.8)
+    K->>K: build_prompt: material DELIMITADO como DATO<br/>(<<<KEEL-MATERIAL-BEGIN … END>>> · sección 13.2, audit.rs:50-71)
+    K->>X: spawn argv estructurado (NUNCA shell+contenido)<br/>(audit.rs:150-156, sección 14.8)
     X-->>K: JSON del resultado
     K->>K: valida forma del verdict (inv 12)<br/>invalid → REVIEW (nunca Block · audit.rs:92-96)
     K->>L: registra origin = semantic (audit.rs:107-109)
-    K-->>P: verdict consultivo + findings<br/>(exit SUCCESS — advisory §4.7)
+    K-->>P: verdict consultivo + findings<br/>(exit SUCCESS — advisory sección 4.7)
 ```
 
 Puntos de evidencia:
 
-- **Contención adversarial** (§13.2): el material va entre marcadores
+- **Contención adversarial** (sección 13.2): el material va entre marcadores
   `DATA_OPEN`/`DATA_CLOSE` — lo que esté dentro es dato a analizar, no
   instrucciones (`audit.rs:50-71`).
-- **Driver del executor** (§14.8): proceso construido con argv estructurado,
+- **Driver del executor** (sección 14.8): proceso construido con argv estructurado,
   placeholder `{prompt}` + JSON por stdin; **nunca concatena shell con contenido
   del modelo** (`audit.rs:135-156`).
-- **Autoridad limitada** (§4.7): `invalid → review`, jamás `block`
+- **Autoridad limitada** (sección 4.7): `invalid → review`, jamás `block`
   (`audit.rs:92-96`); el peor caso alcanzable es un finding sesgado, auditable
   porque el ledger lo marca `semantic`.
-- **Completion gate** (§12.3): al `completion.requested`, blockers vivos
+- **Completion gate** (sección 12.3): al `completion.requested`, blockers vivos
   (findings `invalid` de la sesión sin un `valid` posterior del mismo
   rule+file) **vetan el cierre** con la lista de pendientes
   (`gate.rs:144-168`).
@@ -248,7 +248,7 @@ Claves que responden la preocupación *"se están creando agentes"*:
    directorio + `kind:` (`crates/keel-engine/src/workspace.rs:114-135`);
    `agents/` acepta a propósito `Agent` y `AgentExecutor`. Los schemas son
    distintos y con `kind: const` (`schemas/{agent,agentexecutor,skill}.schema.json`).
-4. **La spec prohíbe usar un Agent para lo que cabe en una Skill** (§14.2): un
+4. **La spec prohíbe usar un Agent para lo que cabe en una Skill** (sección 14.2): un
    Agent se justifica solo con objetivo/contexto aislado, auditoría adversarial
    o ventaja medida de otro modelo — nunca para dividir una tarea trivial.
 
@@ -262,7 +262,7 @@ Claves que responden la preocupación *"se están creando agentes"*:
 | Autoridad | no-enforcement | consultivo (`origin=semantic`) |
 | Estado en Keel | ✅ completo | ✅ **seed** (broker/routing = Phase 2) |
 
-> El broker de invocación, `AgentRoutingPolicy` (§14.4) y los artefactos
+> El broker de invocación, `AgentRoutingPolicy` (sección 14.4) y los artefactos
 > `AgentRequest`/`AgentResult` completos **no existen aún** — son Phase 2. Ver
 > [`ROADMAP.md`](ROADMAP.md) #6.
 
@@ -270,7 +270,7 @@ Claves que responden la preocupación *"se están creando agentes"*:
 
 ## 6. Nota de honestidad
 
-- El **plano local es cooperativo** (§5.1): no resiste a un desarrollador
+- El **plano local es cooperativo** (sección 5.1): no resiste a un desarrollador
   decidido. `locked` se vuelve garantía **solo en el plano de cumplimiento
   (CI)**, que aún está pendiente (ver [`ROADMAP.md`](ROADMAP.md) #2, #3). Ningún
   output de la herramienta afirma lo contrario.

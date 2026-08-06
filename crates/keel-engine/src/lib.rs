@@ -7,7 +7,7 @@
 //! test `tests/arch_boundaries.rs`:
 //!
 //! ```text
-//! audit     → ledger (keel-core)        (§14: runs an executor, files origin=semantic)
+//! audit     → ledger (keel-core)        (section 14: runs an executor, files origin=semantic)
 //! compile   → keel-dsl + snapshot        (config → artifact; PURE)
 //! snapshot  → keel-core                  (⇏ dsl: the compiled artifact does
 //!                                          not drag authoring vocabulary
@@ -21,7 +21,7 @@
 //! testkit   → runtime + keel-dsl         (orchestration of the test gate;
 //!                                          compile does NOT call testkit —
 //!                                          the CLI orchestrates: compile →
-//!                                          test → publish, §10.2)
+//!                                          test → publish, section 10.2)
 //! ```
 //!
 //! WHY: if the runtime could import the DSL, there would be a path by which

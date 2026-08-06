@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Integration test for the binding + lock ceremony (spec §8.6, invariants 4
+//! Integration test for the binding + lock ceremony (spec section 8.6, invariants 4
 //! & 9) via the real `keel` binary: bind → compile → lock → verify, and drift
 //! detection (a changed snapshot makes `keel lock --verify` fail with exit 1).
 

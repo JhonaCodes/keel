@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Integration test for adapter preflight (spec §12.1, invariant 8) via the
+//! Integration test for adapter preflight (spec section 12.1, invariant 8) via the
 //! real `keel` binary: `keel adapter claude-code --check` passes for a block on
 //! an event the client can prevent (`command.requested`) and fails (exit 1) for
 //! a block on one it cannot (`transition.requested`).

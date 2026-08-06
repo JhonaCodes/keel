@@ -33,10 +33,10 @@ Keel's guarantees are structural, so contributions must preserve them:
   never import `keel-dsl`. This is enforced by
   `crates/keel-engine/tests/arch_boundaries.rs` — do not weaken it.
 - **The ledger is append-only** and origin classes are never mixed
-  (deterministic vs semantic, §6.4).
+  (deterministic vs semantic, section 6.4).
 - **`keel observe` never blocks** (telemetry, ADR-021); only `keel gate`
   enforces, and only preventable events (inner ring + completion) exit 2.
-- **A semantic verdict never authorizes an irreversible action** (§4.7).
+- **A semantic verdict never authorizes an irreversible action** (section 4.7).
 - Every file keeps its `SPDX-License-Identifier` header.
 
 The specification (`docs/`) is the source of truth; if code and spec disagree,
@@ -46,7 +46,7 @@ say so in the PR. The `keel-auditor` agent and `STATUS.md` track conformance.
 
 1. Open an issue describing the problem or proposal.
 2. Branch, write the test, implement, keep the suite green.
-3. Open a PR with signed-off commits. Explain which spec section (§) or ADR
+3. Open a PR with signed-off commits. Explain which spec section (section ) or ADR
    the change relates to.
 
 ## Trademark

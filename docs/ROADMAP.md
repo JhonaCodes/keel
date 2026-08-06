@@ -20,7 +20,7 @@ del núcleo actual, **no** es deuda).
 base honesta (instrucciones + skills + linters).
 **Por qué importa:** es el **punto de decisión**, no una feature. La spec
 condiciona las Fases 2+ a un delta material y sostenido. Es medición, no código.
-**Evidencia:** `STATUS.md:133` (❌ not run); spec §15.1
+**Evidencia:** `STATUS.md:133` (❌ not run); spec sección 15.1
 (`RCCA_reference_architecture_v0_9_1.md:1555-1562`). La infraestructura que lo
 mide ya existe: `declared` vs `effective` en el ledger
 (`crates/keel-engine/src/ledger.rs`, `runtime.rs:248-251`).
@@ -32,7 +32,7 @@ medido y su criterio de continuación.
 fijado), con la ceremonia de generación/validación.
 **Por qué importa:** sin esto no existe el plano CI y `locked` **no llega a ser
 garantía**. El repo debe contener solo binding/lock/CI, no estado local.
-**Evidencia:** `STATUS.md:47,52,85`; spec §8.6, ADR-007. Hoy solo hay autoridad
+**Evidencia:** `STATUS.md:47,52,85`; spec sección 8.6, ADR-007. Hoy solo hay autoridad
 de hash única (`crates/keel-engine/src/hash.rs`), sin fichero lock.
 **Hecho cuando:** `keel` genera y valida el lock, y local + CI comparten el mismo
 hash/lock (inv 9).
@@ -42,13 +42,13 @@ hash/lock (inv 9).
 por configuración), que falla el job antes de ejecutar si el binding/lock no
 resuelve.
 **Por qué importa:** es donde `locked` finalmente **se vuelve garantía** (el
-plano local es cooperativo, §5.1). Depende de #2.
+plano local es cooperativo, sección 5.1). Depende de #2.
 **Evidencia:** `STATUS.md:52,134`; no existe `.github/`; CI de referencia
 detallado en `RCCA_future.md:77-111` (se promueve al núcleo en Fase 2).
 **Hecho cuando:** hay un workflow que corre `keel` sobre el lock y publica
 evidencia; el job falla si el binding/lock es inválido.
 
-### 4 · Monotonicidad de composición D1–D4 (§7.4)  · ⏭ stub  · CÓDIGO
+### 4 · Monotonicidad de composición D1–D4 (sección 7.4)  · ⏭ stub  · CÓDIGO
 **Qué:** activar la verificación de monotonicidad (D1 cobertura / D2 sensibilidad
 / D3 consecuencia / D4 carga cognitiva) al componer capas de autoridad.
 **Por qué importa:** garantiza que componer reglas nunca **afloje** una decisión
@@ -58,19 +58,19 @@ lattice D3 ya vive en `keel-core/src/lib.rs:53-94`. Spec líneas 521-562, ADR-01
 **Hecho cuando:** existe una 2ª capa de autoridad y el compilador rechaza toda
 composición no monótona.
 
-### 5 · Capability manifest + preflight del adapter (inv 8, §12.1)  · ✅ HECHO  · CÓDIGO
+### 5 · Capability manifest + preflight del adapter (inv 8, sección 12.1)  · ✅ HECHO  · CÓDIGO
 **Qué:** que el adapter declare un manifiesto de capacidades y el compilador haga
 **preflight**: rechazar una policy bloqueante que el cliente no puede honrar, en
 vez de asumirla.
 **Por qué importa:** una policy "block" que el cliente no aplica es una falsa
 promesa de seguridad.
 **Evidencia:** `STATUS.md:51,106`; el adapter es un thin bridge
-(`gate.rs:291`), sin preflight. Spec §5.2, §12.1, invariante 8.
+(`gate.rs:291`), sin preflight. Spec sección 5.2, sección 12.1, invariante 8.
 **Hecho cuando:** compilar una policy bloqueante contra un adapter sin la
 capability requerida **falla en compilación**.
 
 ### 6 · Broker / routing de agentes (Phase 2)  · ❌/🟡  · CÓDIGO
-**Qué:** `AgentRoutingPolicy` (§14.4), Agent Invocation Broker, artefactos
+**Qué:** `AgentRoutingPolicy` (sección 14.4), Agent Invocation Broker, artefactos
 `AgentRequest`/`AgentResult` completos, **ejecución del `invoke` desde una regla**
 (hoy solo se registra), 2º proveedor/executor, y límites de delegación
 (depth/cost).
@@ -78,12 +78,12 @@ capability requerida **falla en compilación**.
 `invoke.agent` de una regla **solo se registra, nunca se ejecuta**
 (`runtime.rs:212-219`); el único spawn real es `keel audit` manual. Este ítem es
 el que convierte eso en un flujo automático y gobernado — no antes.
-**Evidencia:** `STATUS.md:120,122,135`; §14.3-14.7.
+**Evidencia:** `STATUS.md:120,122,135`; sección 14.3-14.7.
 **Hecho cuando:** una regla puede invocar un agente, el broker resuelve
 Agent+Executor+snapshot, valida el `AgentResult` por schema (inv 12) y respeta
 budgets/depth.
 
-### 7 · Máquina de fases completa §6.2  · 🟡  · CÓDIGO
+### 7 · Máquina de fases completa sección 6.2  · 🟡  · CÓDIGO
 **Qué:** el ciclo Investigación→Entrega propiedad del runtime, gated por
 artefacto (hoy solo hay completion gate + audit seed).
 **Evidencia:** `STATUS.md:60,76`.
@@ -133,8 +133,8 @@ Recomendado como **lo primero** cuando se vuelva a tocar código.
 
 - Packages versionados reutilizables (inv 3) — un solo workspace por ahora.
 - Secrets por referencia (inv 10) — fuera de scope actual.
-- Hot reload (§10.3) — proceso efímero por decisión (ADR-010).
-- Identidad de repo en el plano local (§13.3) — asunto del plano de cumplimiento.
+- Hot reload (sección 10.3) — proceso efímero por decisión (ADR-010).
+- Identidad de repo en el plano local (sección 13.3) — asunto del plano de cumplimiento.
 - **Todo `RCCA_future.md`** (ADR-020): Control Plane remoto, catálogo firmado,
   identidad por persona, certificación de workflows, panel web. **Ninguno
   iniciado, por diseño** — se promueven solo cuando Phase 0 demuestre delta y las

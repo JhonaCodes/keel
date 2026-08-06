@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Session Manager — minimal per-session state (spec §8.1, §6.5, future §9).
+//! Session Manager — minimal per-session state (spec section 8.1, section 6.5, future section 9).
 //!
 //! Tracks which skills a session has already received, implementing the
 //! context economy ladder:
@@ -9,7 +9,7 @@
 //! ```
 //!
 //! A skill already loaded is NOT re-sent when the same momentum arises again
-//! — the agent has it in context. The exception is oscillation (§6.5): three
+//! — the agent has it in context. The exception is oscillation (section 6.5): three
 //! repeated findings at the same rule+location mean the agent lost or is
 //! ignoring the context, so the runtime escalates to the `full` variant.
 //!
@@ -87,7 +87,7 @@ impl SessionStore {
 /// |---|---|
 /// | not loaded, no oscillation | compact content + exemplar; mark compact |
 /// | loaded compact, no oscillation | one-line reference only (no re-send) |
-/// | oscillating, not at full yet | FULL content (escalation §6.5); mark full |
+/// | oscillating, not at full yet | FULL content (escalation section 6.5); mark full |
 /// | loaded full | reference only |
 pub fn deliver_skills(
     snapshot: &Snapshot,
@@ -147,7 +147,7 @@ fn render_skill(skill: &CompiledSkill, root: &Path, level: SkillLevel) -> String
         .unwrap_or_else(|_| format!("(skill file `{path}` missing — see compile warnings)"));
 
     let mut out = format!("--- skill {} ({label}) ---\n{}", skill.id, content.trim_end());
-    // Exemplar pair (§10.4): mandatory companion of a block whenever the
+    // Exemplar pair (section 10.4): mandatory companion of a block whenever the
     // skill provides pairs — the difference between "don't" and "do this".
     if let Some((rejected, accepted)) = skill.examples.first() {
         out.push_str(&format!("\nrejected: {rejected}\naccepted: {accepted}"));

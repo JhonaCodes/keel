@@ -87,7 +87,7 @@
         assert!(!run_precondition(&flag_pre, &bare, &Default::default(), ctx()));
     }
 
-    /// FAIL-SAFE: missing binary → `unknown`, never a crash (§6.4).
+    /// FAIL-SAFE: missing binary → `unknown`, never a crash (section 6.4).
     #[test]
     fn missing_binary_yields_unknown_not_crash() {
         let def = ExternalToolDef {

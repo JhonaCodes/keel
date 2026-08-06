@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:keel:schemas:v1alpha1:agentexecutor",
   "title": "Keel AgentExecutor (keel/v1alpha1)",
-  "description": "kind: AgentExecutor — spec §14.1/§14.8: HOW and WHERE a logical Agent runs. A command template (built from structured args, never by concatenating shell with model content, §14.8). The `{prompt}` placeholder receives the AgentRequest prompt via argument; the material under analysis is delivered delimited as data (§13.2), never as instructions.",
+  "description": "kind: AgentExecutor — spec section 14.1/section 14.8: HOW and WHERE a logical Agent runs. A command template (built from structured args, never by concatenating shell with model content, section 14.8). The `{prompt}` placeholder receives the AgentRequest prompt via argument; the material under analysis is delivered delimited as data (section 13.2), never as instructions.",
   "type": "object",
   "required": ["apiVersion", "kind", "metadata", "spec"],
   "additionalProperties": false,

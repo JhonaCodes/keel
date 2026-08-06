@@ -33,7 +33,7 @@
         assert!(p.contains("Evidence: ev_1 logged"));
     }
 
-    /// §4.7: the deny-pending packet tells the model NOT to retry — a human
+    /// section 4.7: the deny-pending packet tells the model NOT to retry — a human
     /// decides, never the model.
     #[test]
     fn deny_pending_packet_escalates_to_human() {

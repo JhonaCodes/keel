@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Corpus test — Phase 0a (spec §15.1).
+//! Corpus test — Phase 0a (spec section 15.1).
 //!
-//! Loads ALL the rules from spec §11.3–11.5 and asserts:
+//! Loads ALL the rules from spec section 11.3–11.5 and asserts:
 //!   1. they pass the JSON Schema (with ADR-023 active),
 //!   2. the `parse → serialize → parse` round-trip is stable — nothing is lost.
 //!
@@ -14,8 +14,8 @@ const CORPUS: &str = include_str!("corpus/rules_11_4.yaml");
 
 #[test]
 fn corpus_11_4_parses_completely() {
-    let docs = parse_documents(CORPUS).expect("the §11.3–11.5 corpus must parse without loss");
-    // 9 rules: §11.3 (1) + §11.4 (7) + §11.5 (1).
+    let docs = parse_documents(CORPUS).expect("the section 11.3–11.5 corpus must parse without loss");
+    // 9 rules: section 11.3 (1) + section 11.4 (7) + section 11.5 (1).
     assert_eq!(docs.len(), 9, "the full corpus must be present");
     for doc in &docs {
         assert!(matches!(doc, Document::Rule(_)), "the corpus is Rules only");
@@ -61,12 +61,12 @@ fn corpus_preserves_the_hard_parts() {
     );
     assert_eq!(gate.preconditions[2].using.to_string(), "tool:awsume.session-active");
 
-    // Environment constraints of the SQL gate (§11.4): preserved, not swallowed.
+    // Environment constraints of the SQL gate (section 11.4): preserved, not swallowed.
     let sql = rule("db.gate-sql-execution");
     let env = sql.constraints.expect("constraints must be preserved");
     assert_eq!(env["environment"]["deny"][1], "production");
 
-    // Invoke on the unknown branch (§11.3): it is parsed (and in Phase 0 only
+    // Invoke on the unknown branch (section 11.3): it is parsed (and in Phase 0 only
     // recorded — never executed).
     let rn = rule("reactive-notifier.no-direct-data");
     let unknown = rn.enforcement.unknown.expect("unknown branch present");

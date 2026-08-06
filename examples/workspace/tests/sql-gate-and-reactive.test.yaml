@@ -1,4 +1,4 @@
-# Gate SQL (§11.4) — tres estados, caso por caso.
+# Gate SQL (section 11.4) — tres estados, caso por caso.
 apiVersion: keel/v1alpha1
 kind: RuleTest
 metadata: { id: sql-gate.blocks-truncate }
@@ -29,7 +29,7 @@ spec:
     command: "php/artisan db:wipe --force"
   expect: { verdict: unknown, decision: deny-pending-approval, origin: deterministic }
 ---
-# Estado reactivo (§11.3) — el detector nunca decide (§4.5): un match textual
+# Estado reactivo (section 11.3) — el detector nunca decide (section 4.5): un match textual
 # dentro de un comentario abre la puerta, pero la TOOL da el veredicto real.
 apiVersion: keel/v1alpha1
 kind: RuleTest

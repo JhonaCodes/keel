@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:keel:schemas:v1alpha1:project",
   "title": "Keel project binding (.keel/project.yaml)",
-  "description": "spec §8.6 — the ONLY binding versioned in a code repository (invariant 4): which project this repo is, and which workspace resolves its component definitions. The definitions themselves (rules/tools/skills/agents) never live in the repo.",
+  "description": "spec section 8.6 — the ONLY binding versioned in a code repository (invariant 4): which project this repo is, and which workspace resolves its component definitions. The definitions themselves (rules/tools/skills/agents) never live in the repo.",
   "type": "object",
   "required": ["project", "workspace"],
   "additionalProperties": false,
@@ -10,7 +10,7 @@
     "project": {
       "type": "string",
       "minLength": 1,
-      "description": "Project identity, e.g. `project:org/repo` (resolution by repo identity, §7.1)."
+      "description": "Project identity, e.g. `project:org/repo` (resolution by repo identity, section 7.1)."
     },
     "workspace": {
       "type": "string",

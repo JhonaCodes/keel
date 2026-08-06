@@ -1,7 +1,7 @@
 # keel-core — shared stable vocabulary.
 #
 # WHY IT IS A SEPARATE CRATE: compiler and runtime must share ONE single law
-# for the decision ordering (§7.4-D3) and ONE single canonical hashing
+# for the decision ordering (section 7.4-D3) and ONE single canonical hashing
 # authority (invariant 9: local and CI verify the same snapshot hash). If they
 # lived in two places they could silently diverge — exactly the failure mode
 # Keel exists to eliminate.

@@ -1,4 +1,4 @@
-# Reference CI workflow for a keel-GOVERNED repository (spec §5.2, §8).
+# Reference CI workflow for a keel-GOVERNED repository (spec section 5.2, section 8).
 #
 # Copy this into `.github/workflows/` of YOUR project's repo — the one that has
 # a `.keel/project.yaml` binding and a `.keel/keel.lock` (created by `keel bind`

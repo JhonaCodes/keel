@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Runtime Snapshot — the effective, immutable, versioned configuration of
-//! a session (spec §6.1, §10).
+//! a session (spec section 6.1, section 10).
 //!
 //! BOUNDARY RULE: this module does NOT import `keel_dsl`. The snapshot is
 //! the COMPILED artifact; the authoring vocabulary stays in the compiler.
@@ -27,12 +27,12 @@ pub struct Snapshot {
     pub rules: Vec<CompiledRule>,
     /// External tool manifests, by id.
     pub tools: BTreeMap<String, ExternalToolDef>,
-    /// Compiled skills, by id (spec §14.12). Paths only — the .md content is
+    /// Compiled skills, by id (spec section 14.12). Paths only — the .md content is
     /// read at delivery time so the snapshot hash stays machine-independent
     /// and content edits do not require recompiling.
     #[serde(default)]
     pub skills: BTreeMap<String, CompiledSkill>,
-    /// Event → candidate rules index (spec §10.1 "Index generation").
+    /// Event → candidate rules index (spec section 10.1 "Index generation").
     pub index: BTreeMap<EventKind, Vec<usize>>,
 }
 
@@ -95,7 +95,7 @@ impl Snapshot {
     /// Loads and VERIFIES: the stored hash must match the one recomputed
     /// from the content. A tampered snapshot does not load (local
     /// self-verification; the strong guarantee lives in the compliance
-    /// plane, §5.1).
+    /// plane, section 5.1).
     pub fn load(path: &Path) -> Result<Self, SnapshotError> {
         let raw = std::fs::read_to_string(path)?;
         let snap: Snapshot = serde_json::from_str(&raw)?;
@@ -126,7 +126,7 @@ pub enum SnapshotError {
 }
 
 /// Compiled rule. COMPILED mirror of the authoring Rule: refs resolved,
-/// decisions normalized (floor §4.7 applied), provenance preserved for
+/// decisions normalized (floor section 4.7 applied), provenance preserved for
 /// `explain` and `prune`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompiledRule {
@@ -152,7 +152,7 @@ pub struct CompiledRule {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validate: Option<CompiledToolCall>,
     pub enforcement: CompiledEnforcement,
-    /// Constraints preserved from the DSL (§11.4). Recorded, not evaluated
+    /// Constraints preserved from the DSL (section 11.4). Recorded, not evaluated
     /// in Phase 0 (their active evaluation comes in with enforcement).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub constraints: Option<serde_json::Value>,
@@ -171,7 +171,7 @@ pub struct CompiledScope {
 impl CompiledScope {
     /// Does the event fall within the scope? Globs are compiled per call:
     /// Phase 0 simplicity — the per-edit latency budget is precisely one of
-    /// the metrics 0b measures (spec §15.1).
+    /// the metrics 0b measures (spec section 15.1).
     pub fn matches(&self, file: Option<&str>, language: Option<&str>) -> bool {
         if !self.languages.is_empty() {
             let lang = language
@@ -299,7 +299,7 @@ pub struct CompiledBranch {
     pub decision: Decision,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub load_skills: Vec<String>,
-    /// Forward-declared context-economy capabilities (spec §11.3, future §9).
+    /// Forward-declared context-economy capabilities (spec section 11.3, future section 9).
     /// Recorded in the evidence for visibility, but the runtime does not yet
     /// ACTIVATE/limit them — that is Phase 2. Kept (not dropped) so the DSL
     /// stays aligned with the reference example; surfaced in `branch_detail`
@@ -315,7 +315,7 @@ pub struct CompiledBranch {
     pub invoke_agent: Option<String>,
 }
 
-/// Compiled manifest of an external tool (spec §4.4: the tool is code).
+/// Compiled manifest of an external tool (spec section 4.4: the tool is code).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalToolDef {
     pub id: String,
@@ -332,7 +332,7 @@ pub enum OutputKind {
     ExitCode,
 }
 
-/// Compiled skill (spec §14.12): loading levels + exemplar pairs.
+/// Compiled skill (spec section 14.12): loading levels + exemplar pairs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompiledSkill {
     pub id: String,
@@ -340,7 +340,7 @@ pub struct CompiledSkill {
     pub compact: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full: Option<String>,
-    /// Rejected/accepted pairs feeding the packet `exemplar` (§10.4).
+    /// Rejected/accepted pairs feeding the packet `exemplar` (section 10.4).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub examples: Vec<(String, String)>,
 }

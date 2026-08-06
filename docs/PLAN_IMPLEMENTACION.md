@@ -22,14 +22,14 @@ commits sin `Co-Authored-By`, formato `type: short` + `Closes #N`.
 - [x] **PR2 · `docs/implementation-plan`** — este documento + `FUNCIONAMIENTO_INTERNO.md` + `ROADMAP.md`. PR #4 · **merged** `a12d77e`.
 - [x] **PR3 · `test/harden-intervention-layers`** — #10 gaps de test (exit==2, completion-denegado, spawn real) + crate `test/`. PR #6 · **merged** `72ae1a8`.
 - [x] **PR3b · `refactor/move-unit-tests-out-of-src`** — tests inline fuera de `src` vía `#[path]` (15 archivos). PR #8 · **merged** `ab4d119`.
-- [x] **PR4 · `fix/surface-load-capabilities`** — #9: `capabilities` hecho honesto (surfaceado + documentado), NO removido (es forward-declaration de spec §11.3). PR #10 · **merged**.
+- [x] **PR4 · `fix/surface-load-capabilities`** — #9: `capabilities` hecho honesto (surfaceado + documentado), NO removido (es forward-declaration de spec sección 11.3). PR #10 · **merged**.
 - [x] **PR5 · `docs/finding-v1-deprecated-clarification`** — #11: `finding.v1` NO es gap; está **deprecado por diseño** (ADR-016). Corrección de registro.
 - [x] **PR6 · `feat/repo-binding-lock`** — #2 lock + binding (`keel bind`/`keel lock`). PR #14 · **merged** `2cb8b12`.
 - [x] **PR7 · `feat/compliance-ci-plane`** — #3 plano CI (`keel ci resolve`/`run` + `examples/ci/`). PR #16 · **merged** `103e5a8`.
 - [x] **PR8 · `feat/adapter-capability-preflight`** — #5 preflight (`keel adapter --check`). PR #18 · **merged** `01a867f`.
 
 **TODOS los PRs accionables están mergeados.** Quedan (por diseño, fuera de esta
-iniciativa): Phase 0c (medición), monotonicidad D1–D4 (§7.4, hasta 2ª capa),
+iniciativa): Phase 0c (medición), monotonicidad D1–D4 (sección 7.4, hasta 2ª capa),
 broker/routing agentes + máquina de fases (Phase 2), MCP gateway. Ver la sección
 "Deliberadamente DIFERIDO".
 
@@ -57,7 +57,7 @@ contexto; una sola fuente de verdad para seguir la iniciativa entre sesiones.
 **Qué:** tests que faltaban sobre lo YA implementado:
 1. Assert **directo** de `exit == 2` para un evento inner-ring que viola (hoy solo
    indirecto en `gate.rs:178-182`).
-2. Camino **completion DENEGADO** por blockers vivos (§12.3, `gate.rs:144-168`).
+2. Camino **completion DENEGADO** por blockers vivos (sección 12.3, `gate.rs:144-168`).
 3. **Ejecución real** de un `AgentExecutor` end-to-end (hoy el invoke se
    registra-no-ejecuta y el auditor solo se prueba con stub, `audit.rs:150-156`).
 **Por qué / para qué:** endurece las tres capas de intervención sin ampliar
@@ -67,8 +67,8 @@ alcance ni tocar features; sube la confianza antes de modificar el runtime.
 **Qué:** en vez de **eliminarlo** (como decía el plan inicial), se **surfacea** en
 la evidencia del ledger (`branch_detail`) y se **documenta** como forward-declaration.
 **Por qué / para qué:** al investigar, `load.capabilities` resultó ser una
-declaración deliberada del **ejemplo canónico del núcleo (§11.3)** y del futuro
-§9 (economía de contexto), análoga a `invoke.agent` ("recorded, not executed").
+declaración deliberada del **ejemplo canónico del núcleo (sección 11.3)** y del futuro
+sección 9 (economía de contexto), análoga a `invoke.agent` ("recorded, not executed").
 Eliminarlo divergiría de la spec/DSL. La cura del "stub silencioso" es hacerlo
 **visible + documentado** (integrar, no deprecar), no borrarlo. PR8 (#5) es OTRO
 concepto de capabilities (del adapter), no reintroduce éste.
@@ -87,20 +87,20 @@ emite todos los findings. El "absent" de STATUS:105 es correcto, no una falta.
 fijado) + comandos `keel bind` / `keel lock`; reusa la única autoridad de hash
 (`hash.rs`) y un nuevo `keel-engine/src/lock.rs` + `schemas/project.schema.json`.
 **Por qué / para qué:** sin lock/binding no existe plano CI y `locked` no llega a
-ser garantía (inv 4/9, §8.6, ADR-007). El repo debe contener solo binding/lock,
+ser garantía (inv 4/9, sección 8.6, ADR-007). El repo debe contener solo binding/lock,
 no estado local.
 
 ### PR7 — Plano CI de cumplimiento (#3)
 **Qué:** `keel ci resolve` / `keel ci run` reusando el engine sobre el lock, y un
 step `keel` en el workflow. Depende de PR6.
 **Por qué / para qué:** es donde `locked` **se vuelve garantía** (plano de
-cumplimiento, §5.2): el job falla antes de ejecutar si el binding/lock no
-resuelve. El plano local sigue siendo cooperativo (§5.1).
+cumplimiento, sección 5.2): el job falla antes de ejecutar si el binding/lock no
+resuelve. El plano local sigue siendo cooperativo (sección 5.1).
 
 ### PR8 — Manifiesto de capacidades + preflight del adapter (#5)
 **Qué:** manifiesto de capacidades del adapter + **preflight** en compile que
 **rechaza** una policy bloqueante que el cliente no puede honrar.
-**Por qué / para qué:** evita la falsa promesa de seguridad (inv 8, §12.1):
+**Por qué / para qué:** evita la falsa promesa de seguridad (inv 8, sección 12.1):
 declarar un `block` que el cliente nunca aplicará. Reintroduce, con consumidor
 real, la idea de capacidades que PR4 quitó como stub mudo.
 
@@ -115,10 +115,10 @@ Estos faltantes del inventario **no** se implementan ahora, por orden de la spec
   código. Es el *gate de crecimiento* que la spec pone antes de Phase 2. La
   infraestructura que lo mide (`declared` vs `effective` en el ledger) ya existe.
   Lo corre el usuario cuando decida.
-- **#4 Monotonicidad de composición D1–D4 (§7.4).** ⏭ YAGNI: solo aplica cuando
+- **#4 Monotonicidad de composición D1–D4 (sección 7.4).** ⏭ YAGNI: solo aplica cuando
   exista una **segunda capa de autoridad**. Hoy hay una sola. El lattice ya está
   listo en `keel-core` (`composition_stub()` documentado).
-- **#6 Broker/routing de agentes** y **#8 Máquina de fases completa §6.2.**
+- **#6 Broker/routing de agentes** y **#8 Máquina de fases completa sección 6.2.**
   Son **Phase 2**. La spec los gate detrás de Phase 0c. Implementarlos antes de
   medir sería prematuro. (Recordatorio: hoy el `invoke.agent` de una regla solo
   se registra, nunca se ejecuta — `runtime.rs:212-219`; el único spawn real es

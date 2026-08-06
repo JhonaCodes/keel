@@ -37,7 +37,7 @@
         assert_eq!(back.origin, OriginClass::Deterministic);
     }
 
-    /// The telemetry of §6.4 is THE PRODUCT — it gets tested as a product.
+    /// The telemetry of section 6.4 is THE PRODUCT — it gets tested as a product.
     #[test]
     fn rule_stats_answer_the_operational_questions() {
         let ledger = Ledger::open_in_memory().unwrap();
@@ -69,7 +69,7 @@
         assert_eq!((fuzzy.evaluations, fuzzy.unknown), (4, 4)); // mis-specified
     }
 
-    /// §6.5 oscillation: same rule+location repeated within a session.
+    /// section 6.5 oscillation: same rule+location repeated within a session.
     #[test]
     fn oscillation_detects_repeated_findings_at_same_location() {
         let ledger = Ledger::open_in_memory().unwrap();

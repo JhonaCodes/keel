@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stand-in for tool:sqlglot.classify-statement (spec §11.4).
+"""Stand-in for tool:sqlglot.classify-statement (spec section 11.4).
 
 NAIVE classifier of SQL statements extracted from a command. A real
 implementation wraps sqlglot (AST); an honest three-state classifier is

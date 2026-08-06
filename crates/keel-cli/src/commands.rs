@@ -52,7 +52,7 @@ spec:
         path.join("rules/rule.yaml.example"),
         r#"# Keel rule template (rename to <name>.yaml to activate it).
 #
-# Anatomy (spec §11): the rule DECLARES; the tool IMPLEMENTS (it is code).
+# Anatomy (spec section 11): the rule DECLARES; the tool IMPLEMENTS (it is code).
 # author, adrRef and reviewAfter are MANDATORY (ADR-023): every rule has
 # an owner, a decision that justifies it and a review date — so that
 # `keel prune` can propose deleting it BACKED BY DATA once it dies.
@@ -66,12 +66,12 @@ spec:
 #   adrRef: adr:ADR-001             # the design decision that originates it
 #   reviewAfter: P6M                # ISO-8601 review window
 # spec:
-#   reversibility: reversible       # irreversible => unknown escalates to a human (§4.7)
+#   reversibility: reversible       # irreversible => unknown escalates to a human (section 4.7)
 #   scope:
 #     languages: [python]           # optional
 #     paths: { include: ["src/**"], exclude: ["src/legacy/**"] }
 #   on: [file.edited]               # events: file.edited, command.requested, ...
-#   detect:                         # cheap prefilter — NEVER decides (§4.5)
+#   detect:                         # cheap prefilter — NEVER decides (section 4.5)
 #     using: builtin:text.contains  # or builtin:text.regex / builtin:command.classify
 #     with: { value: "pattern" }
 #   validate:                       # the real verdict: valid|invalid|unknown
@@ -88,7 +88,7 @@ spec:
     std::fs::write(
         path.join("tools/tool.yaml.example"),
         r#"# External tool template (rename to <name>.yaml to activate it).
-# The tool is CODE (spec §4.4): it receives the event as JSON via stdin and
+# The tool is CODE (spec section 4.4): it receives the event as JSON via stdin and
 # responds per `output`. Relative paths resolve against this workspace.
 #
 # apiVersion: keel/v1alpha1
@@ -106,7 +106,7 @@ spec:
         path.join("tests/test.yaml.example"),
         r#"# RuleTest template (rename to <name>.yaml to activate it).
 # Every rule deserves its cases: `keel compile` does NOT publish a snapshot
-# if a RuleTest fails (§10.2). It is your safety net for editing rules
+# if a RuleTest fails (section 10.2). It is your safety net for editing rules
 # without fear.
 #
 # apiVersion: keel/v1alpha1
@@ -122,7 +122,7 @@ spec:
 "#,
     )?;
 
-    // Runtime state kept out of version control (spec §8.4 / invariant 5).
+    // Runtime state kept out of version control (spec section 8.4 / invariant 5).
     std::fs::write(path.join(".gitignore"), ".keel-state/\n")?;
 
     println!("workspace created at {}", path.display());
@@ -135,7 +135,7 @@ spec:
 
 // ─────────────────────────── compile ───────────────────────────
 
-/// ATOMIC compilation (spec §10.2): staging → RuleTests → publish only if
+/// ATOMIC compilation (spec section 10.2): staging → RuleTests → publish only if
 /// they pass, retaining the last valid snapshot for rollback (invariant 7).
 pub fn compile(root: &Path) -> Result<ExitCode> {
     let files = workspace::load(root)?;
@@ -150,7 +150,7 @@ pub fn compile(root: &Path) -> Result<ExitCode> {
         for r in &failed {
             eprintln!("  FAIL {} → {}", r.test_id, r.detail);
         }
-        eprintln!("snapshot NOT published; the last-known-good is retained (§10.2)");
+        eprintln!("snapshot NOT published; the last-known-good is retained (section 10.2)");
         return Ok(ExitCode::FAILURE);
     }
 
@@ -362,7 +362,7 @@ pub fn explain(root: &Path, ev_id: &str, as_sarif: bool) -> Result<ExitCode> {
 
 // ─────────────────────────── prune ───────────────────────────
 
-/// The lifecycle against the graveyard (spec §7.7, ADR-023): propose with
+/// The lifecycle against the graveyard (spec section 7.7, ADR-023): propose with
 /// data; a human decides; record with class `human`.
 pub fn prune(
     root: &Path,
@@ -396,7 +396,7 @@ pub fn prune(
     let stats = ledger.rule_stats()?;
     let now = jiff::Timestamp::now();
 
-    println!("keel prune — lifecycle backed by evidence (§7.7)\n");
+    println!("keel prune — lifecycle backed by evidence (section 7.7)\n");
     for rule in &snapshot.rules {
         let stat = stats.iter().find(|s| s.rule_id == rule.id);
         print!(
@@ -427,7 +427,7 @@ pub fn prune(
             (true, 0, _, evals) => format!(
                 "DELETION CANDIDATE (evidence: 0 invalid across {evals} evaluations over the whole window) — with data, not with guts"
             ),
-            (true, _, unk, evals) if unk * 2 > evals => "adjust (high unknown tail: under-specified rule — push the semantics into structure, §4.6)".to_string(),
+            (true, _, unk, evals) if unk * 2 > evals => "adjust (high unknown tail: under-specified rule — push the semantics into structure, section 4.6)".to_string(),
             (true, ..) => "keep (active and healthy)".to_string(),
         };
         println!("  → {proposal}");
@@ -436,7 +436,7 @@ pub fn prune(
 
     let decisions = ledger.human_decisions(None)?;
     if !decisions.is_empty() {
-        println!("recorded human decisions (class `human`, §6.4):");
+        println!("recorded human decisions (class `human`, section 6.4):");
         for d in decisions {
             println!(
                 "  {} {} → {} (by {}{})",
@@ -473,7 +473,7 @@ pub fn test(root: &Path) -> Result<ExitCode> {
     let reports = testkit::run_tests(&outcome.snapshot, &files.tests, &files.root);
 
     if reports.is_empty() {
-        println!("no RuleTests in tests/ — Phase 0a requires verifying every gate case by case (§15.1)");
+        println!("no RuleTests in tests/ — Phase 0a requires verifying every gate case by case (section 15.1)");
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -630,7 +630,7 @@ fn binary_on_path(program: &str) -> bool {
 
 // ─────────────────────────── bind / lock ───────────────────────────
 
-/// `keel bind` — writes `.keel/project.yaml` (spec §8.6). The repo holds only
+/// `keel bind` — writes `.keel/project.yaml` (spec section 8.6). The repo holds only
 /// the binding + lock, never the component definitions (invariant 4).
 pub(crate) fn bind(root: &Path, project: Option<String>, org: Option<String>) -> Result<ExitCode> {
     use keel_engine::lock::ProjectBinding;
@@ -653,7 +653,7 @@ pub(crate) fn bind(root: &Path, project: Option<String>, org: Option<String>) ->
     Ok(ExitCode::SUCCESS)
 }
 
-/// `keel lock` — (re)generate or `--verify` the pinned resolution (spec §8.6,
+/// `keel lock` — (re)generate or `--verify` the pinned resolution (spec section 8.6,
 /// invariant 9). The fingerprint is the snapshot's canonical hash, so the same
 /// configuration locks identically on any machine — the basis of the CI check.
 pub(crate) fn lock(root: &Path, verify: bool) -> Result<ExitCode> {
@@ -723,7 +723,7 @@ fn parse_project_from_remote(url: &str) -> Option<String> {
 /// Resolves the compliance plane: binding present, workspace compiles + tests
 /// pass, and the lock matches a FRESH compile (no drift). Returns `true` when
 /// everything resolves. This is the same engine as local, run over the pinned
-/// lock — the point where `locked` becomes a guarantee (§5.2, §8).
+/// lock — the point where `locked` becomes a guarantee (section 5.2, section 8).
 fn ci_resolve_inner(root: &Path) -> Result<bool> {
     use keel_engine::lock::{Lock, ProjectBinding};
 
@@ -800,7 +800,7 @@ pub(crate) fn ci_run(root: &Path) -> Result<ExitCode> {
 // ─────────────────────────── adapter preflight ───────────────────────────
 
 /// `keel adapter <client> --check` — preflight the published snapshot against
-/// the adapter's capability manifest (spec §12.1, invariant 8). Rejects a
+/// the adapter's capability manifest (spec section 12.1, invariant 8). Rejects a
 /// `block` the client cannot honor instead of assuming it. Exit 1 on any
 /// unhonorable policy.
 pub(crate) fn adapter_check(root: &Path, client: &str) -> Result<ExitCode> {

@@ -25,7 +25,7 @@
         assert_eq!(f, vec!["x".to_string()]);
     }
 
-    /// §4.7: an auditor's `invalid` becomes `review`, never a block of an
+    /// section 4.7: an auditor's `invalid` becomes `review`, never a block of an
     /// irreversible action. Verified through run_audit with an echo executor.
     #[test]
     fn semantic_invalid_maps_to_review_and_records_semantic_origin() {

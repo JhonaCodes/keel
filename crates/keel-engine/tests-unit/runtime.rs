@@ -70,7 +70,7 @@
         }
     }
 
-    /// THE L1 test (§5.3 inner ring): in Enforce mode the declared decision
+    /// THE L1 test (section 5.3 inner ring): in Enforce mode the declared decision
     /// applies as-is — block means BLOCK. This is the keel holding.
     #[test]
     fn enforce_applies_declared_decision() {

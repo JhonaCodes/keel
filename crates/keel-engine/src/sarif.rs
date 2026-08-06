@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! SARIF export — the normative findings format (spec §11.6, ADR-016).
+//! SARIF export — the normative findings format (spec section 11.6, ADR-016).
 //!
 //! Keel does not maintain a proprietary format: it extends SARIF via
 //! `properties` (evidence class, rule, snapshot hash, decisions). It

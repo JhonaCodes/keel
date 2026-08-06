@@ -1,4 +1,4 @@
-# Production write gate — spec §11.4, the ADR-022 reference case:
+# Production write gate — spec section 11.4, the ADR-022 reference case:
 # preconditions evaluate the STATE OF THE WORLD at the moment of the request
 # (explicit env + explicit flag + live credential), not the content of the
 # command. Fail-closed: without all three, the command is not even validated.
@@ -32,6 +32,6 @@ spec:
       decision: block
       report: { message: "destructive or unscoped write against production" }
     unknown:
-      decision: deny-pending-approval   # irreversible → human, never an LLM (§4.7)
+      decision: deny-pending-approval   # irreversible → human, never an LLM (section 4.7)
     valid:
       decision: allow

@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Compiler — the spec §10.1 pipeline, trimmed down to Phase 0.
+//! Compiler — the spec section 10.1 pipeline, trimmed down to Phase 0.
 //!
 //! ```text
 //! Parse                → workspace.rs (YAML → Document, schema-validated)
 //! Schema validation    → keel-dsl::schema (ADR-023 active)
 //! Reference resolution → every tool ref resolves to a builtin or a manifest
 //! Composition          → *** DOCUMENTED STUB *** (see below)
-//! Conflict detection   → duplicate IDs at the same level (§7.6)
+//! Conflict detection   → duplicate IDs at the same level (section 7.6)
 //! Tool validation      → compilable regexes, detect builtin-only in Phase 0
 //! Index generation     → event → candidate rules
 //! Snapshot creation    → immutable artifact with a canonical hash
 //! ```
 //!
 //! ── Composition: why it is a no-op in Phase 0 ───────────────────────────
-//! The `locked` monotonicity check (spec §7.4, D1–D4) operates on the
+//! The `locked` monotonicity check (spec section 7.4, D1–D4) operates on the
 //! COMPOSITION of layers (org → platform → project → team → profile).
 //! Phase 0 has ONE workspace and ONE project: there is no second authority
 //! layer against which to verify that nothing gets weakened. The step exists
@@ -43,15 +43,15 @@ const DEFAULT_TOOL_TIMEOUT_MS: u64 = 10_000;
 #[derive(Debug)]
 pub struct CompileOutcome {
     pub snapshot: Snapshot,
-    /// Non-blocking debt (§6.5: exemplar/report missing on block rules;
-    /// §4.7 floors applied by normalization). The rule ledger starts here:
+    /// Non-blocking debt (section 6.5: exemplar/report missing on block rules;
+    /// section 4.7 floors applied by normalization). The rule ledger starts here:
     /// debt is declared, not swallowed.
     pub warnings: Vec<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum CompileError {
-    #[error("duplicate id `{0}`: two components at the same authority level (§7.6) — resolution required, never silent")]
+    #[error("duplicate id `{0}`: two components at the same authority level (section 7.6) — resolution required, never silent")]
     DuplicateId(String),
     #[error("rule `{rule}`: unresolvable reference `{reference}` — {hint}")]
     UnresolvedTool {
@@ -65,7 +65,7 @@ pub enum CompileError {
         #[source]
         source: regex::Error,
     },
-    #[error("rule `{rule}`: external detect not supported in Phase 0 (the §11.4 corpus uses builtin detectors only); use a builtin or move the tool to validate")]
+    #[error("rule `{rule}`: external detect not supported in Phase 0 (the section 11.4 corpus uses builtin detectors only); use a builtin or move the tool to validate")]
     ExternalDetect { rule: String },
     #[error("rule `{rule}`: reviewAfter `{value}` is not a valid ISO-8601 duration")]
     BadReviewAfter { rule: String, value: String },
@@ -77,7 +77,7 @@ pub enum CompileError {
 pub fn compile(files: &WorkspaceFiles, created_at: String) -> Result<CompileOutcome, CompileError> {
     let mut warnings = Vec::new();
 
-    // ── Conflict detection (§7.6): the compiler does not resolve silently ──
+    // ── Conflict detection (section 7.6): the compiler does not resolve silently ──
     let mut seen = std::collections::BTreeSet::new();
     for doc in files.rules.iter().map(|r| &r.metadata.id) {
         if !seen.insert(doc.clone()) {
@@ -94,7 +94,7 @@ pub fn compile(files: &WorkspaceFiles, created_at: String) -> Result<CompileOutc
         tools.insert(tool.metadata.id.clone(), compile_tool(tool));
     }
 
-    // ── Skill manifests (§14.12): paths validated, content read at delivery ──
+    // ── Skill manifests (section 14.12): paths validated, content read at delivery ──
     let mut skills: BTreeMap<String, CompiledSkill> = BTreeMap::new();
     for skill in &files.skills {
         if !seen.insert(skill.metadata.id.clone()) {
@@ -122,7 +122,7 @@ pub fn compile(files: &WorkspaceFiles, created_at: String) -> Result<CompileOutc
         );
     }
 
-    // ── Composition: DOCUMENTED STUB (see module header, §7.4) ──
+    // ── Composition: DOCUMENTED STUB (see module header, section 7.4) ──
     composition_stub();
 
     // ── Reference resolution + Tool validation + Policy compilation ──
@@ -136,9 +136,9 @@ pub fn compile(files: &WorkspaceFiles, created_at: String) -> Result<CompileOutc
     Ok(CompileOutcome { snapshot, warnings })
 }
 
-/// `Composition` step of the §10.1 pipeline — deliberate no-op in Phase 0.
+/// `Composition` step of the section 10.1 pipeline — deliberate no-op in Phase 0.
 ///
-/// HERE is where the D1–D4 `locked` monotonicity check (§7.4) will live once
+/// HERE is where the D1–D4 `locked` monotonicity check (section 7.4) will live once
 /// there is a second authority layer to compose. It is kept as a named
 /// function so the pipeline declares ALL its steps even when one does not
 /// operate yet: a silently omitted step is the failure mode this system
@@ -172,7 +172,7 @@ fn compile_rule(
     let id = &rule.metadata.id;
     let spec = &rule.spec;
 
-    // reviewAfter validated at compile time: prune (§7.7) depends on it.
+    // reviewAfter validated at compile time: prune (section 7.7) depends on it.
     let review_after = rule.metadata.review_after.clone().unwrap_or_default();
     if review_after.parse::<jiff::Span>().is_err() {
         return Err(CompileError::BadReviewAfter {
@@ -265,7 +265,7 @@ fn compile_rule(
 
     let enforcement = compile_enforcement(id, &spec.enforcement, spec.reversibility, warnings);
 
-    // ── Reference resolution for load.skills (§10.1): a skill a rule loads
+    // ── Reference resolution for load.skills (section 10.1): a skill a rule loads
     //    must exist — a dangling reference would silently deliver nothing,
     //    exactly the omission class this system eliminates.
     for branch in [
@@ -294,7 +294,7 @@ fn compile_rule(
         }
     }
 
-    // Rule debt (§6.5/§10.4): a block with neither message nor skills
+    // Rule debt (section 6.5/section 10.4): a block with neither message nor skills
     // produces findings open to interpretation — declared as a warning.
     if let Some(inv) = &enforcement.invalid {
         if inv.decision >= Decision::Block
@@ -302,7 +302,7 @@ fn compile_rule(
             && inv.load_skills.is_empty()
         {
             warnings.push(format!(
-                "rule `{id}`: invalid branch with decision block but no report.message or load.skills — rule debt (§6.5): an ambiguous block reproduces the failure mode the system fights"
+                "rule `{id}`: invalid branch with decision block but no report.message or load.skills — rule debt (section 6.5): an ambiguous block reproduces the failure mode the system fights"
             ));
         }
     }
@@ -368,7 +368,7 @@ fn compile_enforcement(
 ) -> CompiledEnforcement {
     let mut unknown = e.unknown.as_ref().map(to_compiled_branch);
 
-    // Floor §4.7 normalization (ADR-017): on an IRREVERSIBLE rule the
+    // Floor section 4.7 normalization (ADR-017): on an IRREVERSIBLE rule the
     // `unknown` branch has `deny-pending-approval` as its floor, regardless
     // of what it composes to. It is normalized at COMPILE time (a static
     // property) so the runtime never has to reason about reversibility.
@@ -377,7 +377,7 @@ fn compile_enforcement(
         match &mut unknown {
             Some(branch) if branch.decision < floor => {
                 warnings.push(format!(
-                    "rule `{rule_id}`: unknown branch raised to deny-pending-approval (floor §4.7 for irreversible actions: uncertainty escalates to a human, never to a model)"
+                    "rule `{rule_id}`: unknown branch raised to deny-pending-approval (floor section 4.7 for irreversible actions: uncertainty escalates to a human, never to a model)"
                 ));
                 branch.decision = floor;
             }

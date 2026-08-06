@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Evidence Ledger — THE FIRST PRODUCT of the system (spec §6.4, ADR-021).
+//! Evidence Ledger — THE FIRST PRODUCT of the system (spec section 6.4, ADR-021).
 //!
 //! Enforcement is the second product; this is the first thing that gets
 //! built and the first thing that delivers value: constraint telemetry
@@ -12,7 +12,7 @@
 //!
 //! APPEND-ONLY (invariant 16 via API surface): this module exposes no UPDATE
 //! or DELETE over the evidence. Human prune decisions are recorded as NEW
-//! entries in their own table, with class `human` (§7.7).
+//! entries in their own table, with class `human` (section 7.7).
 //!
 //! BOUNDARY RULES: does not import `keel_dsl` (⇏ dsl) and no ledger module
 //! calls the runtime (⇏ runtime: the ledger is a sink — the runtime writes
@@ -24,11 +24,11 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-/// One evidence entry (spec §6.4: rule and version, verdict, origin class,
+/// One evidence entry (spec section 6.4: rule and version, verdict, origin class,
 /// cost, and resulting decision).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LedgerEntry {
-    /// `ev_<ulid>` — time-sortable, citable in the transcript (§10.4).
+    /// `ev_<ulid>` — time-sortable, citable in the transcript (section 10.4).
     pub id: String,
     /// RFC 3339.
     pub ts: String,
@@ -47,7 +47,7 @@ pub struct LedgerEntry {
     /// What was actually applied. Phase 0: never above `review`.
     pub effective_decision: Decision,
     pub latency_ms: u64,
-    /// 0 for every deterministic tool — the economics of §4.4 made into data.
+    /// 0 for every deterministic tool — the economics of section 4.4 made into data.
     pub tokens: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
@@ -58,7 +58,7 @@ pub struct LedgerEntry {
     pub detail: Option<String>,
 }
 
-/// Aggregated per-rule telemetry (spec §6.4, the operational-questions table).
+/// Aggregated per-rule telemetry (spec section 6.4, the operational-questions table).
 #[derive(Debug, Clone, Serialize)]
 pub struct RuleStats {
     pub rule_id: String,
@@ -75,7 +75,7 @@ pub struct RuleStats {
 }
 
 /// Repetition of the same finding (rule+location) within a session —
-/// the oscillation signal of §6.5.
+/// the oscillation signal of section 6.5.
 #[derive(Debug, Clone, Serialize)]
 pub struct Oscillation {
     pub rule_id: String,
@@ -85,7 +85,7 @@ pub struct Oscillation {
     pub count: u64,
 }
 
-/// Recorded human decision (§7.7: deletion stops being risky because it
+/// Recorded human decision (section 7.7: deletion stops being risky because it
 /// stops being blind — and it stays audited with class `human`).
 #[derive(Debug, Clone, Serialize)]
 pub struct HumanDecision {
@@ -136,7 +136,7 @@ impl Ledger {
             CREATE INDEX IF NOT EXISTS idx_evidence_rule ON evidence(rule_id);
             CREATE INDEX IF NOT EXISTS idx_evidence_session ON evidence(session_id);
 
-            -- Human lifecycle decisions (§7.7). Origin both implicit and
+            -- Human lifecycle decisions (section 7.7). Origin both implicit and
             -- explicit: class `human`, always.
             CREATE TABLE IF NOT EXISTS human_decisions (
               id         TEXT PRIMARY KEY,
@@ -197,7 +197,7 @@ impl Ledger {
         }
     }
 
-    /// Per-rule telemetry (§6.4): the operational-questions table.
+    /// Per-rule telemetry (section 6.4): the operational-questions table.
     pub fn rule_stats(&self) -> rusqlite::Result<Vec<RuleStats>> {
         let mut stmt = self.conn.prepare(
             r#"SELECT rule_id,
@@ -229,7 +229,7 @@ impl Ledger {
         rows.collect()
     }
 
-    /// Repeated findings (rule+location per session) — §6.5 oscillation.
+    /// Repeated findings (rule+location per session) — section 6.5 oscillation.
     pub fn oscillations(&self, threshold: u64) -> rusqlite::Result<Vec<Oscillation>> {
         let mut stmt = self.conn.prepare(
             r#"SELECT rule_id, session_id, file, line, COUNT(*) AS n
@@ -251,7 +251,7 @@ impl Ledger {
         rows.collect()
     }
 
-    /// Records a human lifecycle decision (§7.7). Deleting a rule is NEVER
+    /// Records a human lifecycle decision (section 7.7). Deleting a rule is NEVER
     /// executed by the system: it proposes with data; a human decides; the
     /// trail stays here with class `human`.
     pub fn record_human_decision(
@@ -302,10 +302,10 @@ impl Ledger {
         }
     }
 
-    /// Unresolved blockers of a session (§6.2 acceptance, minimal form):
+    /// Unresolved blockers of a session (section 6.2 acceptance, minimal form):
     /// invalid findings whose declared decision is blocking and for which no
     /// LATER `valid` evaluation of the same rule+file exists in the session.
-    /// Feeds the completion gate (§12.3: completion requires runtime
+    /// Feeds the completion gate (section 12.3: completion requires runtime
     /// authorization — you cannot declare "done" over live blockers).
     pub fn unresolved_blockers(&self, session_id: &str) -> rusqlite::Result<Vec<LedgerEntry>> {
         let mut stmt = self.conn.prepare(

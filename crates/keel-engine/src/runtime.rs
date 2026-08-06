@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Rule Engine — the two execution modes of the keel (spec §15.1, §5.3).
+//! Rule Engine — the two execution modes of the keel (spec section 15.1, section 5.3).
 //!
 //! Evaluates an event against the snapshot and produces evaluations with the
 //! DECLARED decision (what the rule asks for) and the EFFECTIVE decision
@@ -8,7 +8,7 @@
 //! | Mode      | effective_decision            | Entry point    | Purpose |
 //! |-----------|-------------------------------|----------------|---------|
 //! | `Passive` | `declared.min(Review)` — nothing blocks | `keel observe` | Telemetry (ADR-021): measure which constraints are alive, dead, mis-specified |
-//! | `Enforce` | `declared` — block means BLOCK | `keel gate`    | The inner ring (§5.3): a blocked action never exists as a process |
+//! | `Enforce` | `declared` — block means BLOCK | `keel gate`    | The inner ring (section 5.3): a blocked action never exists as a process |
 //!
 //! Both modes write the same declared/effective pair to the ledger, so
 //! telemetry never degrades: the Phase 0c comparison (violations reaching
@@ -46,20 +46,20 @@ pub struct Evaluation {
     pub declared_decision: Decision,
     pub effective_decision: Decision,
     pub latency_ms: u64,
-    /// Tokens consumed: 0 throughout Phase 0 (deterministic tools only, §4.4).
+    /// Tokens consumed: 0 throughout Phase 0 (deterministic tools only, section 4.4).
     pub tokens: u64,
     pub findings: Vec<tools::Finding>,
     /// Human-readable context: failed precondition, recorded invoke, report
     /// message. Feeds `keel explain`.
     pub detail: Option<String>,
-    /// Skill refs the fired branch loads (§10.4). The Session Manager decides
-    /// whether to DELIVER content or just reference it (already loaded, §6.5).
+    /// Skill refs the fired branch loads (section 10.4). The Session Manager decides
+    /// whether to DELIVER content or just reference it (already loaded, section 6.5).
     pub load_skills: Vec<String>,
 }
 
 /// Evaluates an event against all candidate rules in the snapshot.
 ///
-/// Per-rule ladder (§4.6, in cost order):
+/// Per-rule ladder (section 4.6, in cost order):
 /// scope → when → detect (µs; a miss is NOT recorded: recording detector
 /// misses would explode the ledger with no signal) → preconditions (ADR-022)
 /// → validate (the real verdict) → enforcement branch → passive forcing.
@@ -87,7 +87,7 @@ fn evaluate_rule(
     ctx: ExecContext<'_>,
     mode: Mode,
 ) -> Option<Evaluation> {
-    // 1. Scope: the rule does not apply outside its coverage (D1 of §7.4).
+    // 1. Scope: the rule does not apply outside its coverage (D1 of section 7.4).
     if let Some(scope) = &rule.scope {
         if !scope.matches(event.file.as_deref(), event.language.as_deref()) {
             return None;
@@ -102,7 +102,7 @@ fn evaluate_rule(
     }
 
     // 3. Detect: economical prefilter. A miss = the rule does not fire = no
-    //    entry (the detector never decides NOR generates evidence, §4.5).
+    //    entry (the detector never decides NOR generates evidence, section 4.5).
     if let Some(detect) = &rule.detect {
         if !tools::run_detector(detect, event) {
             return None;
@@ -188,7 +188,7 @@ fn pick_branch(rule: &CompiledRule, verdict: Verdict) -> Option<&CompiledBranch>
 }
 
 /// Default decision when the author did not declare the branch. Conservative
-/// without being dramatic: the compiler already normalized the §4.7 floor on
+/// without being dramatic: the compiler already normalized the section 4.7 floor on
 /// the declared branches; a missing branch falls back to `review`
 /// (invalid/unknown) or `allow`.
 fn default_decision(verdict: Verdict) -> Decision {
@@ -211,7 +211,7 @@ fn branch_detail(branch: &CompiledBranch, verdict: Verdict) -> Option<String> {
     }
     if !branch.load_capabilities.is_empty() {
         // Phase 0 honesty (like `invoke`): capabilities are a forward-declared
-        // field of the DSL (spec §11.3, future §9 context-economy). They are
+        // field of the DSL (spec section 11.3, future section 9 context-economy). They are
         // recorded in the evidence so the declaration is visible, but the
         // runtime does not yet ACTIVATE/limit them — that is Phase 2. Surfacing
         // them here keeps the field honest instead of a silent no-op.

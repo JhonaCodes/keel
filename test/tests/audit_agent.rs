@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Integration tests for the L3 specialized-agent path (spec §14) through the
+//! Integration tests for the L3 specialized-agent path (spec section 14) through the
 //! public `keel_engine::audit` API — a real executor subprocess, then result
 //! validation and ledger recording. Complements the in-crate unit tests that
 //! reach `audit`'s private helpers.
@@ -17,8 +17,8 @@ fn agent() -> AgentSpec {
     }
 }
 
-/// §14.8: a real executor process returning a schema-valid `invalid` verdict is
-/// recorded as `semantic` and mapped to `review` — never a block (§4.7).
+/// section 14.8: a real executor process returning a schema-valid `invalid` verdict is
+/// recorded as `semantic` and mapped to `review` — never a block (section 4.7).
 #[test]
 fn real_executor_invalid_is_semantic_review() {
     let ledger = Ledger::open_in_memory().unwrap();

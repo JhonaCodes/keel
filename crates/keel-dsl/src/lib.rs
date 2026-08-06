@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-//! keel-dsl — Keel's authoring vocabulary (spec §11).
+//! keel-dsl — Keel's authoring vocabulary (spec section 11).
 //!
 //! Models the `apiVersion/kind/metadata/spec` envelope and the core kinds
 //! Phase 0 needs: `Workspace`, `Rule`, `Tool`, `RuleTest`.
 //!
 //! The loading flow is ALWAYS: raw YAML → JSON-Schema validation
 //! ([`schema`]) → typed deserialization. The schema is the Phase 0a
-//! deliverable (spec §15.1): if a real protection cannot be expressed here,
+//! deliverable (spec section 15.1): if a real protection cannot be expressed here,
 //! the gap gets fixed BEFORE writing runtime.
 
 pub mod rule;
@@ -24,7 +24,7 @@ pub use rule::{
 /// apiVersion supported by this binary.
 pub const API_VERSION: &str = "keel/v1alpha1";
 
-/// Common envelope metadata (spec §11.1).
+/// Common envelope metadata (spec section 11.1).
 ///
 /// `author`, `adr_ref` and `review_after` are optional HERE because the
 /// envelope is common to all kinds — but the JSON Schema for `kind: Rule`
@@ -40,7 +40,7 @@ pub struct Metadata {
     pub author: Option<String>,
     #[serde(default, rename = "adrRef", skip_serializing_if = "Option::is_none")]
     pub adr_ref: Option<String>,
-    /// ISO-8601 review window (e.g. "P6M"). Feeds `keel prune` (§7.7).
+    /// ISO-8601 review window (e.g. "P6M"). Feeds `keel prune` (section 7.7).
     #[serde(default, rename = "reviewAfter", skip_serializing_if = "Option::is_none")]
     pub review_after: Option<String>,
 }
@@ -121,7 +121,7 @@ pub struct ToolDoc {
     pub spec: ToolSpec,
 }
 
-/// Manifest of an EXTERNAL tool (spec §4.4: the tool is code — a registered
+/// Manifest of an EXTERNAL tool (spec section 4.4: the tool is code — a registered
 /// program with a manifest, versioned like any component).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -159,9 +159,9 @@ pub struct SkillDoc {
     pub spec: SkillSpec,
 }
 
-/// Operational knowledge with loading levels (spec §14.12): `compact.md` is
-/// delivered on first activation; `full.md` on oscillation (§6.5). The
-/// rejected/accepted `examples` feed the packet `exemplar` (§10.4) — a block
+/// Operational knowledge with loading levels (spec section 14.12): `compact.md` is
+/// delivered on first activation; `full.md` on oscillation (section 6.5). The
+/// rejected/accepted `examples` feed the packet `exemplar` (section 10.4) — a block
 /// whose message is open to interpretation reproduces the failure mode the
 /// system exists to prevent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -183,7 +183,7 @@ pub struct ExemplarPair {
     pub accepted: String,
 }
 
-/// kind: Agent (spec §14) — a logical responsibility executed by an
+/// kind: Agent (spec section 14) — a logical responsibility executed by an
 /// AgentExecutor. Minimal Phase-2-seed shape.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -216,7 +216,7 @@ pub struct AgentBudget {
     pub max_tokens: Option<u64>,
 }
 
-/// kind: AgentExecutor (spec §14.1/§14.8) — how/where an Agent runs.
+/// kind: AgentExecutor (spec section 14.1/section 14.8) — how/where an Agent runs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentExecutorDoc {
@@ -245,8 +245,8 @@ pub struct RuleTestDoc {
     pub spec: RuleTestSpec,
 }
 
-/// Declarative fixture: input event → expected result (plan §tests).
-/// It is Phase 0a's FUNCTIONAL EQUIVALENCE criterion (spec §15.1): every gate
+/// Declarative fixture: input event → expected result (plan section tests).
+/// It is Phase 0a's FUNCTIONAL EQUIVALENCE criterion (spec section 15.1): every gate
 /// already deployed is expressed in the DSL and verified case by case against
 /// the behavior of the original script.
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,4 +1,4 @@
-# Equivalencia funcional del prod-write-gate (Phase 0a, §15.1): cada caso
+# Equivalencia funcional del prod-write-gate (Phase 0a, section 15.1): cada caso
 # replica el comportamiento del gate original — env/flag/credencial
 # presentes o ausentes, SQL acotado o no. La decision esperada es la
 # DECLARADA (el pasivo la fuerza a review sin perderla).
@@ -65,7 +65,7 @@ spec:
     kind: command.requested
     command: "mysql --allow-production-write -e \"$DYNAMIC_STATEMENT\""
     env: { NUI_PROD_WRITE: "1", AWSUME_EXPIRATION: "2026-12-31" }
-  # §4.7 / ADR-017: irreversible + unknown → deny-pending-approval (humano,
+  # section 4.7 / ADR-017: irreversible + unknown → deny-pending-approval (humano,
   # nunca LLM). La decision declarada lo refleja; el pasivo registra.
   expect: { verdict: unknown, decision: deny-pending-approval, origin: deterministic }
 ---

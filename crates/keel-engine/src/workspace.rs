@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Workspace loading — convention over configuration (Phase 0).
 //!
-//! Minimal structure (spec §8.5 trimmed down to a single project without
+//! Minimal structure (spec section 8.5 trimmed down to a single project without
 //! layers):
 //!
 //! ```text
@@ -9,15 +9,15 @@
 //! ├── workspace.yaml      # kind: Workspace (required)
 //! ├── rules/*.yaml        # kind: Rule
 //! ├── tools/*.yaml        # kind: Tool (manifests for external tools)
-//! ├── skills/*.yaml       # kind: Skill (compact/full/examples, §14.12)
-//! ├── agents/*.yaml       # kind: Agent + AgentExecutor (§14)
-//! ├── tests/*.yaml        # kind: RuleTest (compile gate, §10.2)
+//! ├── skills/*.yaml       # kind: Skill (compact/full/examples, section 14.12)
+//! ├── agents/*.yaml       # kind: Agent + AgentExecutor (section 14)
+//! ├── tests/*.yaml        # kind: RuleTest (compile gate, section 10.2)
 //! ├── fixtures/*.jsonl    # replay events for `keel observe`
 //! └── .keel-state/        # execution state: snapshot, ledger (IGNORED)
 //! ```
 //!
 //! Execution state lives in an ignored directory INSIDE the workspace
-//! (spec §8.4 allows "outside the source tree or in an ignored directory").
+//! (spec section 8.4 allows "outside the source tree or in an ignored directory").
 //! Workspace-local is chosen for Phase 0 for inspectability: `keel doctor`
 //! and the dev see the snapshot and ledger right next to the rules that
 //! produced them. XDG paths arrive with the installation story (Phase 1).

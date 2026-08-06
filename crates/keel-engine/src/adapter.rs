@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Adapter capability manifest + preflight (spec §12.1, invariant 8).
+//! Adapter capability manifest + preflight (spec section 12.1, invariant 8).
 //!
 //! A blocking policy is only real if the client can actually prevent the
 //! action. This module lets an adapter DECLARE what it can prevent, and lets
@@ -13,7 +13,7 @@ use keel_core::event::EventKind;
 use keel_core::Decision;
 use std::collections::BTreeSet;
 
-/// What a client adapter can enforce (§12.1). Minimal Phase-1 form: the set of
+/// What a client adapter can enforce (section 12.1). Minimal Phase-1 form: the set of
 /// event kinds on which the adapter can PREVENT the action before it runs. Any
 /// other event may still be delivered as post-hoc feedback, never prevention.
 #[derive(Debug, Clone)]
@@ -56,7 +56,7 @@ pub struct PreflightViolation {
 /// Preflight: every rule that declares a `block` on an event whose prevention
 /// the adapter cannot deliver (an inner-ring or completion request the adapter
 /// cannot stop) is a false promise. Outer-ring blocks (e.g. `file.edited`) are
-/// fine — the runtime already downgrades those to feedback (§5.3), so they are
+/// fine — the runtime already downgrades those to feedback (section 5.3), so they are
 /// not flagged.
 pub fn preflight(snapshot: &Snapshot, manifest: &AdapterManifest) -> Vec<PreflightViolation> {
     let mut out = Vec::new();

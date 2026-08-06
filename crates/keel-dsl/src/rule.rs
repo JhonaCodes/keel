@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-//! `kind: Rule` — the declarative anatomy of a rule (spec §11.3–11.5).
+//! `kind: Rule` — the declarative anatomy of a rule (spec section 11.3–11.5).
 //!
-//! The anatomy does not change across languages; the tool changes (spec §11.4).
-//! These types must be able to express the real gates of the §11.4 corpus
+//! The anatomy does not change across languages; the tool changes (spec section 11.4).
+//! These types must be able to express the real gates of the section 11.4 corpus
 //! WITHOUT LOSS — that is the Phase 0a test. If a gate does not fit here, the
 //! gap gets fixed in the DSL before writing more runtime.
 
@@ -15,17 +15,17 @@ use std::str::FromStr;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RuleSpec {
-    /// Decides the fate of `unknown` (§4.7). Optional because cognitive
+    /// Decides the fate of `unknown` (section 4.7). Optional because cognitive
     /// activation rules (enforcement.always) do not govern an action.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reversibility: Option<Reversibility>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<Scope>,
-    /// Events that trigger the rule (§11.2).
+    /// Events that trigger the rule (section 11.2).
     pub on: Vec<EventKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub when: Option<When>,
-    /// Economic prefilter. It NEVER decides (§4.5): a match only opens the
+    /// Economic prefilter. It NEVER decides (section 4.5): a match only opens the
     /// door to `validate`. A detector false positive costs microseconds of
     /// tool CPU; never a blocked action.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -40,7 +40,7 @@ pub struct RuleSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validate: Option<ToolCall>,
     pub enforcement: Enforcement,
-    /// Additional constraints (e.g. `environment.allow/deny` from the §11.4
+    /// Additional constraints (e.g. `environment.allow/deny` from the section 11.4
     /// SQL gate). Phase 0 preserves and records them; their active evaluation
     /// arrives with enforcement (Phase 1). Keeping them loose here is
     /// deliberate: losing them in the round-trip would violate the Phase 0a
@@ -67,7 +67,7 @@ pub struct Paths {
     pub exclude: Vec<String>,
 }
 
-/// Additional activation condition (§11.4 corpus: cognitive activation).
+/// Additional activation condition (section 11.4 corpus: cognitive activation).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct When {
@@ -89,7 +89,7 @@ pub struct WhenCondition {
     pub files_touch: Option<Vec<String>>,
 }
 
-/// Reference to a tool: `builtin:<id>` or `tool:<id>` (§4.4).
+/// Reference to a tool: `builtin:<id>` or `tool:<id>` (section 4.4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolRef {
     Builtin(String),
@@ -160,7 +160,7 @@ pub struct Precondition {
 ///
 /// `deny` is a CERTAIN DENIAL (not uncertainty): it maps to declared decision
 /// `block` with verdict `invalid`. `deny-pending-approval` is reserved for the
-/// `unknown` branch of irreversible actions (§4.7) — uncertainty escalates to
+/// `unknown` branch of irreversible actions (section 4.7) — uncertainty escalates to
 /// a human; certainty of violation blocks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -171,7 +171,7 @@ pub enum OnFail {
 }
 
 impl OnFail {
-    /// Equivalent declared decision in the lattice (§7.4-D3).
+    /// Equivalent declared decision in the lattice (section 7.4-D3).
     pub fn as_declared_decision(self) -> Decision {
         match self {
             OnFail::Deny | OnFail::Block => Decision::Block,
@@ -180,7 +180,7 @@ impl OnFail {
     }
 }
 
-/// Enforcement branches per verdict (§11.3). `always` is the cognitive
+/// Enforcement branches per verdict (section 11.3). `always` is the cognitive
 /// activation variant (loads context without governing an action).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -203,22 +203,22 @@ pub struct Branch {
     pub load: Option<Load>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub report: Option<Report>,
-    /// Agent invocation on the `unknown` branch (§11.4). In Phase 0 it is
+    /// Agent invocation on the `unknown` branch (section 11.4). In Phase 0 it is
     /// PARSED and RECORDED, never executed: the semantic evaluator is Phase 2
     /// and no model runs in the passive slice.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub invoke: Option<Invoke>,
 }
 
-/// Cognitive load associated with a branch (§7.4-D4: under `locked`
+/// Cognitive load associated with a branch (section 7.4-D4: under `locked`
 /// composition, extend-only — never replaceable by poorer variants).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Load {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skills: Vec<String>,
-    /// Context-economy capabilities to activate for the agent (spec §11.3,
-    /// future §9). Forward-declared: compiled into the snapshot and surfaced in
+    /// Context-economy capabilities to activate for the agent (spec section 11.3,
+    /// future section 9). Forward-declared: compiled into the snapshot and surfaced in
     /// the evidence, but the runtime does not yet activate/limit them (Phase 2).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub capabilities: Vec<String>,

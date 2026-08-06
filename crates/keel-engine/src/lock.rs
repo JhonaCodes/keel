@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Repository binding + resolution lock (spec §8.6, invariants 4 & 9).
+//! Repository binding + resolution lock (spec section 8.6, invariants 4 & 9).
 //!
 //! The code repository holds ONLY the binding (`.keel/project.yaml`) and the
 //! pinned resolution (`.keel/keel.lock`) — never the component definitions
@@ -39,11 +39,11 @@ pub enum LockError {
     },
 }
 
-/// `.keel/project.yaml` — the only binding versioned in the repo (§8.6):
+/// `.keel/project.yaml` — the only binding versioned in the repo (section 8.6):
 /// which project this repo is, and which workspace resolves its components.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProjectBinding {
-    /// Project identity, e.g. `project:org/repo` (repo-identity resolution, §7.1).
+    /// Project identity, e.g. `project:org/repo` (repo-identity resolution, section 7.1).
     pub project: String,
     /// Workspace reference that owns the definitions, e.g. `org:local`.
     pub workspace: String,
@@ -94,7 +94,7 @@ pub struct LockComponents {
     pub skills: Vec<String>,
 }
 
-/// `.keel/keel.lock` — the pinned resolution (§8.6).
+/// `.keel/keel.lock` — the pinned resolution (section 8.6).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Lock {
     pub project: String,
@@ -159,7 +159,7 @@ impl Lock {
     }
 
     /// Verifies a freshly-built resolution matches this lock. The compliance
-    /// plane's core check (§5.2): drift means the repo's pinned resolution no
+    /// plane's core check (section 5.2): drift means the repo's pinned resolution no
     /// longer matches its workspace. Returns the human-readable reason on
     /// mismatch, `Ok(())` when they agree.
     pub fn verify(
