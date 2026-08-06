@@ -5,7 +5,7 @@
 //! the keel-engine modules, and presents results. It is the only crate that
 //! knows about all the others (plan: "keel-cli contains no logic").
 //!
-//! `compile` orchestration (spec §10.2, atomic compilation):
+//! `compile` orchestration (spec section 10.2, atomic compilation):
 //!   compile to staging → run RuleTests → publish ONLY if they pass,
 //!   retaining the last-known-good.
 //!
@@ -36,7 +36,7 @@ const LONG_VERSION: &str = concat!(
     about = "Keel — agentic cognitive cycle runtime that holds the line on AI-agent actions",
     long_about = "Keel compiles declarative constraints to an immutable snapshot and evaluates \
                   agent events outside the model. `keel gate` blocks a violating action before it \
-                  runs (§5.3); `keel observe` records passively (telemetry, ADR-021)."
+                  runs (section 5.3); `keel observe` records passively (telemetry, ADR-021)."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -69,7 +69,7 @@ enum Command {
         session: Option<String>,
     },
     /// Resolves an evidence entry: rule, version, snapshot, verdict,
-    /// origin, decisions (traceability, spec §11.1).
+    /// origin, decisions (traceability, spec section 11.1).
     Explain {
         /// Evidence id (ev_…).
         ev_id: String,
@@ -79,7 +79,7 @@ enum Command {
         #[arg(long)]
         sarif: bool,
     },
-    /// Lifecycle telemetry (spec §7.7): for each rule with an expired
+    /// Lifecycle telemetry (spec section 7.7): for each rule with an expired
     /// reviewAfter it proposes keep/adjust/prune BACKED BY DATA. Deleting is
     /// a human decision: --record logs it with class `human`.
     Prune {
@@ -98,7 +98,7 @@ enum Command {
         reason: Option<String>,
     },
     /// Runs the workspace RuleTests against a staged snapshot
-    /// (Phase 0a functional equivalence, §15.1).
+    /// (Phase 0a functional equivalence, section 15.1).
     Test {
         #[arg(long, default_value = ".")]
         workspace: PathBuf,
@@ -108,7 +108,7 @@ enum Command {
         #[arg(long, default_value = ".")]
         workspace: PathBuf,
     },
-    /// Pre-action gate (inner ring, spec §5.3): ONE event via stdin, evaluated
+    /// Pre-action gate (inner ring, spec section 5.3): ONE event via stdin, evaluated
     /// in Enforce mode. Exit 2 = blocked (packet on stderr) — the client must
     /// not run the action. Exit 0 = allowed.
     Gate {
@@ -125,8 +125,8 @@ enum Command {
         #[arg(long)]
         passive: bool,
     },
-    /// Invoke a specialized agent (spec §14) on some material. Records an
-    /// advisory semantic verdict (§6.4/§4.7) — findings, never a block.
+    /// Invoke a specialized agent (spec section 14) on some material. Records an
+    /// advisory semantic verdict (section 6.4/section 4.7) — findings, never a block.
     Audit {
         /// Agent id declared in agents/.
         #[arg(long)]
@@ -139,7 +139,7 @@ enum Command {
         #[arg(long)]
         session: Option<String>,
     },
-    /// Client adapter helpers (thin bridges — the rules live in the runtime, §12.2).
+    /// Client adapter helpers (thin bridges — the rules live in the runtime, section 12.2).
     Adapter {
         /// Client name (supported: claude-code).
         client: String,
@@ -147,7 +147,7 @@ enum Command {
         #[arg(long)]
         print: bool,
         /// Preflight the published snapshot against the adapter's capability
-        /// manifest (§12.1, invariant 8): fail if a `block` targets an event the
+        /// manifest (section 12.1, invariant 8): fail if a `block` targets an event the
         /// client cannot prevent. Exit 1 on any unhonorable policy.
         #[arg(long)]
         check: bool,
@@ -155,7 +155,7 @@ enum Command {
         workspace: PathBuf,
     },
     /// Bind this repository to a project/workspace, writing `.keel/project.yaml`
-    /// (§8.6, invariant 4: the repo holds only binding + lock, never the
+    /// (section 8.6, invariant 4: the repo holds only binding + lock, never the
     /// component definitions).
     Bind {
         #[arg(long, default_value = ".")]
@@ -168,7 +168,7 @@ enum Command {
         #[arg(long)]
         org: Option<String>,
     },
-    /// Generate or verify `.keel/keel.lock` — the pinned resolution (§8.6,
+    /// Generate or verify `.keel/keel.lock` — the pinned resolution (section 8.6,
     /// invariant 9: local and CI share the same hash). `--verify` recompiles
     /// and fails on drift (the compliance-plane check reused by CI).
     Lock {
@@ -179,7 +179,7 @@ enum Command {
         #[arg(long)]
         verify: bool,
     },
-    /// Compliance plane (spec §5.2, §8): the SAME engine run in CI over the
+    /// Compliance plane (spec section 5.2, section 8): the SAME engine run in CI over the
     /// pinned lock. Where `locked` finally becomes a guarantee, because CI runs
     /// on infrastructure the developer does not control.
     Ci {

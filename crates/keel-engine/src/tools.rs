@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Tool Runner — deterministic builtins and wrapper for external tools.
 //!
-//! Contract (spec §4.4/§4.6): the rule declares; the tool implements; the
+//! Contract (spec section 4.4/section 4.6): the rule declares; the tool implements; the
 //! tool is CODE. It runs on CPU, not in a model: a deterministic validation
 //! costs 0 tokens and fires identically on every run. Its output is honest:
 //! `valid | invalid | unknown` — it is never forced to decide.
@@ -9,7 +9,7 @@
 //! BOUNDARY RULE: this module does not import `keel_dsl` (it operates on the
 //! COMPILED types from the snapshot).
 //!
-//! FAIL-SAFE (§6.4): a broken tool (timeout, missing binary, unparseable
+//! FAIL-SAFE (section 6.4): a broken tool (timeout, missing binary, unparseable
 //! output) produces `unknown`, NEVER an engine crash. That `unknown` feeds
 //! the "misspecified rule" telemetry metric — it is data, not an error.
 
@@ -33,7 +33,7 @@ pub struct ExecContext<'a> {
     pub workspace_root: &'a Path,
 }
 
-/// Structured output of a tool (three states + cost, spec §6.4).
+/// Structured output of a tool (three states + cost, spec section 6.4).
 #[derive(Debug, Clone)]
 pub struct ToolOutcome {
     pub verdict: Verdict,
@@ -53,12 +53,12 @@ pub struct Finding {
 }
 
 /// IDs of builtins supported in Phase 0. This is the list the compiler uses
-/// to resolve references (spec §10.1 "Tool validation").
+/// to resolve references (spec section 10.1 "Tool validation").
 pub const BUILTIN_DETECTORS: &[&str] = &["text.contains", "text.regex", "command.classify"];
 pub const BUILTIN_PRECONDITIONS: &[&str] = &["env.present", "flag.present"];
 
 /// Runs a builtin DETECTOR. Returns only hit/no-hit: the detector never
-/// decides (§4.5) — a match opens the door to `validate`, nothing more.
+/// decides (section 4.5) — a match opens the door to `validate`, nothing more.
 ///
 /// If the detector fails (missing parameter, broken regex that slipped past
 /// the compiler), it OPENS THE DOOR (`true`): failing open here costs one
@@ -105,7 +105,7 @@ pub fn run_detector(call: &CompiledToolCall, event: &Event) -> bool {
 }
 
 /// A family matches if it is the invoked program (first token) or if, as a
-/// glob, it matches the full command (e.g. `*/artisan db:*`, §11.4).
+/// glob, it matches the full command (e.g. `*/artisan db:*`, section 11.4).
 fn command_matches_family(command: &str, family: &str) -> bool {
     if family.contains('*') {
         return globset::Glob::new(family)
@@ -167,7 +167,7 @@ pub fn run_precondition(
     }
 }
 
-/// Runs a VALIDATE. The real verdict (spec §4.6).
+/// Runs a VALIDATE. The real verdict (spec section 4.6).
 ///
 /// Semantics of builtins in validate position: the pattern describes the
 /// VIOLATION — match → `invalid`, no-match → `valid`, absent content →

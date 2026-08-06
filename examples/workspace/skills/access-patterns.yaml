@@ -1,5 +1,5 @@
-# Skill (spec §14.12): loading levels + exemplar pairs. Delivered by the
-# Session Manager: compact on first activation, full on oscillation (§6.5),
+# Skill (spec section 14.12): loading levels + exemplar pairs. Delivered by the
+# Session Manager: compact on first activation, full on oscillation (section 6.5),
 # never re-sent while already in the session's context.
 apiVersion: keel/v1alpha1
 kind: Skill

@@ -2,7 +2,7 @@
 //! The ONLY canonical hashing authority in the system (invariant 9).
 //!
 //! WHY IT EXISTS: local and CI must verify THE SAME snapshot hash
-//! (spec §4.9 inv. 9, ADR-007). If hashing were duplicated in the compiler
+//! (spec section 4.9 inv. 9, ADR-007). If hashing were duplicated in the compiler
 //! and in the CI plane, the invariant would be a hope, not a guarantee.
 //! Every piece that needs to hash Keel content goes through here.
 //!
@@ -60,7 +60,7 @@ impl fmt::Display for ContentHash {
 }
 
 // Serialized as its presentation form ("sha256:…") so that snapshots and
-// ledger entries are readable and interoperable (§11.6: the hash travels in
+// ledger entries are readable and interoperable (section 11.6: the hash travels in
 // SARIF properties).
 impl Serialize for ContentHash {
     fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {

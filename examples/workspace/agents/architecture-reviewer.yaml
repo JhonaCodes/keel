@@ -1,7 +1,7 @@
-# Agent + AgentExecutor (spec §14). The executor here is a local STUB that
+# Agent + AgentExecutor (spec section 14). The executor here is a local STUB that
 # emulates a `claude -p`-style call returning schema-valid JSON, so the demo
 # runs with no network/credentials. A real deployment points `command` at
-# `claude --bare -p --output-format json ...` (§14.8).
+# `claude --bare -p --output-format json ...` (section 14.8).
 apiVersion: keel/v1alpha1
 kind: Agent
 metadata: { id: architecture.reviewer, version: 1.0.0 }

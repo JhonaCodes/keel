@@ -1,5 +1,5 @@
-# SQL execution gate — spec §11.4. It intercepts the OPERATION (inner ring,
-# §5.3), not files. In Phase 0 the verdict is recorded passively; real
+# SQL execution gate — spec section 11.4. It intercepts the OPERATION (inner ring,
+# section 5.3), not files. In Phase 0 the verdict is recorded passively; real
 # blocking arrives with enforcement (Phase 0c/1).
 apiVersion: keel/v1alpha1
 kind: Rule

@@ -1,7 +1,7 @@
 # keel-dsl — AUTHORING vocabulary (YAML apiVersion/kind/metadata/spec).
 #
 # WHY IT IS A SEPARATE CRATE: the DSL evolves with the rule grammar
-# (versioned by apiVersion, spec §11.1); the compiled artifact (snapshot) must
+# (versioned by apiVersion, spec section 11.1); the compiled artifact (snapshot) must
 # NOT drag this vocabulary along (forbidden edge snapshot ⇏ dsl), because it
 # would couple the snapshot hash to grammar changes — unacceptable against
 # invariant 9. It is also the structural guarantee of ADR-004: the runtime has

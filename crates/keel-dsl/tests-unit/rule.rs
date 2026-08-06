@@ -18,7 +18,7 @@
     #[test]
     fn onfail_deny_is_certain_denial_not_uncertainty() {
         // deny = certainty of violation → block. deny-pending-approval is
-        // reserved for `unknown` on irreversibles (§4.7).
+        // reserved for `unknown` on irreversibles (section 4.7).
         assert_eq!(OnFail::Deny.as_declared_decision(), Decision::Block);
         assert_eq!(OnFail::Review.as_declared_decision(), Decision::Review);
     }

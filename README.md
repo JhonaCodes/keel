@@ -27,23 +27,23 @@ that lies silently to a check that fires or breaks loudly.
 
 ## What Keel does — the three layers that hold the project up
 
-Keel intervenes at the three moments the spec defines (§5.3, §11.4, §6.2):
+Keel intervenes at the three moments the spec defines (section 5.3, section 11.4, section 6.2):
 
 - **L1 — pre-execution gate (`keel gate`).** Before an irreversible action runs
   (a `DROP DATABASE`, a destructive command), Keel validates it and — if it
   breaks a rule — **blocks it before it becomes a process** (exit 2 +
-  contextualized reason). This is the inner ring (§5.3): a blocked command
+  contextualized reason). This is the inner ring (section 5.3): a blocked command
   never executes. It is wired as a client hook (Claude Code PreToolUse); the
   hook only transports, the rules live in the runtime.
 - **L2 — cognitive activation.** When a governed concept surfaces, the rule can
   load a **skill**: Keel delivers the compact guidance (with a rejected/accepted
   exemplar) once per session, references it thereafter, and escalates to the
-  full guide only if the agent keeps tripping on it (oscillation, §6.5).
+  full guide only if the agent keeps tripping on it (oscillation, section 6.5).
 - **L3 — post-action verification.** After an edit, feedback for correction;
   at completion, a gate that refuses to close a session with live blockers
-  (§12.3); and an independent **auditor agent** (§14) that can run on a
+  (section 12.3); and an independent **auditor agent** (section 14) that can run on a
   different model, whose opinion is filed as `semantic` — advisory, never a
-  block of an irreversible action (§4.7).
+  block of an irreversible action (section 4.7).
 
 Underneath all three, the **Evidence Ledger** (the first product, ADR-021)
 records every evaluation with *how* it was known (`deterministic | semantic |
@@ -60,14 +60,14 @@ monotonicity, lock/CI plane, control plane).
 
 ```
 crates/
-├── keel-core      # stable vocabulary: Verdict, Decision lattice (§7.4-D3),
+├── keel-core      # stable vocabulary: Verdict, Decision lattice (section 7.4-D3),
 │                  # ContentHash (the ONLY canonical hashing authority, inv. 9)
 ├── keel-dsl       # authoring vocabulary: envelope + kinds + JSON Schema
 ├── keel-engine    # compiler, snapshot, tool runner, ledger, passive runtime
 │                  # (forbidden edges enforced by tests/arch_boundaries.rs)
 └── keel-cli       # the `keel` binary — orchestration only, no logic
 schemas/           # versioned JSON Schemas (the Phase 0a deliverable)
-examples/workspace # runnable demo: the spec §11.4 gates with stub tools
+examples/workspace # runnable demo: the spec section 11.4 gates with stub tools
 ```
 
 Forbidden dependency edges (the trust model, compiled):
@@ -88,7 +88,7 @@ cd ~/my-keel-workspace
 keel compile                       # atomic: staging → RuleTests → publish
 keel observe --events events.jsonl # passive evaluation → ledger (nothing blocks)
 keel explain <ev_id>               # full traceability for one evidence entry
-keel prune                         # lifecycle proposals backed by data (§7.7)
+keel prune                         # lifecycle proposals backed by data (section 7.7)
 keel test                          # run RuleTests against a staged snapshot
 keel doctor                        # end-to-end read-only health checks
 ```
@@ -131,12 +131,12 @@ spec:
 
 - The local plane is **cooperative**: it does not resist a determined
   developer. `locked` becomes a guarantee only on the compliance plane (CI) —
-  see spec §5. No output of this tool claims otherwise.
+  see spec section 5. No output of this tool claims otherwise.
 - Irreversible actions: `unknown` escalates to a **human**, never to a model
-  (§4.7, ADR-017). The compiler normalizes this floor.
+  (section 4.7, ADR-017). The compiler normalizes this floor.
 - Findings are SARIF (ADR-016); evidence entries carry their origin class
   (`deterministic | semantic | attestation | human`) and the classes are
-  never mixed (§6.4).
+  never mixed (section 6.4).
 
 ## License
 

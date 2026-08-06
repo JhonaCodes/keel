@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stand-in for tool:reactive-notifier.validate-access (spec §11.3).
+"""Stand-in for tool:reactive-notifier.validate-access (spec section 11.3).
 
 A real implementation is AST analysis of the edited Dart (0 tokens,
 deterministic). The stand-in demonstrates the three-state contract with

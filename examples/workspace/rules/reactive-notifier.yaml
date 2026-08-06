@@ -1,5 +1,5 @@
-# Direct access to notifier state — spec §11.3, the canonical example of
-# "available ≠ applied" (§2.2). A cheap detector opens the door; the external
+# Direct access to notifier state — spec section 11.3, the canonical example of
+# "available ≠ applied" (section 2.2). A cheap detector opens the door; the external
 # tool gives the real verdict; the unknown branch declares an invoke that in
 # Phase 0 is only RECORDED (the semantic evaluator is Phase 2).
 apiVersion: keel/v1alpha1
@@ -32,7 +32,7 @@ spec:
         schema: finding.sarif
         message: "do not read notifier data; use the approved access pattern"
     unknown:
-      decision: review                  # reversible → review (§4.7)
+      decision: review                  # reversible → review (section 4.7)
       invoke:
         agent: agent:reactive-notifier.state-auditor
     valid:

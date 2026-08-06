@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stand-in for tool:awsume.session-active (spec §11.4, ADR-022).
+"""Stand-in for tool:awsume.session-active (spec section 11.4, ADR-022).
 
 "Live credential RIGHT NOW" precondition: in replay (Phase 0) the state of
 the world comes captured in the event (`env`); a live adapter (Phase 1)

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:keel:schemas:v1alpha1:tool",
   "title": "Keel Tool (keel/v1alpha1)",
-  "description": "kind: Tool — spec §4.4: the tool is code, a registered program with a manifest, versioned. The event is delivered as JSON via stdin; the output is interpreted according to `output`.",
+  "description": "kind: Tool — spec section 4.4: the tool is code, a registered program with a manifest, versioned. The event is delivered as JSON via stdin; the output is interpreted according to `output`.",
   "type": "object",
   "required": ["apiVersion", "kind", "metadata", "spec"],
   "additionalProperties": false,

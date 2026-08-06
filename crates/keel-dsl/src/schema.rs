@@ -2,7 +2,7 @@
 //! JSON-Schema validation of the raw YAML, BEFORE typing.
 //!
 //! WHY SCHEMA-FIRST: the schema is the DELIVERABLE of Phase 0a (spec
-//! §15.1) — the mechanical proof that the DSL expresses the real gates
+//! section 15.1) — the mechanical proof that the DSL expresses the real gates
 //! without losing anything — and its errors point at the exact field in the
 //! author's YAML (`/metadata/adrRef`), not at serde's internal
 //! representation. This is where ADR-023 is enforced: a Rule without

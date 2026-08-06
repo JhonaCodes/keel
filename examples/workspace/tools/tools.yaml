@@ -1,4 +1,4 @@
-# External tool manifests (spec §4.4: the tool is code — a registered
+# External tool manifests (spec section 4.4: the tool is code — a registered
 # program with a manifest). Paths are RELATIVE to the workspace: the Tool
 # Runner executes with cwd = workspace root, so the snapshot contains no
 # machine paths (invariant 9).

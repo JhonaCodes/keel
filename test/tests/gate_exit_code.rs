@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Integration tests for the `keel gate` EXIT-CODE CONTRACT (spec §5.3, §12.3).
+//! Integration tests for the `keel gate` EXIT-CODE CONTRACT (spec section 5.3, section 12.3).
 //!
 //! The exit code IS the contract with the client: 2 prevents the action, 0
 //! allows it. `gate` reads the event from stdin, so the contract is exercised
@@ -141,7 +141,7 @@ spec:
     valid:   { decision: allow }
 "#;
 
-/// §5.3 inner ring: a violating pre-action command is blocked BEFORE it runs —
+/// section 5.3 inner ring: a violating pre-action command is blocked BEFORE it runs —
 /// exit code 2. This is the assertion STATUS.md marked as only-indirect.
 #[test]
 fn violating_command_request_exits_2() {
@@ -170,7 +170,7 @@ fn clean_command_request_exits_0() {
     assert_eq!(code, 0, "a clean command must be allowed (exit 0)");
 }
 
-/// §5.3 outer ring: a post-hoc file edit that violates is FEEDBACK, never
+/// section 5.3 outer ring: a post-hoc file edit that violates is FEEDBACK, never
 /// prevention — exit 0 even though the finding is a block (the file already
 /// landed; its danger only materializes at execution).
 #[test]
@@ -187,7 +187,7 @@ fn violating_file_edit_is_feedback_exit_0() {
     );
 }
 
-/// §12.3 completion gate: "done" is a transition the runtime authorizes. A
+/// section 12.3 completion gate: "done" is a transition the runtime authorizes. A
 /// session with a live blocker (an invalid file finding never cleared) cannot
 /// close — the completion request is denied with exit 2.
 #[test]

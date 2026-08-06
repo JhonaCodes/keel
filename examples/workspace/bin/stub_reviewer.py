@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Stand-in AgentExecutor (spec §14.8). Emulates a specialized reviewer model.
+"""Stand-in AgentExecutor (spec section 14.8). Emulates a specialized reviewer model.
 
 Reads the AgentRequest prompt from stdin (the material is delimited as data,
-§13.2) and returns a schema-valid verdict-json result. This is a DEMO stub:
+section 13.2) and returns a schema-valid verdict-json result. This is a DEMO stub:
 it flags a direct notifier access if present, otherwise passes. A real
 executor would be `claude --bare -p --output-format json ...`.
 """

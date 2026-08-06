@@ -3,7 +3,7 @@
 
     use super::*;
 
-    /// The §7.4-D3 lattice is load-bearing: passive forcing and the future
+    /// The section 7.4-D3 lattice is load-bearing: passive forcing and the future
     /// D3 check depend on this exact ordering.
     #[test]
     fn decision_lattice_order() {

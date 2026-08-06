@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Integration test for the compliance plane `keel ci` (spec §5.2, §8) via the
+//! Integration test for the compliance plane `keel ci` (spec section 5.2, section 8) via the
 //! real `keel` binary: `resolve` gates on binding + compile + lock, and fails
 //! (non-zero) on a missing binding, a missing lock, or lock drift.
 

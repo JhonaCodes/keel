@@ -24,17 +24,17 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 
 | Layer | When | Mechanism | Status | Evidence |
 |---|---|---|---|---|
-| **L1 pre-execution gate** | before an irreversible action runs | `keel gate` → Enforce mode → exit 2 + ContextPacket; the action never becomes a process (§5.3 inner ring) | ✅ | `keel-cli/src/gate.rs`, `keel-engine/src/runtime.rs` (Mode::Enforce), `packet.rs` |
-| **L2 cognitive activation** | while working, a concept surfaces | rule `load.skills` → Session Manager delivers compact once, references thereafter, escalates to full on oscillation (§6.5, §14.12) | ✅ | `keel-engine/src/session.rs`, `kind: Skill` |
-| **L3 post-action verification** | after write / at completion | post-edit feedback (outer ring), completion gate (§12.3), specialized auditor agent with `origin=semantic` (§14) | ✅ (seed) | `gate.rs` (completion), `keel-engine/src/audit.rs`, `kind: Agent`/`AgentExecutor` |
+| **L1 pre-execution gate** | before an irreversible action runs | `keel gate` → Enforce mode → exit 2 + ContextPacket; the action never becomes a process (section 5.3 inner ring) | ✅ | `keel-cli/src/gate.rs`, `keel-engine/src/runtime.rs` (Mode::Enforce), `packet.rs` |
+| **L2 cognitive activation** | while working, a concept surfaces | rule `load.skills` → Session Manager delivers compact once, references thereafter, escalates to full on oscillation (section 6.5, section 14.12) | ✅ | `keel-engine/src/session.rs`, `kind: Skill` |
+| **L3 post-action verification** | after write / at completion | post-edit feedback (outer ring), completion gate (section 12.3), specialized auditor agent with `origin=semantic` (section 14) | ✅ (seed) | `gate.rs` (completion), `keel-engine/src/audit.rs`, `kind: Agent`/`AgentExecutor` |
 
 ---
 
-## §4 Principles & the 18 structural invariants (§4.9)
+## section 4 Principles & the 18 structural invariants (section 4.9)
 
 | Item | Status | Evidence / note |
 |---|---|---|
-| 4.1 freedom in analysis, discipline in execution | 🟡 | modes exist; full phase lifecycle is §6.2 (partial) |
+| 4.1 freedom in analysis, discipline in execution | 🟡 | modes exist; full phase lifecycle is section 6.2 (partial) |
 | 4.2 LLM does not read config (ADR-004) | ✅ | runtime/snapshot/tools ⇏ dsl, enforced by `tests/arch_boundaries.rs` |
 | 4.3 one logical integration per client | ✅ | adapter is a thin bridge (`gate --client`), rules in runtime |
 | 4.4 rule declares, tool implements, tool is code | ✅ | `tools.rs`, external tool manifests, 0 tokens |
@@ -58,10 +58,10 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 | **inv 14** executor/model change in provenance | 🟡 | recorded in ledger detail; not in a lock |
 | **inv 15** composition monotonicity | ⏭ | one authority layer — documented stub (`compile.rs::composition_stub`) |
 | **inv 16** session append-only, non-authoritative | ✅ | `session.rs` only records deliveries; ledger has no UPDATE/DELETE |
-| **inv 17** phases owned by runtime, artifact-gated | 🟡 | completion gate exists; full phase machine §6.2 pending |
-| **inv 18** adversarial input delimited as data | ✅ | `audit.rs` DATA markers (§13.2) |
+| **inv 17** phases owned by runtime, artifact-gated | 🟡 | completion gate exists; full phase machine section 6.2 pending |
+| **inv 18** adversarial input delimited as data | ✅ | `audit.rs` DATA markers (section 13.2) |
 
-## §5 Trust boundary & rings
+## section 5 Trust boundary & rings
 
 | Item | Status | Evidence |
 |---|---|---|
@@ -69,7 +69,7 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 | 5.2 guarantee matrix by plane | ✅ | local plane + compliance CI plane (`keel ci`) reusing the same engine over the lock |
 | 5.3 interception rings (inner pre-action / outer post-hoc) | ✅ | `gate.rs` `preventable` = inner ring + completion; file.edited = feedback |
 
-## §6 Model & lifecycle
+## section 6 Model & lifecycle
 
 | Item | Status | Evidence |
 |---|---|---|
@@ -79,7 +79,7 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 | 6.4 ledger: facts vs attestations | ✅ | `OriginClass`, deterministic never mixed with semantic |
 | 6.5 blocking + oscillation | ✅ | `ledger.oscillations`, gate escalates to full skill |
 
-## §7 Composition & `locked`
+## section 7 Composition & `locked`
 
 | Item | Status | Evidence |
 |---|---|---|
@@ -91,7 +91,7 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 | 7.6 conflicts not silently resolved | ✅ | duplicate-id compile error |
 | 7.7 rule lifecycle / prune | ✅ | `keel prune` with ledger evidence + human decisions |
 
-## §8–§13
+## section 8–section 13
 
 | Item | Status | Evidence |
 |---|---|---|
@@ -112,7 +112,7 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 | 13.2 adversarial content delimited | ✅ | `audit.rs` |
 | 13.3 repository identity | ⏭ | compliance-plane concern |
 
-## §14 Specialized agents & cross-model
+## section 14 Specialized agents & cross-model
 
 | Item | Status | Evidence |
 |---|---|---|
@@ -125,16 +125,16 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 | 14.10 isolation/interaction modes | 🟡 | auditor read-only + timeout; worktrees/depth graph pending |
 | 14.12 tools/MCP/skills | 🟡 | tools + skills done; MCP gateway pending |
 
-## §15 Validation & phases
+## section 15 Validation & phases
 
 | Item | Status | Evidence |
 |---|---|---|
-| 15.1 Phase 0a — DSL expressiveness | ✅ | corpus §11.3–11.5 parses + round-trips (`keel-dsl/tests/corpus.rs`) |
+| 15.1 Phase 0a — DSL expressiveness | ✅ | corpus section 11.3–11.5 parses + round-trips (`keel-dsl/tests/corpus.rs`) |
 | 15.1 Phase 0b — passive telemetry | ✅ built / 🟡 unproven | `keel observe` + ledger; needs real-session data |
 | 15.1 Phase 0c — enforcement experiment | ❌ | the measurement gating further growth — **not run** |
-| Phase 1 — local core | 🟡 | engine + enforcement + lock/binding + CI plane + preflight done; monotonicity (§7.4) still a stub |
+| Phase 1 — local core | 🟡 | engine + enforcement + lock/binding + CI plane + preflight done; monotonicity (section 7.4) still a stub |
 | Phase 2 — full cycle & cross-model | 🟡 | audit seed + completion; broker/routing/full phases pending |
-| §16 limitations | ✅ | acknowledged in README + here (cooperative local plane, etc.) |
+| section 16 limitations | ✅ | acknowledged in README + here (cooperative local plane, etc.) |
 
 ## ADRs 1–23
 
@@ -152,15 +152,15 @@ workflow certification, web panel. None started.
 ## What to do next, in the spec's own order
 
 Done since the first pass: **lock + binding (inv 4/9)** (`keel bind`/`keel lock`),
-the **compliance CI plane (§5.2)** (`keel ci resolve`/`run` + `examples/ci/`),
-and the **adapter capability preflight (inv 8, §12.1)** (`keel adapter --check`).
+the **compliance CI plane (section 5.2)** (`keel ci resolve`/`run` + `examples/ci/`),
+and the **adapter capability preflight (inv 8, section 12.1)** (`keel adapter --check`).
 See `docs/ROADMAP.md` and `docs/PLAN_IMPLEMENTACION.md` for the full record.
 
 Still open, in the spec's own order:
 
 1. **Run Phase 0c** — capture real agent sessions, compare violations-to-review
    with/without `keel gate`. This is the decision point, not more features.
-2. **Composition + monotonicity (§7.4)** — activate the stub once a second
+2. **Composition + monotonicity (section 7.4)** — activate the stub once a second
    authority layer exists.
-3. **Phase 2 (§14.4+)** — agent broker/routing + full phase machine, gated by
+3. **Phase 2 (section 14.4+)** — agent broker/routing + full phase machine, gated by
    the Phase 0c result.

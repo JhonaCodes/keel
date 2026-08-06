@@ -1,12 +1,12 @@
-# Expressiveness corpus — Phase 0a (spec §15.1).
+# Expressiveness corpus — Phase 0a (spec section 15.1).
 #
-# These rules are taken from spec §11.3–11.5 AS-IS. The corpus test asserts
+# These rules are taken from spec section 11.3–11.5 AS-IS. The corpus test asserts
 # that ALL of them parse, pass the JSON Schema, and round-trip stably.
 # If a rule from the spec does not fit in the typed DSL, that test fails — and
 # that is exactly the "something gets lost" that Phase 0a exists to hunt down
 # before writing more runtime.
 ---
-# §11.3 — rule with detector, tool and escalation (reversible)
+# section 11.3 — rule with detector, tool and escalation (reversible)
 apiVersion: keel/v1alpha1
 kind: Rule
 metadata:
@@ -46,7 +46,7 @@ spec:
     valid:
       decision: allow
 ---
-# §11.4 — PHP: raw queries
+# section 11.4 — PHP: raw queries
 apiVersion: keel/v1alpha1
 kind: Rule
 metadata: { id: php.no-raw-queries, version: 1.0.0, author: jhonatan, adrRef: adr:ADR-031, reviewAfter: P6M }
@@ -73,7 +73,7 @@ spec:
         output: { schema: finding.sarif }
     valid: { decision: allow }
 ---
-# §11.4 — Python: blocking I/O on async paths
+# section 11.4 — Python: blocking I/O on async paths
 apiVersion: keel/v1alpha1
 kind: Rule
 metadata: { id: py.no-sync-io-in-async, version: 1.0.0, author: jhonatan, adrRef: adr:ADR-035, reviewAfter: P6M }
@@ -92,7 +92,7 @@ spec:
       load: { skills: [skill:py.httpx-async-patterns] }
     valid: { decision: allow }
 ---
-# §11.4 — production write gate (preconditions, ADR-022)
+# section 11.4 — production write gate (preconditions, ADR-022)
 apiVersion: keel/v1alpha1
 kind: Rule
 metadata:
@@ -123,7 +123,7 @@ spec:
     unknown:  { decision: deny-pending-approval }
     valid:    { decision: allow }
 ---
-# §11.4 — SQL execution gate (irreversible, environment constraints)
+# section 11.4 — SQL execution gate (irreversible, environment constraints)
 apiVersion: keel/v1alpha1
 kind: Rule
 metadata: { id: db.gate-sql-execution, version: 1.0.0, author: jhonatan, adrRef: adr:ADR-044, reviewAfter: P12M }
@@ -147,7 +147,7 @@ spec:
       allow: [local, docker-dev]
       deny:  [staging, production]
 ---
-# §11.4 — immutable migrations (governs an operation, not syntax)
+# section 11.4 — immutable migrations (governs an operation, not syntax)
 apiVersion: keel/v1alpha1
 kind: Rule
 metadata: { id: db.migrations-immutable, version: 1.0.0, author: jhonatan, adrRef: adr:ADR-044, reviewAfter: P12M }
@@ -163,7 +163,7 @@ spec:
       report: { message: "applied migrations are immutable — create a new one" }
     valid: { decision: allow }
 ---
-# §11.4 — forbidden library
+# section 11.4 — forbidden library
 apiVersion: keel/v1alpha1
 kind: Rule
 metadata: { id: dependencies.denylist, version: 1.0.0, author: jhonatan, adrRef: adr:ADR-012, reviewAfter: P12M }
@@ -176,7 +176,7 @@ spec:
     invalid: { decision: block }
     valid: { decision: allow }
 ---
-# §11.4 — cognitive activation during analysis (no enforcement)
+# section 11.4 — cognitive activation during analysis (no enforcement)
 apiVersion: keel/v1alpha1
 kind: Rule
 metadata: { id: analysis.load-state-context, version: 1.0.0, author: jhonatan, adrRef: adr:ADR-031, reviewAfter: P6M }
@@ -192,7 +192,7 @@ spec:
         skills: [skill:reactive-notifier.access-patterns#compact]
         capabilities: [reactive-state.inspect-consumers]
 ---
-# §11.5 — rule that invokes a tool directly
+# section 11.5 — rule that invokes a tool directly
 apiVersion: keel/v1alpha1
 kind: Rule
 metadata: { id: project.validate-state-access, author: jhonatan, adrRef: adr:ADR-031, reviewAfter: P6M }

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-//! ContextPacket — the ONLY thing the model ever receives (spec §10.4).
+//! ContextPacket — the ONLY thing the model ever receives (spec section 10.4).
 //!
 //! ~50–100 tokens, adjacent to the action it governs, at the exact turn where
 //! it applies: the verdict, the constraint, the required action, an exemplar
 //! pair when available, and the evidence id. Never the YAML, never workspace
 //! paths, never the composition tree (ADR-004).
 //!
-//! A blocking packet must reduce ambiguity to near zero (§6.5): a block whose
+//! A blocking packet must reduce ambiguity to near zero (section 6.5): a block whose
 //! message is open to interpretation reproduces the failure mode the system
 //! exists to prevent.
 //!
@@ -15,7 +15,7 @@
 use crate::runtime::Evaluation;
 use keel_core::Decision;
 
-/// Renders the transcript-facing packet for one evaluation (§10.4 format).
+/// Renders the transcript-facing packet for one evaluation (section 10.4 format).
 ///
 /// `skill_payload` is the L2 cognitive-activation content (compact/full skill
 /// text + exemplar), delivered once per session by the Session Manager; empty
@@ -43,11 +43,11 @@ pub fn render(eval: &Evaluation, ev_id: &str, skill_payload: &[String]) -> Strin
         lines.push(detail.clone());
     }
 
-    // §4.7 / ADR-017: uncertainty over an irreversible action escalates to a
+    // section 4.7 / ADR-017: uncertainty over an irreversible action escalates to a
     // human — the packet says so explicitly, so the model does not retry.
     if eval.effective_decision == Decision::DenyPendingApproval {
         lines.push(
-            "requires human approval — a model never authorizes an irreversible action (§4.7)"
+            "requires human approval — a model never authorizes an irreversible action (section 4.7)"
                 .to_string(),
         );
     }

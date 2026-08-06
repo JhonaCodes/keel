@@ -1,6 +1,6 @@
 # Keel — workspace root.
 #
-# Crate boundaries (see plan + spec §4.9, §10):
+# Crate boundaries (see plan + spec section 4.9, section 10):
 #   keel-core   — stable vocabulary (Verdict, Decision, canonical hash). Leaf.
 #   keel-dsl    — AUTHORING types (YAML apiVersion/kind/metadata/spec). Leaf.
 #   keel-engine — compiler + snapshot + tools + ledger + runtime (modules with

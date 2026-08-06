@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:keel:schemas:v1alpha1:ruletest",
   "title": "Keel RuleTest (keel/v1alpha1)",
-  "description": "Declarative fixture: event → expected result. It is Phase 0a's functional-equivalence criterion (§15.1) and the gate of `keel compile` (§10.2: a snapshot is published only if its tests pass).",
+  "description": "Declarative fixture: event → expected result. It is Phase 0a's functional-equivalence criterion (section 15.1) and the gate of `keel compile` (section 10.2: a snapshot is published only if its tests pass).",
   "type": "object",
   "required": ["apiVersion", "kind", "metadata", "spec"],
   "additionalProperties": false,

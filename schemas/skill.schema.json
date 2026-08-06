@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:keel:schemas:v1alpha1:skill",
   "title": "Keel Skill (keel/v1alpha1)",
-  "description": "kind: Skill — spec §14.12: operational knowledge with loading levels (compact / full) and rejected/accepted example pairs that feed the `exemplar` of blocking packets (§10.4). The runtime selects compact or full by oscillation state (§6.5): nothing at start, compact on demand, full on oscillation.",
+  "description": "kind: Skill — spec section 14.12: operational knowledge with loading levels (compact / full) and rejected/accepted example pairs that feed the `exemplar` of blocking packets (section 10.4). The runtime selects compact or full by oscillation state (section 6.5): nothing at start, compact on demand, full on oscillation.",
   "type": "object",
   "required": ["apiVersion", "kind", "metadata", "spec"],
   "additionalProperties": false,
@@ -32,7 +32,7 @@
         },
         "full": {
           "type": "string",
-          "description": "Workspace-relative path to the full variant (delivered on oscillation, §6.5)."
+          "description": "Workspace-relative path to the full variant (delivered on oscillation, section 6.5)."
         },
         "examples": {
           "type": "array",

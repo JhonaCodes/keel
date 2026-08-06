@@ -1,5 +1,5 @@
 # keel-tests — the repository's top-level home for integration / black-box
-# tests (spec §15 functional validation). Unit tests that must reach a module's
+# tests (spec section 15 functional validation). Unit tests that must reach a module's
 # PRIVATE items stay beside their code (a Rust requirement — an external crate
 # cannot see private items); everything else lives here, under test/tests/.
 #

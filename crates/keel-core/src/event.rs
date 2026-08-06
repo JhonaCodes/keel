@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! The protocol's reserved events (spec §11.2) and the event envelope the
+//! The protocol's reserved events (spec section 11.2) and the event envelope the
 //! runtime consumes.
 //!
 //! WHY IT LIVES IN CORE AND NOT IN THE DSL: the event is PROTOCOL vocabulary
@@ -7,7 +7,7 @@
 //! without ever knowing the DSL (forbidden edge `runtime ⇏ dsl`); that is why
 //! the shared type lives in the leaf both can see.
 //!
-//! PHASE NOTE (spec §6.2, invariant 17): phase events
+//! PHASE NOTE (spec section 6.2, invariant 17): phase events
 //! (`analysis.started`, `implementation.started`, …) are emitted by the
 //! RUNTIME when it authorizes the transition — the model does not declare its
 //! own phase. In Phase 0 (passive replay) they may appear in fixtures as
@@ -16,7 +16,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// The 17 reserved events (spec §11.2).
+/// The 17 reserved events (spec section 11.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum EventKind {
     #[serde(rename = "session.started")]
@@ -56,7 +56,7 @@ pub enum EventKind {
 }
 
 impl EventKind {
-    /// Inner ring (spec §5.3): potentially irreversible actions whose
+    /// Inner ring (spec section 5.3): potentially irreversible actions whose
     /// interception is ALWAYS pre-action. In Phase 0 (passive) this is living
     /// documentation + telemetry data; in Phase 1 it governs blocking.
     pub fn is_inner_ring(self) -> bool {
@@ -89,7 +89,7 @@ pub struct Event {
     /// Content or diff of the edited file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
-    /// Main line of the change (oscillation key per §6.5 together with `file`).
+    /// Main line of the change (oscillation key per section 6.5 together with `file`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<u32>,
     /// Requested command (command.requested — inner ring).

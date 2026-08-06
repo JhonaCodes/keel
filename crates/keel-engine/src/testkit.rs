@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Testkit — runs the workspace's `kind: RuleTest` documents.
 //!
-//! It is the FUNCTIONAL EQUIVALENCE criterion of Phase 0a (spec §15.1: every
+//! It is the FUNCTIONAL EQUIVALENCE criterion of Phase 0a (spec section 15.1: every
 //! already-deployed gate, verified case by case against the behavior of the
-//! original) and the GATE of `keel compile` (spec §10.2: a snapshot is
+//! original) and the GATE of `keel compile` (spec section 10.2: a snapshot is
 //! published only if compilation AND its tests pass).
 //!
 //! BOUNDARY NOTE: this module imports `keel_dsl` (RuleTests are authoring)

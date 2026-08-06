@@ -6,17 +6,17 @@
 //! | Worst effective decision | Exit | Output |
 //! |---|---|---|
 //! | allow                    | 0    | silent |
-//! | review                   | 0    | advisory packet on stderr (§4.7: reversible — CI catches it) |
+//! | review                   | 0    | advisory packet on stderr (section 4.7: reversible — CI catches it) |
 //! | block / deny-pending-approval | **2** | ContextPacket on stderr — the client MUST NOT run the action |
 //!
-//! Inner ring (spec §5.3): for `command.requested` the client asks BEFORE
+//! Inner ring (spec section 5.3): for `command.requested` the client asks BEFORE
 //! executing, so a blocked command **never exists as a process**. The exit-2
 //! contract is the same one agent clients use for hooks: blocking is not
 //! advice, it prevents the action, and the packet contextualizes WHY plus how
-//! to correct (§6.5: a blocking packet must reduce ambiguity to near zero).
+//! to correct (section 6.5: a blocking packet must reduce ambiguity to near zero).
 //!
 //! `--client claude-code` adapts the Claude Code hook protocol: the hook is
-//! pure transport (§12.2) — it forwards its stdin here and applies our
+//! pure transport (section 12.2) — it forwards its stdin here and applies our
 //! decision. The rule logic never lives in the hook.
 
 use anyhow::{Context, Result};
@@ -94,7 +94,7 @@ pub fn gate(
         let entry = to_ledger_entry(eval, &event, &snapshot, new_ev_id(), now_ts());
         ledger.append(&entry)?;
 
-        // Oscillation guard (§6.5): a runtime that blocks is responsible for
+        // Oscillation guard (section 6.5): a runtime that blocks is responsible for
         // not inducing token-burn loops. Same rule+location+session repeating
         // ≥3 times → escalate explicitly AND deliver the full skill variant.
         let oscillating = is_oscillating(&ledger, &entry.rule_id, &event);
@@ -111,7 +111,7 @@ pub fn gate(
         if oscillating {
             payload.push(
                 "oscillating: repeated finding at this location — stop retrying; \
-                 request human intervention if it persists (§6.5)"
+                 request human intervention if it persists (section 6.5)"
                     .to_string(),
             );
         }
@@ -126,10 +126,10 @@ pub fn gate(
 
     store.save(&session_id, &session_state, &now_ts())?;
 
-    // Whether a block on THIS event can actually be prevented (§5.3):
+    // Whether a block on THIS event can actually be prevented (section 5.3):
     // - inner ring (command/transition/delivery.requested): pre-action — the
     //   client asks before executing, so exit 2 stops the action.
-    // - completion.requested: the Stop transition is gate-able (§12.3).
+    // - completion.requested: the Stop transition is gate-able (section 12.3).
     // - outer ring (file.edited, *.completed): post-hoc — the file already
     //   landed. A block here is FEEDBACK, not prevention (exit 0): the file is
     //   reversible and inert; its danger only materializes at execution, which
@@ -137,7 +137,7 @@ pub fn gate(
     let preventable =
         event.kind.is_inner_ring() || event.kind == EventKind::CompletionRequested;
 
-    // Completion gate (§12.3, §6.2 minimal): "done" is not a claim the model
+    // Completion gate (section 12.3, section 6.2 minimal): "done" is not a claim the model
     // makes — it is a transition the runtime authorizes. Live blockers
     // (invalid findings never followed by a later `valid` of the same
     // rule+file in this session) veto the close, with the pending list.
@@ -145,7 +145,7 @@ pub fn gate(
         let blockers = ledger.unresolved_blockers(&session_id)?;
         if !blockers.is_empty() {
             let mut lines = vec![format!(
-                "COMPLETION DENIED — {} unresolved blocker(s) in session {session_id} (§12.3)",
+                "COMPLETION DENIED — {} unresolved blocker(s) in session {session_id} (section 12.3)",
                 blockers.len()
             )];
             for b in &blockers {
@@ -172,7 +172,7 @@ pub fn gate(
     }
 
     // The exit code IS the contract: 2 prevents the action, 0 allows it. Only
-    // preventable events (§5.3 inner ring + completion) exit 2; a post-hoc
+    // preventable events (section 5.3 inner ring + completion) exit 2; a post-hoc
     // block is delivered as feedback (packet on stderr) with exit 0 — the edit
     // already happened and the danger is caught later at execution.
     if worst >= Decision::Block && preventable {
@@ -206,16 +206,16 @@ fn parse_event(client: Client, input: &str) -> Result<Option<Event>> {
     }
 }
 
-/// Translates a Claude Code hook payload into a Keel event (§12.1 adapter
+/// Translates a Claude Code hook payload into a Keel event (section 12.1 adapter
 /// contract, kept deliberately thin). Unknown shapes → None (pass-through).
 ///
 /// Mapping:
 /// - PreToolUse  + Bash            → command.requested   (inner ring: pre-action)
 /// - PostToolUse + Bash            → command.completed
-/// - Pre/PostToolUse + Edit/Write/MultiEdit → file.edited (outer ring §5.3:
+/// - Pre/PostToolUse + Edit/Write/MultiEdit → file.edited (outer ring section 5.3:
 ///   post-hoc is acceptable — an edited file is reversible and inert; its
 ///   danger materializes at execution/delivery, which cross the inner ring)
-/// - Stop                          → completion.requested (§12.3)
+/// - Stop                          → completion.requested (section 12.3)
 fn parse_claude_code_hook(input: &str) -> Option<Event> {
     let v: serde_json::Value = serde_json::from_str(input).ok()?;
     let hook = v.get("hook_event_name")?.as_str()?;
@@ -287,7 +287,7 @@ fn parse_claude_code_hook(input: &str) -> Option<Event> {
 
 /// `keel adapter claude-code --print` — emits the settings.json wiring. The
 /// hook only transports events and applies our exit code; no rule logic
-/// lives in it (§12.2, ADR-003).
+/// lives in it (section 12.2, ADR-003).
 pub fn adapter_print_claude_code(root: &Path) -> Result<ExitCode> {
     let ws = root
         .canonicalize()
@@ -312,13 +312,13 @@ pub fn adapter_print_claude_code(root: &Path) -> Result<ExitCode> {
     println!();
     println!("# Add the block above to your project's .claude/settings.json.");
     println!("# Contract: exit 2 blocks the action (the packet on stderr reaches the model);");
-    println!("# exit 0 allows. Verify the hook schema against your client version (spec §19).");
+    println!("# exit 0 allows. Verify the hook schema against your client version (spec section 19).");
     Ok(ExitCode::SUCCESS)
 }
 
 /// `keel audit --agent <id> --input <file>` — invokes a specialized agent
-/// (spec §14) on the given material. The result is recorded with
-/// origin=semantic (§6.4) and is advisory (review), never a block (§4.7).
+/// (spec section 14) on the given material. The result is recorded with
+/// origin=semantic (section 6.4) and is advisory (review), never a block (section 4.7).
 pub fn audit(root: &Path, agent_id: &str, input: &Path, session: Option<String>) -> Result<ExitCode> {
     use keel_engine::audit::{run_audit, AgentSpec, ExecutorSpec};
 
@@ -367,7 +367,7 @@ pub fn audit(root: &Path, agent_id: &str, input: &Path, session: Option<String>)
 
     println!("agent    {} (role: {})", agent_spec.id, agent_spec.role);
     println!("executor {}", exec_spec.id);
-    println!("verdict  {} (origin: semantic — a model's opinion, advisory only §4.7)",
+    println!("verdict  {} (origin: semantic — a model's opinion, advisory only section 4.7)",
         serde_json::to_string(&out.verdict).unwrap_or_default().trim_matches('"'));
     for f in &out.findings {
         println!("  - {f}");

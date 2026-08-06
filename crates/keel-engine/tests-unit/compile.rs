@@ -39,7 +39,7 @@ metadata: { id: sql.classify }
 spec: { command: ["true"], output: exit-code }
 "#;
 
-    /// Floor §4.7: irreversible without an unknown branch → the compiler
+    /// Floor section 4.7: irreversible without an unknown branch → the compiler
     /// creates it with deny-pending-approval. Uncertainty never goes without
     /// a destination.
     #[test]
@@ -53,7 +53,7 @@ spec: { command: ["true"], output: exit-code }
         );
     }
 
-    /// Floor §4.7: an unknown branch DECLARED below the floor is RAISED with
+    /// Floor section 4.7: an unknown branch DECLARED below the floor is RAISED with
     /// a warning (never silently).
     #[test]
     fn irreversible_unknown_below_floor_is_raised_with_warning() {
@@ -68,7 +68,7 @@ spec: { command: ["true"], output: exit-code }
             rule.enforcement.unknown.as_ref().unwrap().decision,
             Decision::DenyPendingApproval
         );
-        assert!(out.warnings.iter().any(|w| w.contains("floor §4.7")));
+        assert!(out.warnings.iter().any(|w| w.contains("floor section 4.7")));
     }
 
     #[test]
