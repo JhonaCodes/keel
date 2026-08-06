@@ -241,6 +241,19 @@ fn env_violation_classifies_deny_and_allowlist() {
     assert!(env_violation(&env, &cmd("psql local/app")).is_none());
     // no allowed token present → allowlist miss.
     assert!(env_violation(&env, &cmd("psql somewhere/app")).is_some());
+    // whole-word: `reproduction` must NOT trigger the `production` deny.
+    assert!(env_violation(&env, &cmd("psql reproduction-notes")).is_some()); // allowlist miss, not a deny
+    assert!(
+        !env_violation(&env, &cmd("psql reproduction-notes"))
+            .unwrap()
+            .contains("denied"),
+        "`reproduction` must not match the `production` deny token"
+    );
+    // whole-word: `localstack` must NOT satisfy the `local` allowlist.
+    assert!(
+        env_violation(&env, &cmd("psql localstack-host/app")).is_some(),
+        "`localstack` must not count as the allowed `local` environment"
+    );
     // empty constraint never fires.
     let empty = EnvConstraint {
         allow: vec![],

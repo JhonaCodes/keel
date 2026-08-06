@@ -206,10 +206,11 @@ fn evaluate_rule(
 
 /// Environment constraint check (section 11.4). The environment is classified from
 /// the event's connection context — its `command` and `content` (e.g. a
-/// connection string) — by case-insensitive token match (deterministic, 0
-/// tokens). `deny` blocks ALWAYS; a non-empty `allow` is a strict allowlist:
-/// the action must name an allowed environment, otherwise it is denied. Returns
-/// the reason when the constraint is violated.
+/// connection string) — by case-insensitive WHOLE-WORD match (deterministic, 0
+/// tokens): `production` does not match `reproduction`, and `local` does not
+/// match `localstack`. `deny` blocks ALWAYS; a non-empty `allow` is a strict
+/// allowlist: the action must name an allowed environment, otherwise it is
+/// denied. Returns the reason when the constraint is violated.
 fn env_violation(env: &EnvConstraint, event: &Event) -> Option<String> {
     let mut hay = String::new();
     if let Some(c) = &event.command {
@@ -220,17 +221,45 @@ fn env_violation(env: &EnvConstraint, event: &Event) -> Option<String> {
         hay.push_str(&c.to_lowercase());
     }
     for d in &env.deny {
-        if hay.contains(&d.to_lowercase()) {
+        if contains_word(&hay, &d.to_lowercase()) {
             return Some(format!("denied environment `{d}` (section 11.4)"));
         }
     }
-    if !env.allow.is_empty() && !env.allow.iter().any(|a| hay.contains(&a.to_lowercase())) {
+    if !env.allow.is_empty()
+        && !env
+            .allow
+            .iter()
+            .any(|a| contains_word(&hay, &a.to_lowercase()))
+    {
         return Some(format!(
             "no allowed environment present (allow: {:?}) (section 11.4)",
             env.allow
         ));
     }
     None
+}
+
+/// Whole-word containment: `needle` occurs in `hay` bounded by non-alphanumeric
+/// characters (or the string edges). Connection strings separate the
+/// environment token with `@ / : - . _`, all non-alphanumeric, so this matches
+/// `@production-db` but not `reproduction` and not `localstack`.
+fn contains_word(hay: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return false;
+    }
+    let bytes = hay.as_bytes();
+    let mut from = 0;
+    while let Some(pos) = hay[from..].find(needle) {
+        let start = from + pos;
+        let end = start + needle.len();
+        let before_ok = start == 0 || !bytes[start - 1].is_ascii_alphanumeric();
+        let after_ok = end == bytes.len() || !bytes[end].is_ascii_alphanumeric();
+        if before_ok && after_ok {
+            return true;
+        }
+        from = start + 1;
+    }
+    false
 }
 
 fn pick_branch(rule: &CompiledRule, verdict: Verdict) -> Option<&CompiledBranch> {
