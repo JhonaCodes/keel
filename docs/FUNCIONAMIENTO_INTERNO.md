@@ -89,7 +89,7 @@ Modos del motor: **`keel observe`** = pasivo (todo se topa a `review`, nada
 bloquea — telemetría, ADR-021); **`keel gate`** = enforce (la decisión declarada
 aplica). El selector es una sola línea: `gate.rs:82`
 (`if passive { Passive } else { Enforce }`) y la ley del modo vive en
-`runtime.rs:248-251`.
+`runtime.rs:263-266`.
 
 ---
 
@@ -227,7 +227,7 @@ flowchart TD
 
     LOAD --> SKILL["Ruta SKILL (L2)<br/>texto markdown al contexto<br/>session.rs · 0 procesos"]
 
-    INV --> REC["En gate/observe:<br/>SOLO se REGISTRA, no se ejecuta<br/>runtime.rs:212-219<br/>\"invoke recorded (NOT executed, Phase 2)\""]
+    INV --> REC["En gate/observe:<br/>SOLO se REGISTRA, no se ejecuta<br/>runtime.rs:227-233<br/>\"invoke recorded (NOT executed, Phase 2)\""]
     REC -. "único spawn real:<br/>comando MANUAL" .-> AUDIT["keel audit --agent <id><br/>audit.rs:150-156"]
     AUDIT --> AGENTPROC["Ruta AGENT (L3)<br/>subproceso (posible otro modelo)"]
 
@@ -239,7 +239,7 @@ Claves que responden la preocupación *"se están creando agentes"*:
 1. **En el flujo normal `keel gate` / `keel observe`, NUNCA nace un proceso de
    agente.** El `invoke.agent` de una regla se compila y se guarda en el
    snapshot (`snapshot.rs` con el comentario "NEVER executed… Phase 2"), pero en
-   runtime **solo se registra como texto**: `runtime.rs:212-219` produce la
+   runtime **solo se registra como texto**: `runtime.rs:227-233` produce la
    cadena `invoke recorded (NOT executed, Phase 2): <agent>`. El test
    `runtime.rs` `unknown_branch_invoke_is_recorded_not_executed` lo fija.
 2. **La única forma de instanciar un agente hoy es el comando manual

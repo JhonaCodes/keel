@@ -6,7 +6,7 @@
 > Complementa a [`STATUS.md`](../STATUS.md) (matriz de conformidad punto a punto)
 > y a [`FUNCIONAMIENTO_INTERNO.md`](FUNCIONAMIENTO_INTERNO.md) (cómo funciona hoy).
 > Cada ítem cita su evidencia. Estado hoy: 3 capas de intervención en modo
-> **seed**, 4 crates, 61 tests verdes; el auto-diagnóstico de `STATUS.md`
+> **seed**, 4 crates, 94 tests verdes; el auto-diagnóstico de `STATUS.md`
 > coincide con el código verificado.
 
 Leyenda: ❌ falta · 🟡 parcial · ⏭ diferido por la propia spec (fuera de alcance
@@ -16,16 +16,22 @@ del núcleo actual, **no** es deuda).
 
 ## Prioridad según la spec (el orden importa)
 
-### 1 · Phase 0c — experimento de enforcement  · ❌  · GATE DE CRECIMIENTO
+### 1 · Phase 0c — experimento de enforcement  · 🟡  · GATE DE CRECIMIENTO
 **Qué:** medir violaciones-que-llegan-a-revisión-humana **con** vs **sin**
 `keel gate`, sobre N tareas reales, mismo modelo/cliente/reglas, contra una línea
 base honesta (instrucciones + skills + linters).
 **Por qué importa:** es el **punto de decisión**, no una feature. La spec
 condiciona las Fases 2+ a un delta material y sostenido. Es medición, no código.
-**Evidencia:** `STATUS.md:133` (❌ not run); spec sección 15.1
-(`RCCA_reference_architecture_v0_9_1.md:1555-1562`). La infraestructura que lo
-mide ya existe: `declared` vs `effective` en el ledger
-(`crates/keel-engine/src/ledger.rs`, `runtime.rs:248-251`).
+**Estado:** el **harness ya existe** — `keel-measure` (binario del crate `test/`)
+corre el brazo pasivo (`keel observe`) y enforce (`keel gate`) sobre un dataset y
+agrega el ledger read-only en un reporte con el delta; el dataset **sintético v0**
+(`datasets/phase0c/v0-synthetic/`) lo prueba end-to-end. **Falta la corrida real:**
+capturar sesiones reales de agente (mismo modelo/cliente) — el harness está hecho
+para que ese paso solo agregue `tasks/*.jsonl` + etiquetas en `expected.yaml`.
+**Evidencia:** spec sección 15.1
+(`RCCA_reference_architecture_v0_9_1_EN.md:1558-1565`); infra `declared` vs
+`effective` en `crates/keel-engine/src/ledger.rs`; harness en
+`test/src/measure.rs` + `datasets/phase0c/README.md`.
 **Hecho cuando:** hay un dataset de sesiones reales y un reporte con el delta
 medido y su criterio de continuación.
 
@@ -55,7 +61,7 @@ evidencia; el job falla si el binding/lock es inválido.
 / D3 consecuencia / D4 carga cognitiva) al componer capas de autoridad.
 **Por qué importa:** garantiza que componer reglas nunca **afloje** una decisión
 en silencio. Hoy hay una sola capa, así que es un stub honesto.
-**Evidencia:** `compile.rs:125-146` (`composition_stub()` no-op documentado); el
+**Evidencia:** `compile.rs:176-197` (`composition_stub()` no-op documentado); el
 lattice D3 ya vive en `keel-core/src/lib.rs:53-94`. Spec líneas 521-562, ADR-014.
 **Hecho cuando:** existe una 2ª capa de autoridad y el compilador rechaza toda
 composición no monótona.
@@ -78,7 +84,7 @@ capability requerida **falla en compilación**.
 (depth/cost).
 **Por qué importa:** completa L3 de seed a producción. **Nota:** hoy el
 `invoke.agent` de una regla **solo se registra, nunca se ejecuta**
-(`runtime.rs:212-219`); el único spawn real es `keel audit` manual. Este ítem es
+(`runtime.rs:227-233`); el único spawn real es `keel audit` manual. Este ítem es
 el que convierte eso en un flujo automático y gobernado — no antes.
 **Evidencia:** `STATUS.md:120,122,135`; sección 14.3-14.7.
 **Hecho cuando:** una regla puede invocar un agente, el broker resuelve
@@ -114,20 +120,22 @@ Añadirlo revivería un formato muerto. No hay trabajo que hacer aquí.
 
 ---
 
-## Endurecimiento del seed (deuda de test) — PRIMER PASO recomendado al retomar código
+## Endurecimiento del seed (deuda de test) — ✅ HECHO
 
-Barato, sin ampliar alcance, sube la confianza en las tres capas ya existentes.
-Recomendado como **lo primero** cuando se vuelva a tocar código.
+Cubierto; se deja como registro de lo que endurece las tres capas.
 
-- **Assert directo de `exit == 2`** para un evento inner-ring que viola: hoy los
-  4 tests de `gate.rs` cubren solo el mapeo de hooks; el exit-2 se ejercita solo
-  indirectamente (`gate.rs:178-182`).
-- **Camino completion-DENEGADO completo:** hoy se prueba
-  `claude_stop_maps_to_completion_requested`, pero no el veto real por blockers
-  vivos (`gate.rs:144-168`).
-- **Ejecución real de un `AgentExecutor`:** el invoke se registra-no-ejecuta
-  (`runtime.rs:401`) y el auditor solo se prueba con el stub; falta un test
-  end-to-end del spawn (`audit.rs:150-156`).
+- **Assert directo de `exit == 2`** para un evento inner-ring que viola — ✅
+  `test/tests/gate_exit_code.rs::violating_command_request_exits_2`, y también
+  ejercitado por el brazo enforce del harness Phase 0c (task-002).
+- **Camino completion-DENEGADO completo** — ✅
+  `gate_exit_code.rs::completion_with_live_blocker_exits_2` (veto real por
+  blockers vivos, `gate.rs:144-176`).
+- **Ejecución real de un `AgentExecutor`** — ✅ `test/tests/audit_agent.rs`:
+  spawn de subproceso real (invalid/unvalidated/schema) más, tras inv 13,
+  over-budget → `unknown` y **timeout → `unknown`**. El invoke sigue
+  registrado-no-ejecutado en la evaluación de reglas
+  (`runtime.rs:227-233`; test `tests-unit/runtime.rs:168`); el spawn real es solo
+  la ruta explícita `keel audit` (`audit.rs`).
 
 ---
 
@@ -148,10 +156,10 @@ Recomendado como **lo primero** cuando se vuelva a tocar código.
 
 ```mermaid
 flowchart LR
-    P0c["#1 Phase 0c<br/>(medir — decide todo)"] --> LOCK["#2 Lock+binding"]
+    P0c["#1 Phase 0c<br/>(harness listo; falta corrida real — decide todo)"] --> LOCK["#2 Lock+binding"]
     LOCK --> CI["#3 Plano CI<br/>(locked = garantía)"]
     CI --> COMP["#4 Monotonicidad D1-D4"]
     COMP --> PRE["#5 Capability preflight"]
     PRE --> BROKER["#6 Broker/routing agentes"]
-    TEST["Endurecer tests del seed<br/>(primer paso al codear)"] -.-> LOCK
+    TEST["Endurecer tests del seed ✅"] -.-> LOCK
 ```

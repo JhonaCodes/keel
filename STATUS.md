@@ -8,12 +8,13 @@ Legend: ✅ done · 🟡 partial · ❌ missing · ⏭ deferred by the spec itse
 **One-line honesty note (ADR-020/021):** the ledger was built first and records
 every evaluation in both modes (`declared` vs `effective`). Enforcement now
 exists (the three intervention layers below). The **Phase 0c experiment** —
-measuring violations-reaching-review with vs. without enforcement on a real
-repo — has **not been run**; that measurement, not the code, is what the spec
-makes the gate for growing further.
+measuring violations-reaching-review with vs. without enforcement — now has a
+**built, reproducible harness** (`keel-measure` + a synthetic v0 dataset), but
+the run over **real agent sessions in a real repo** has **not been done**; that
+measurement, not the code, is what the spec makes the gate for growing further.
 
 Snapshot of the tree: 4 crates (`keel-core`, `keel-dsl`, `keel-engine`,
-`keel-cli`), **85 tests green**. Kinds: Workspace, Rule, Tool, Skill,
+`keel-cli`), **94 tests green**. Kinds: Workspace, Rule, Tool, Skill,
 Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 `observe`, `gate`, `audit`, `adapter` (+`--check` preflight), `bind`, `lock`,
 `ci resolve`/`ci run`, `explain`, `prune`, `test`, `doctor`.
@@ -131,7 +132,7 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 |---|---|---|
 | 15.1 Phase 0a — DSL expressiveness | ✅ | corpus section 11.3–11.5 parses + round-trips (`keel-dsl/tests/corpus.rs`) |
 | 15.1 Phase 0b — passive telemetry | ✅ built / 🟡 unproven | `keel observe` + ledger; needs real-session data |
-| 15.1 Phase 0c — enforcement experiment | ❌ | the measurement gating further growth — **not run** |
+| 15.1 Phase 0c — enforcement experiment | 🟡 | harness BUILT (`keel-measure` + synthetic v0 dataset, `test/src/measure.rs`, `datasets/phase0c/`); the real-session run gating further growth is **not run yet** |
 | Phase 1 — local core | 🟡 | engine + enforcement + lock/binding + CI plane + preflight done; monotonicity (section 7.4) still a stub |
 | Phase 2 — full cycle & cross-model | 🟡 | audit seed + completion; broker/routing/full phases pending |
 | section 16 limitations | ✅ | acknowledged in README + here (cooperative local plane, etc.) |
@@ -158,8 +159,9 @@ See `docs/ROADMAP.md` and `docs/PLAN_IMPLEMENTACION.md` for the full record.
 
 Still open, in the spec's own order:
 
-1. **Run Phase 0c** — capture real agent sessions, compare violations-to-review
-   with/without `keel gate`. This is the decision point, not more features.
+1. **Run Phase 0c over real sessions** — the harness exists (`keel-measure`);
+   what remains is capturing real agent sessions and running the passive-vs-enforce
+   comparison over them. This is the decision point, not more features.
 2. **Composition + monotonicity (section 7.4)** — activate the stub once a second
    authority layer exists.
 3. **Phase 2 (section 14.4+)** — agent broker/routing + full phase machine, gated by

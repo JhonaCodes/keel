@@ -10,7 +10,7 @@
 > [`ROADMAP.md`](ROADMAP.md) (prioridades) y
 > [`FUNCIONAMIENTO_INTERNO.md`](FUNCIONAMIENTO_INTERNO.md) (cómo funciona hoy).
 >
-> Estado del repo al escribir esto: `main` verde, 85 tests, fmt/clippy limpios,
+> Estado del repo al escribir esto: `main` verde, 94 tests, fmt/clippy limpios,
 > lint del CI bloqueante; invariantes 4/8/9/11/12/14 ✅.
 
 **Estados:** `LISTO` (accionable ya, sin bloqueo) · `BLOQUEADO` (espera a otra tarea) · `DIFERIDO` (fuera de alcance por diseño — NO es deuda).
@@ -21,8 +21,8 @@
 
 | ID | Tarea | Estado | Bloqueo / orden |
 |----|---|---|---|
-| **T1** | Phase 0c — experimento de enforcement (medición) ⭐ | **LISTO** | ninguno — es el gate de crecimiento |
-| **T2** | Conteo de tokens del executor + enforcement de `maxTokens` (inv 13) | **LISTO** | ninguno |
+| **T1** | Phase 0c — experimento de enforcement (medición) ⭐ | **EN CURSO** — harness hecho (`keel-measure` + v0 sintético); falta la corrida sobre sesiones reales | ninguno — es el gate de crecimiento |
+| **T2** | Conteo de tokens del executor + enforcement de `maxTokens` (inv 13) | ✅ **HECHO** | ninguno |
 | **T3** | Baseline de seguridad del executor (sección 13.1) | **LISTO** | ninguno |
 | **T4** | `AgentRoutingPolicy` — routing de agentes (sección 14.4) | BLOQUEADO | tras T1 |
 | **T5** | Ejecutar `invoke.agent` desde una regla, vía broker (sección 14.5) | BLOQUEADO | T4 |
@@ -34,7 +34,7 @@
 | **T11** | Modo gobernado / proxy (sección 12.4) | BLOQUEADO | tras T1 |
 | **D1–D8** | Diferidos por diseño (ver sección Diferidos) | DIFERIDO | — |
 
-**La próxima tarea recomendada es T1.** La spec condiciona todo el crecimiento (T4–T11) a que Phase 0c mida un delta material; empezar Phase 2 antes es prematuro.
+**La próxima tarea recomendada es completar T1** (correr el harness sobre sesiones reales). El harness ya existe; la spec condiciona todo el crecimiento (T4–T11) a que Phase 0c mida un delta material sobre datos reales, así que empezar Phase 2 antes es prematuro.
 
 ---
 
@@ -43,16 +43,16 @@
 ### T1 — Phase 0c: experimento de enforcement ⭐
 - **Por qué.** Es el **punto de decisión** que la propia spec pone antes de crecer (sección 15.1). La tesis del proyecto — "tener la regla disponible no garantiza que se aplique" — solo se prueba **midiendo**. Sin este dato, construir Phase 2 es fe, no ingeniería.
 - **Qué falta.** Capturar sesiones reales de un agente y comparar **violaciones-que-llegan-a-revisión-humana** con `keel gate` vs sin él, mismo modelo/cliente/reglas, contra una línea base honesta (instrucciones + skills + linters). No es código de producto: es un **harness de medición + un reporte**.
-- **Contexto.** La infraestructura de medición ya existe: el ledger registra `declared` vs `effective` en cada evaluación (`crates/keel-engine/src/ledger.rs`; modos `Passive`/`Enforce` en `crates/keel-engine/src/runtime.rs`). `keel observe` (pasivo) y `keel gate` (enforce) ya alimentan el ledger. Falta el harness que corra un set de tareas en ambos modos y agregue la métrica.
-- **Qué hacer.** (1) Definir un set fijo y reproducible de tareas/eventos. (2) Correrlo en modo passive y en modo enforce. (3) Contar desde el ledger las violaciones que habrían llegado a revisión humana en cada caso. (4) Emitir el delta + un criterio explícito de "seguir a Phase 2 o no".
-- **Hecho cuando.** Hay un dataset reproducible y un reporte con el delta medido; la decisión de crecer queda respaldada por datos, no por intuición.
+- **Contexto.** La infraestructura de medición ya existe: el ledger registra `declared` vs `effective` en cada evaluación (`crates/keel-engine/src/ledger.rs`; modos `Passive`/`Enforce` en `crates/keel-engine/src/runtime.rs`). `keel observe` (pasivo) y `keel gate` (enforce) ya alimentan el ledger.
+- **Hecho (harness).** El harness ya está construido: `keel-measure` (binario del crate `test/`, `test/src/measure.rs`) corre un dataset en ambos modos y agrega el ledger read-only en un reporte con el delta y su criterio de continuación; el dataset **sintético v0** (`datasets/phase0c/v0-synthetic/`) lo prueba end-to-end (`cargo run -p keel-tests --bin keel-measure -- --dataset datasets/phase0c/v0-synthetic`). Ver `datasets/phase0c/README.md`.
+- **Qué falta (la corrida real).** Capturar **sesiones reales** de un agente en un repo real (mismo modelo/cliente) y correr el harness sobre ellas; cargar a mano la **línea base honesta** (instrucciones + skills + linters + alternativa por lenguaje) que el reporte reserva. El harness está hecho para que ese paso solo agregue `tasks/*.jsonl` + etiquetas en `expected.yaml`.
+- **Hecho cuando.** Hay un dataset de sesiones reales y un reporte con el delta medido; la decisión de crecer queda respaldada por datos, no por intuición.
 
-### T2 — Conteo de tokens + enforcement de `maxTokens` (inv 13)
-- **Por qué.** Un agente auditor puede correr en otro modelo con coste real. Sin límites, una delegación puede desbocarse en tokens/coste. Hoy solo se aplica `timeout`.
-- **Qué falta.** El executor no reporta tokens: el ledger graba `tokens: 0` (un hueco honesto, documentado). Hay que (a) capturar el conteo real del executor y (b) marcar/abortar si supera el `maxTokens` declarado en el budget del agente.
-- **Contexto.** `crates/keel-engine/src/audit.rs` → `run_audit` (el budget `timeout_ms` ya se aplica; `max_tokens` se compila en `CompiledAgent` pero no se consume). El campo vive en `crates/keel-dsl` (`AgentBudget`) y en `crates/keel-engine/src/snapshot.rs` (`CompiledAgent.max_tokens`). El `tokens: 0` está en `audit.rs` (entrada del ledger).
-- **Qué hacer.** Definir cómo el executor emite su conteo (p. ej. un campo en el JSON de salida), leerlo, registrarlo en el ledger (reemplazar el `0`), y enforcementar `maxTokens` (exceder → `unknown` + finding).
-- **Hecho cuando.** Un executor que excede `maxTokens` produce `unknown` con un finding explícito y el ledger registra tokens reales. `maxDepth` y `cost` cruzado quedan para Phase 2 (requieren el grafo de delegación).
+### T2 — Conteo de tokens + enforcement de `maxTokens` (inv 13) · ✅ HECHO
+- **Por qué.** Un agente auditor puede correr en otro modelo con coste real. Sin límites, una delegación puede desbocarse en tokens/coste. Antes solo se aplicaba `timeout`.
+- **Hecho.** `run_audit` captura el conteo real de tokens que reporta el executor (campo opcional `tokens` en su JSON de salida, `parse_tokens` en `audit.rs`), lo registra en el ledger (reemplaza el `tokens: 0`), y si supera el `maxTokens` declarado del budget degrada el verdict a `unknown` con un finding explícito. `AgentSpec.max_tokens` se threadea desde el snapshot lockeado (`CompiledAgent.max_tokens`) por el comando `keel audit`. Enforcement colocado antes del mapeo verdict→decision; `invalid`→`review` preservado (sección 4.7).
+- **Trust assumption documentada.** El conteo es tan confiable como el wrapper que lo emite; hoy un modelo crudo podría auto-reportar `tokens`, pero solo puede degradar hacia `review` (nunca autoriza un irreversible). Un canal de uso confiable y `maxDepth`/`cost` cruzado quedan para Phase 2 (requieren el grafo de delegación).
+- **Tests.** `test/tests/audit_agent.rs`: over-budget → `unknown` + finding + tokens reales; within-budget → verdict preservado + tokens reales; timeout → `unknown`.
 
 ### T3 — Baseline de seguridad del executor (sección 13.1)
 - **Por qué.** El auditor L3 lanza un subproceso (posible otro modelo/CLI). Sin restricciones explícitas hereda el entorno y las credenciales del proceso padre — superficie de riesgo innecesaria.
