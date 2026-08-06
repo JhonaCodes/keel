@@ -102,9 +102,13 @@ elimina el campo hasta que se implemente (no dejar stub silencioso).
 **Qué:** gateway MCP para tools/skills. Diferido.
 **Evidencia:** `STATUS.md:125`.
 
-### 10 · Schema `finding.v1` ausente  · 🟡  · CÓDIGO
-**Qué:** formalizar el schema de findings (`finding.v1`) además del SARIF actual.
-**Evidencia:** `STATUS.md:105` (SARIF ✅, `finding.v1` ausente).
+### 10 · Schema `finding.v1`  · ✅ NO es un gap — deprecado por diseño (ADR-016)
+**Corrección:** `finding.v1` está **ausente a propósito**. ADR-016 lo **deprecó**
+en favor de SARIF como formato normativo de findings; `sarif.rs` lo dice
+explícito ("finding.v1 is deprecated and does NOT exist in this code").
+Añadirlo revivería un formato muerto. No hay trabajo que hacer aquí.
+**Evidencia:** spec `RCCA_reference_architecture_v0_9_1.md:1139,1637` (ADR-016);
+`crates/keel-engine/src/sarif.rs:7`. SARIF ✅ ya emite todos los findings.
 
 ---
 
