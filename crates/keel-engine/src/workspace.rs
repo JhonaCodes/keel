@@ -93,6 +93,23 @@ pub enum WorkspaceError {
         "`{path}` contains a `{kind}` — kinds belong in their directory: rules/, tools/, skills/, tests/"
     )]
     MisplacedKind { path: PathBuf, kind: String },
+    #[error(
+        "`{0}` mixes root-level components (rules/, tools/, ...) with composition layer directories (global/, organizations/, projects/, ...); a workspace is either flat or layered, not both — move the root components into a layer"
+    )]
+    MixedLayout(PathBuf),
+    #[error(
+        "`{path}` uses the org-native `components/` layout, which is not supported yet (deferred): author components under rules/, tools/, skills/, agents/ or tests/ instead"
+    )]
+    UnsupportedLayerLayout { path: PathBuf },
+}
+
+/// The component subdirectories a layer (or a flat root) may carry.
+const COMPONENT_SUBDIRS: [&str; 5] = ["rules", "tools", "skills", "agents", "tests"];
+
+/// Whether `dir` carries any component subdirectory directly (the marker of a
+/// flat/degenerate workspace root, or of a populated layer).
+fn has_components(dir: &Path) -> bool {
+    COMPONENT_SUBDIRS.iter().any(|sub| dir.join(sub).is_dir())
 }
 
 /// Loads and validates (schema included) all workspace documents.
@@ -102,7 +119,7 @@ pub fn load(root: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
         return Err(WorkspaceError::NotAWorkspace(root.to_path_buf()));
     }
 
-    let mut files = WorkspaceFiles::empty(root.to_path_buf());
+    let mut files = load_components(root)?;
 
     for doc in parse_file(&ws_file)? {
         match doc {
@@ -116,14 +133,26 @@ pub fn load(root: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
         }
     }
 
-    for (dir, expect_hint) in [
+    Ok(files)
+}
+
+/// Scans ONE directory's component subdirectories (`rules/`, `tools/`,
+/// `skills/`, `agents/`, `tests/`) into a [`WorkspaceFiles`]. This is the unit
+/// of a single composition LAYER (section 8.5): the same convention applies to
+/// the flat root, to `global/` and to each `projects/<name>/` alike. It does
+/// NOT require a `workspace.yaml` — that is a workspace-root concern, not a
+/// per-layer one.
+pub fn load_components(dir: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
+    let mut files = WorkspaceFiles::empty(dir.to_path_buf());
+
+    for (sub, expect_hint) in [
         ("rules", "Rule"),
         ("tools", "Tool"),
         ("skills", "Skill"),
         ("agents", "Agent"),
         ("tests", "RuleTest"),
     ] {
-        let dir_path = root.join(dir);
+        let dir_path = dir.join(sub);
         if !dir_path.is_dir() {
             continue;
         }
@@ -171,6 +200,192 @@ pub fn load(root: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
 
     Ok(files)
 }
+
+/// The authority layers of the composition chain (spec section 7.2), highest
+/// authority FIRST. The derived `Ord` IS the composition order: composition
+/// runs global → organization → platform → project → team → profile, and a
+/// lower-authority layer may only ADD restriction (section 7.4), never weaken a
+/// higher one. The `task/session` layer of section 7.2 is runtime-only
+/// (append-only, non-authoritative, section 7.5) and has no directory.
+///
+/// Do NOT reorder these variants: the ordering is load-bearing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum LayerId {
+    Global,
+    Organization,
+    Platform,
+    Project,
+    Team,
+    Profile,
+}
+
+impl LayerId {
+    /// The composition chain, highest authority first.
+    pub const CHAIN: [LayerId; 6] = [
+        LayerId::Global,
+        LayerId::Organization,
+        LayerId::Platform,
+        LayerId::Project,
+        LayerId::Team,
+        LayerId::Profile,
+    ];
+
+    /// The workspace subdirectory that holds this layer (section 8.5). `global/`
+    /// carries its components directly; the rest namespace instances under a
+    /// plural directory (`organizations/<org>/`, `projects/<proj>/`, ...).
+    pub fn dir(self) -> &'static str {
+        match self {
+            LayerId::Global => "global",
+            LayerId::Organization => "organizations",
+            LayerId::Platform => "platforms",
+            LayerId::Project => "projects",
+            LayerId::Team => "teams",
+            LayerId::Profile => "profiles",
+        }
+    }
+
+    /// Whether this layer namespaces instances by a subdirectory name.
+    pub fn is_namespaced(self) -> bool {
+        !matches!(self, LayerId::Global)
+    }
+}
+
+/// One loaded composition layer: its authority position, its instance name
+/// (the `organizations/<name>` / `projects/<name>` subdir; `None` for `global/`),
+/// and the components it contributes.
+#[derive(Debug)]
+pub struct Layer {
+    pub id: LayerId,
+    pub name: Option<String>,
+    pub files: WorkspaceFiles,
+}
+
+/// A workspace loaded as its composition layers (section 8.5), in composition
+/// order (section 7.2). This is what a compiler composes into a single effective
+/// rule set; which layers actually apply to a given repository is resolution
+/// (section 7.1, a later step) — this loader simply reads every layer present.
+#[derive(Debug)]
+pub struct LayeredWorkspace {
+    pub root: PathBuf,
+    pub layers: Vec<Layer>,
+}
+
+/// Loads a workspace as its composition layers (spec section 8.5). Reads every
+/// layer directory present (`global/`, `organizations/<org>/`,
+/// `platforms/<p>/`, `projects/<proj>/`, `teams/<t>/`, `profiles/<name>/`) via
+/// [`load_components`] — that is, the `rules/tools/skills/agents/tests`
+/// convention — and returns them in composition order.
+///
+/// A FLAT workspace (components under the root, no layer directories) is read
+/// as a single degenerate `Project` layer, so single-project workspaces keep
+/// working unchanged. A workspace that mixes both shapes is rejected
+/// ([`WorkspaceError::MixedLayout`]) rather than silently dropping the root
+/// components.
+///
+/// SCOPE: only the component-directory convention is loaded. The org-native
+/// section 8.5 layout (`components/{policies,contracts,workflows,permissions}/`)
+/// and the org files `composition.yaml`/`repositories.yaml` are NOT read as
+/// components here; a layer dir carrying a `components/` subdir is rejected
+/// ([`WorkspaceError::UnsupportedLayerLayout`]) so nothing is dropped silently.
+/// (`repositories.yaml` is read where it is used — resolution, section 7.1.)
+pub fn load_layered(root: &Path) -> Result<LayeredWorkspace, WorkspaceError> {
+    let ws_file = root.join("workspace.yaml");
+    if !ws_file.exists() {
+        return Err(WorkspaceError::NotAWorkspace(root.to_path_buf()));
+    }
+    for doc in parse_file(&ws_file)? {
+        if !matches!(doc, Document::Workspace(_)) {
+            return Err(WorkspaceError::MisplacedKind {
+                path: ws_file.clone(),
+                kind: doc.kind_name().to_string(),
+            });
+        }
+    }
+
+    let mut layers = Vec::new();
+    for id in LayerId::CHAIN {
+        let base = root.join(id.dir());
+        if !base.is_dir() {
+            continue;
+        }
+        if id.is_namespaced() {
+            for name in sorted_subdirs(&base)? {
+                let dir = base.join(&name);
+                reject_unsupported_layout(&dir)?;
+                layers.push(Layer {
+                    id,
+                    name: Some(name),
+                    files: load_components(&dir)?,
+                });
+            }
+        } else {
+            reject_unsupported_layout(&base)?;
+            layers.push(Layer {
+                id,
+                name: None,
+                files: load_components(&base)?,
+            });
+        }
+    }
+
+    // A flat single-project workspace (components under the root, no layer
+    // directories) composes as one degenerate Project layer.
+    let root_is_flat = has_components(root);
+    if !layers.is_empty() && root_is_flat {
+        // Both a layered tree AND root components: ambiguous — never drop one.
+        return Err(WorkspaceError::MixedLayout(root.to_path_buf()));
+    }
+    if layers.is_empty() && root_is_flat {
+        layers.push(Layer {
+            id: LayerId::Project,
+            name: None,
+            files: load_components(root)?,
+        });
+    }
+
+    layers.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.name.cmp(&b.name)));
+    Ok(LayeredWorkspace {
+        root: root.to_path_buf(),
+        layers,
+    })
+}
+
+/// Rejects a layer directory that uses the not-yet-supported org-native
+/// `components/` layout, so its content is never silently ignored.
+fn reject_unsupported_layout(layer_dir: &Path) -> Result<(), WorkspaceError> {
+    if layer_dir.join("components").is_dir() {
+        return Err(WorkspaceError::UnsupportedLayerLayout {
+            path: layer_dir.to_path_buf(),
+        });
+    }
+    Ok(())
+}
+
+/// Immediate subdirectory names of `dir`, sorted (deterministic layer order,
+/// invariant 9). Hidden entries (dot-prefixed, e.g. `.keel-state`) are skipped.
+fn sorted_subdirs(dir: &Path) -> Result<Vec<String>, WorkspaceError> {
+    let mut names = Vec::new();
+    let entries = std::fs::read_dir(dir).map_err(|source| WorkspaceError::Io {
+        path: dir.to_path_buf(),
+        source,
+    })?;
+    for entry in entries.flatten() {
+        if !entry.path().is_dir() {
+            continue;
+        }
+        if let Some(name) = entry.file_name().to_str()
+            && !name.starts_with('.')
+        {
+            names.push(name.to_string());
+        }
+    }
+    names.sort();
+    Ok(names)
+}
+
+#[cfg(test)]
+#[path = "../tests-unit/workspace.rs"]
+mod tests;
 
 fn yaml_files(dir: &Path) -> Result<Vec<PathBuf>, WorkspaceError> {
     let mut out = Vec::new();

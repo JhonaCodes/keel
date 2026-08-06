@@ -85,7 +85,7 @@ RuleTest, RepositoryRegistry, Profile, Exception. Commands: `workspace init`, `c
 | Item | Status | Evidence |
 |---|---|---|
 | 7.1 resolution by repo identity | ✅ | `keel bind` derives `project:org/repo` from the git remote → `.keel/project.yaml` |
-| 7.2 composition order | ⏭ | single layer |
+| 7.2 composition order | 🟡 | layer LOADING landed (`workspace::load_layered`, section 8.5 dirs in the fixed 7.2 order); composing them + monotonicity still a stub (7.4) |
 | 7.3 inheritance types | 🟡 | authoring vocabulary parses + round-trips (`locked`/`overridable`/`merge` on `RuleSpec`); monotonicity runtime still a stub (see 7.4) |
 | 7.4 monotonicity D1–D4 | ⏭ | documented stub; lattice ready in `keel-core::Decision` |
 | 7.5 session append-only | ✅ | see inv 16 |
@@ -96,7 +96,7 @@ RuleTest, RepositoryRegistry, Profile, Exception. Commands: `workspace init`, `c
 
 | Item | Status | Evidence |
 |---|---|---|
-| 8 architecture / workspace layout | ✅ | crates + `workspace.rs` (rules/tools/skills/agents/tests) |
+| 8 architecture / workspace layout | ✅ | crates + `workspace.rs`; flat (rules/tools/skills/agents/tests) and layered (`load_layered`: global/organizations/platforms/projects/teams/profiles, section 8.5). Org-native `components/` layout deferred (rejected loudly, not dropped) |
 | 9 installation & operation | 🟡 | CLI commands; no signed installer / project attach |
 | 10.1 compile pipeline | ✅ | `compile.rs` (parse→schema→refs→[composition stub]→conflicts→index→snapshot) |
 | 10.2 atomic compilation | ✅ | staging → RuleTests gate → publish |
