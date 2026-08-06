@@ -14,8 +14,8 @@ the run over **real agent sessions in a real repo** has **not been done**; that
 measurement, not the code, is what the spec makes the gate for growing further.
 
 Snapshot of the tree: 4 crates (`keel-core`, `keel-dsl`, `keel-engine`,
-`keel-cli`), **107 tests green**. Kinds: Workspace, Rule, Tool, Skill,
-Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
+`keel-cli`). Kinds: Workspace, Rule, Tool, Skill, Agent, AgentExecutor,
+RuleTest, RepositoryRegistry, Profile, Exception. Commands: `workspace init`, `compile`,
 `observe`, `gate`, `audit`, `adapter` (+`--check` preflight), `bind`, `lock`,
 `ci resolve`/`ci run`, `explain`, `prune`, `test`, `doctor`.
 
@@ -86,7 +86,7 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 |---|---|---|
 | 7.1 resolution by repo identity | ✅ | `keel bind` derives `project:org/repo` from the git remote → `.keel/project.yaml` |
 | 7.2 composition order | ⏭ | single layer |
-| 7.3 inheritance types | ⏭ | — |
+| 7.3 inheritance types | 🟡 | authoring vocabulary parses + round-trips (`locked`/`overridable`/`merge` on `RuleSpec`); monotonicity runtime still a stub (see 7.4) |
 | 7.4 monotonicity D1–D4 | ⏭ | documented stub; lattice ready in `keel-core::Decision` |
 | 7.5 session append-only | ✅ | see inv 16 |
 | 7.6 conflicts not silently resolved | ✅ | duplicate-id compile error |

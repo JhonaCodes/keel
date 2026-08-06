@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:keel:schemas:v1alpha1:exception",
+  "title": "Keel Exception (keel/v1alpha1)",
+  "description": "kind: Exception — spec section 7.4 / ADR-014. The only legitimate route to relax a locked rule: owned at the scope that declared the lock, with reason, bounded scope and expiry, recorded as a human decision.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "keel/v1alpha1" },
+    "kind": { "const": "Exception" },
+    "metadata": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" },
+        "author": { "type": "string" },
+        "adrRef": { "type": "string" },
+        "reviewAfter": { "type": "string" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["rule", "owner", "reason", "scope", "expiry"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "type": "string", "minLength": 1, "pattern": "^rule:" },
+        "owner": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "languages": { "type": "array", "items": { "type": "string" } },
+            "paths": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "include": { "type": "array", "items": { "type": "string" } },
+                "exclude": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "expiry": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

@@ -15,7 +15,10 @@ fn files_from_yaml(yaml: &str) -> WorkspaceFiles {
             Document::Agent(a) => files.agents.push(*a),
             Document::AgentExecutor(x) => files.executors.push(*x),
             Document::RuleTest(t) => files.tests.push(*t),
-            Document::Workspace(_) => {}
+            Document::Workspace(_)
+            | Document::RepositoryRegistry(_)
+            | Document::Profile(_)
+            | Document::Exception(_) => {}
         }
     }
     files

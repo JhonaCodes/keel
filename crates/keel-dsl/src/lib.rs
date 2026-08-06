@@ -17,12 +17,18 @@ use keel_core::{Decision, OriginClass, Verdict};
 use serde::{Deserialize, Serialize};
 
 pub use rule::{
-    Branch, Enforcement, Load, OnFail, Precondition, Report, RuleSpec, Scope, ToolCall, ToolRef,
-    When, WhenCondition,
+    Branch, Enforcement, Load, Merge, OnFail, Precondition, Report, RuleSpec, Scope, ToolCall,
+    ToolRef, When, WhenCondition,
 };
 
 /// apiVersion supported by this binary.
 pub const API_VERSION: &str = "keel/v1alpha1";
+
+/// `skip_serializing_if` helper for booleans that default to `false`: a flag
+/// that is off round-trips as absent, not as an explicit `false`.
+pub(crate) fn is_false(b: &bool) -> bool {
+    !*b
+}
 
 /// Common envelope metadata (spec section 11.1).
 ///
@@ -64,6 +70,9 @@ pub enum Document {
     Agent(Box<AgentDoc>),
     AgentExecutor(Box<AgentExecutorDoc>),
     RuleTest(Box<RuleTestDoc>),
+    RepositoryRegistry(Box<RepositoryRegistryDoc>),
+    Profile(Box<ProfileDoc>),
+    Exception(Box<ExceptionDoc>),
 }
 
 impl Document {
@@ -76,6 +85,9 @@ impl Document {
             Document::Agent(d) => &d.metadata,
             Document::AgentExecutor(d) => &d.metadata,
             Document::RuleTest(d) => &d.metadata,
+            Document::RepositoryRegistry(d) => &d.metadata,
+            Document::Profile(d) => &d.metadata,
+            Document::Exception(d) => &d.metadata,
         }
     }
 
@@ -88,6 +100,9 @@ impl Document {
             Document::Agent(_) => "Agent",
             Document::AgentExecutor(_) => "AgentExecutor",
             Document::RuleTest(_) => "RuleTest",
+            Document::RepositoryRegistry(_) => "RepositoryRegistry",
+            Document::Profile(_) => "Profile",
+            Document::Exception(_) => "Exception",
         }
     }
 }
@@ -292,6 +307,97 @@ pub struct Expectation {
     pub decision: Option<Decision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<OriginClass>,
+}
+
+/// kind: RepositoryRegistry (spec section 8.5) — links repository identities to
+/// Keel projects. This is the input to resolution by repo identity (section 7.1):
+/// which project (and therefore which composition chain) a checked-out repo
+/// resolves to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RepositoryRegistryDoc {
+    #[serde(rename = "apiVersion")]
+    pub api_version: String,
+    pub metadata: Metadata,
+    pub spec: RepositoryRegistrySpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RepositoryRegistrySpec {
+    pub repositories: Vec<RepositoryEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RepositoryEntry {
+    /// Source-control provider, e.g. `github`.
+    pub provider: String,
+    /// Provider-scoped identity, e.g. `NuiMarkets/con-app`.
+    pub id: String,
+    /// Keel project this repository binds to, e.g. `project:nui/con-app`.
+    pub project: String,
+    /// A locked mapping cannot be reassigned by a lower layer (section 7.1).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub locked: bool,
+}
+
+/// kind: Profile (spec section 8.5) — personal preferences. A profile is the
+/// LOWEST authority layer: it may select an alternative binding only where an
+/// ancestor declares it `overridable`, and it can NEVER weaken a `locked` rule.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileDoc {
+    #[serde(rename = "apiVersion")]
+    pub api_version: String,
+    pub metadata: Metadata,
+    pub spec: ProfileSpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileSpec {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client: Option<String>,
+    /// Free-form personal preferences (e.g. implementationStrategy, verbosity).
+    /// Non-authoritative: kept for round-trip, they govern no action.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferences: Option<serde_json::Value>,
+}
+
+/// kind: Exception (spec section 7.4, ADR-014) — the ONLY legitimate route to
+/// relax a `locked` rule in a concrete context. It is NOT composition: it is an
+/// explicit object owned at the scope that declared the lock, with a reason, a
+/// bounded scope and an expiry, recorded in the ledger as a `human` decision.
+/// Silent weakenings do not exist.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExceptionDoc {
+    #[serde(rename = "apiVersion")]
+    pub api_version: String,
+    pub metadata: Metadata,
+    pub spec: ExceptionSpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExceptionSpec {
+    /// `rule:<id>` — the locked rule this exception relaxes.
+    pub rule: String,
+    /// The scope that declared the lock and therefore owns the exception
+    /// (e.g. `organization:nui`).
+    pub owner: String,
+    pub reason: String,
+    /// BOUNDED scope the relaxation applies to (section 7.4: "reason, bounded
+    /// scope and expiry"). Mandatory — a scope-less exception would be an
+    /// unbounded weakening of a `locked` rule, the exact silent relaxation the
+    /// mechanism exists to forbid.
+    pub scope: Scope,
+    /// ISO-8601 expiry date (e.g. `2026-12-31`). An expired exception no longer
+    /// suppresses the monotonicity check.
+    pub expiry: String,
 }
 
 /// DSL loading/validation errors.

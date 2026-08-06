@@ -47,6 +47,30 @@ pub struct RuleSpec {
     /// strict allowlist.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub constraints: Option<serde_json::Value>,
+    /// Composition inheritance (section 7.3, reserved words spec 11.1). `locked`:
+    /// this rule cannot be WEAKENED by lower layers — the composed effective rule
+    /// must stay at least as restrictive, dimension by dimension (section 7.4).
+    /// Absent = a plain rule that lower layers may replace. NOTE: authoring only
+    /// until the composition step verifies it (a second authority layer is
+    /// required; monotonicity is still a stub, STATUS invariant 15).
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub locked: bool,
+    /// `overridable`: a lower layer MAY replace this rule (the exemption marker of
+    /// section 7.4). Meaningful only where an ancestor is `locked`.
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub overridable: bool,
+    /// `merge`: how this rule's requirements compose downward (section 7.3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge: Option<Merge>,
+}
+
+/// How a rule's mergeable requirements compose across layers (section 7.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Merge {
+    /// Lower layers may only ADD requirements (a join in the restriction
+    /// lattice, section 7.4) — never remove or weaken.
+    Append,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
