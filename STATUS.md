@@ -14,7 +14,7 @@ the run over **real agent sessions in a real repo** has **not been done**; that
 measurement, not the code, is what the spec makes the gate for growing further.
 
 Snapshot of the tree: 4 crates (`keel-core`, `keel-dsl`, `keel-engine`,
-`keel-cli`), **94 tests green**. Kinds: Workspace, Rule, Tool, Skill,
+`keel-cli`), **107 tests green**. Kinds: Workspace, Rule, Tool, Skill,
 Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 `observe`, `gate`, `audit`, `adapter` (+`--check` preflight), `bind`, `lock`,
 `ci resolve`/`ci run`, `explain`, `prune`, `test`, `doctor`.
@@ -26,7 +26,7 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 | Layer | When | Mechanism | Status | Evidence |
 |---|---|---|---|---|
 | **L1 pre-execution gate** | before an irreversible action runs | `keel gate` → Enforce mode → exit 2 + ContextPacket; the action never becomes a process (section 5.3 inner ring) | ✅ | `keel-cli/src/gate.rs`, `keel-engine/src/runtime.rs` (Mode::Enforce), `packet.rs` |
-| **L2 cognitive activation** | while working, a concept surfaces | rule `load.skills` → Session Manager delivers compact once, references thereafter, escalates to full on oscillation (section 6.5, section 14.12) | ✅ | `keel-engine/src/session.rs`, `kind: Skill` |
+| **L2 cognitive activation** | while working, a concept surfaces | rule `load.skills` → Session Manager delivers compact once, references thereafter, escalates to full on oscillation (section 6.5, section 14.12); the `context.compacted` session-layer event resets delivered-skill state so a skill lost to a compaction is re-delivered (a deliberate extension beyond the 17 governance events of section 11.2 — governs no action, writes no evidence) | ✅ | `keel-engine/src/session.rs`, `kind: Skill`, `event.rs::ContextCompacted` |
 | **L3 post-action verification** | after write / at completion | post-edit feedback (outer ring), completion gate (section 12.3), specialized auditor agent with `origin=semantic` (section 14) | ✅ (seed) | `gate.rs` (completion), `keel-engine/src/audit.rs`, `kind: Agent`/`AgentExecutor` |
 
 ---
