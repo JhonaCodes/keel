@@ -190,8 +190,9 @@ pub struct CompiledRule {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub validate: Option<CompiledToolCall>,
     pub enforcement: CompiledEnforcement,
-    /// Constraints preserved from the DSL (section 11.4). Recorded, not evaluated
-    /// in Phase 0 (their active evaluation comes in with enforcement).
+    /// Constraints preserved from the DSL (section 11.4). Recorded and hashed;
+    /// the runtime evaluator is tracked as F1 in docs/PARCIALES.md (pending,
+    /// not yet wired).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub constraints: Option<serde_json::Value>,
 }
