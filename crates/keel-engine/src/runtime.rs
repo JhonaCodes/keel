@@ -209,6 +209,17 @@ fn branch_detail(branch: &CompiledBranch, verdict: Verdict) -> Option<String> {
     if !branch.load_skills.is_empty() {
         parts.push(format!("load: {}", branch.load_skills.join(", ")));
     }
+    if !branch.load_capabilities.is_empty() {
+        // Phase 0 honesty (like `invoke`): capabilities are a forward-declared
+        // field of the DSL (spec §11.3, future §9 context-economy). They are
+        // recorded in the evidence so the declaration is visible, but the
+        // runtime does not yet ACTIVATE/limit them — that is Phase 2. Surfacing
+        // them here keeps the field honest instead of a silent no-op.
+        parts.push(format!(
+            "capabilities declared (activation is Phase 2): {}",
+            branch.load_capabilities.join(", ")
+        ));
+    }
     if let Some(agent) = &branch.invoke_agent {
         // Phase 0 honesty: the invoke exists in the rule and stays in the
         // evidence, but no model is executed in the passive slice.

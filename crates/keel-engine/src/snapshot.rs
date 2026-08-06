@@ -299,6 +299,11 @@ pub struct CompiledBranch {
     pub decision: Decision,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub load_skills: Vec<String>,
+    /// Forward-declared context-economy capabilities (spec §11.3, future §9).
+    /// Recorded in the evidence for visibility, but the runtime does not yet
+    /// ACTIVATE/limit them — that is Phase 2. Kept (not dropped) so the DSL
+    /// stays aligned with the reference example; surfaced in `branch_detail`
+    /// so it is a declared field, never a silent no-op.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub load_capabilities: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

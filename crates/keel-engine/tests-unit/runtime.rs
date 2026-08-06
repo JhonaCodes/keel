@@ -161,3 +161,22 @@
         assert!(detail.contains("NOT executed"), "invoke must be recorded as not executed: {detail}");
         assert_eq!(evs[0].tokens, 0, "no tokens in Phase 0");
     }
+
+    /// A declared `load.capabilities` is a forward-declared field: not yet
+    /// activated by the runtime, but surfaced in the evidence so it is never a
+    /// silent no-op (like `invoke`, it is recorded honestly).
+    #[test]
+    fn declared_capabilities_are_surfaced_in_detail() {
+        let branch = CompiledBranch {
+            decision: Decision::Review,
+            load_skills: vec![],
+            load_capabilities: vec!["reactive-state.inspect-consumers".into()],
+            report_message: None,
+            invoke_agent: None,
+        };
+        let detail = branch_detail(&branch, Verdict::Unknown).unwrap();
+        assert!(
+            detail.contains("capabilities declared") && detail.contains("inspect-consumers"),
+            "declared capabilities must appear in the evidence detail: {detail}"
+        );
+    }
