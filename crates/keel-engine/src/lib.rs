@@ -29,6 +29,7 @@
 //! runtime, it would stop being a pure config→snapshot function and local/CI
 //! could diverge (invariant 9).
 
+pub mod adapter;
 pub mod audit;
 pub mod compile;
 pub mod ledger;

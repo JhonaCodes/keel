@@ -796,3 +796,40 @@ pub(crate) fn ci_run(root: &Path) -> Result<ExitCode> {
     println!("ci run OK");
     Ok(ExitCode::SUCCESS)
 }
+
+// ─────────────────────────── adapter preflight ───────────────────────────
+
+/// `keel adapter <client> --check` — preflight the published snapshot against
+/// the adapter's capability manifest (spec §12.1, invariant 8). Rejects a
+/// `block` the client cannot honor instead of assuming it. Exit 1 on any
+/// unhonorable policy.
+pub(crate) fn adapter_check(root: &Path, client: &str) -> Result<ExitCode> {
+    use keel_engine::adapter::{preflight, AdapterManifest};
+
+    let Some(manifest) = AdapterManifest::for_client(client) else {
+        eprintln!("error: unknown adapter `{client}` (supported: claude-code)");
+        return Ok(ExitCode::FAILURE);
+    };
+    let files = workspace::load(root)?;
+    let snapshot = Snapshot::load(&files.snapshot_path())
+        .context("no published snapshot — run `keel compile` first")?;
+
+    let violations = preflight(&snapshot, &manifest);
+    if violations.is_empty() {
+        println!(
+            "adapter {} — preflight OK ({} rules honor their blocking policy)",
+            manifest.id,
+            snapshot.rules.len()
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
+    eprintln!(
+        "adapter {} — preflight FAILED: {} unhonorable blocking policy(ies)",
+        manifest.id,
+        violations.len()
+    );
+    for v in &violations {
+        eprintln!("  {} → {}", v.rule_id, v.reason);
+    }
+    Ok(ExitCode::FAILURE)
+}
