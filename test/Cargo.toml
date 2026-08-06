@@ -1,0 +1,21 @@
+# keel-tests — the repository's top-level home for integration / black-box
+# tests (spec §15 functional validation). Unit tests that must reach a module's
+# PRIVATE items stay beside their code (a Rust requirement — an external crate
+# cannot see private items); everything else lives here, under test/tests/.
+#
+# These tests run under `cargo test --workspace`, which builds the `keel`
+# binary first, so the CLI black-box tests can invoke it from target/.
+[package]
+name = "keel-tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dev-dependencies]
+keel-core = { path = "../crates/keel-core" }
+keel-dsl = { path = "../crates/keel-dsl" }
+keel-engine = { path = "../crates/keel-engine" }
