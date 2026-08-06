@@ -110,18 +110,20 @@ real, la idea de capacidades que PR4 quitó como stub mudo.
 
 Estos faltantes del inventario **no** se implementan ahora, por orden de la spec:
 
-- **#1 Phase 0c — experimento de enforcement.** Es una **medición** (correr
-  sesiones reales y comparar violaciones-a-revisión con/sin `keel gate`), no
-  código. Es el *gate de crecimiento* que la spec pone antes de Phase 2. La
-  infraestructura que lo mide (`declared` vs `effective` en el ledger) ya existe.
-  Lo corre el usuario cuando decida.
+- **#1 Phase 0c — experimento de enforcement.** El **harness ya está construido**
+  (`keel-measure` + dataset sintético v0, `test/src/measure.rs`,
+  `datasets/phase0c/`): corre passive vs enforce y agrega el ledger en un reporte
+  con el delta. Lo que queda es la **medición real** — correr sesiones reales y
+  comparar violaciones-a-revisión con/sin `keel gate`, más la línea base honesta —,
+  que no es código de producto y es el *gate de crecimiento* que la spec pone antes
+  de Phase 2. Lo corre el usuario cuando decida.
 - **#4 Monotonicidad de composición D1–D4 (sección 7.4).** ⏭ YAGNI: solo aplica cuando
   exista una **segunda capa de autoridad**. Hoy hay una sola. El lattice ya está
   listo en `keel-core` (`composition_stub()` documentado).
 - **#6 Broker/routing de agentes** y **#8 Máquina de fases completa sección 6.2.**
   Son **Phase 2**. La spec los gate detrás de Phase 0c. Implementarlos antes de
   medir sería prematuro. (Recordatorio: hoy el `invoke.agent` de una regla solo
-  se registra, nunca se ejecuta — `runtime.rs:212-219`; el único spawn real es
+  se registra, nunca se ejecuta — `runtime.rs:227-233`; el único spawn real es
   `keel audit` manual.)
 - **#7 MCP gateway (ADR-005).** ⏭ diferido; sin MCP en el alcance actual.
 
