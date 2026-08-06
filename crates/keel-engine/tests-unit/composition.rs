@@ -8,8 +8,9 @@
 //! are covered too.
 
 use super::Dimension;
-use crate::compile::{CompileError, CompileLayer, CompileOutcome, compile_layered};
+use crate::compile::{CompileError, CompileLayer, CompileOutcome, compile, compile_layered};
 use crate::composition::MonotonicityViolation;
+use crate::lock::{Lock, ProjectBinding};
 use crate::snapshot::CompiledRule;
 use crate::workspace::WorkspaceFiles;
 use keel_core::Decision;
@@ -48,6 +49,17 @@ fn compile_chain(
         ],
         "t".to_string(),
     )
+}
+
+fn compile_labeled(layers: &[(&str, &WorkspaceFiles)]) -> Result<CompileOutcome, CompileError> {
+    let chain: Vec<CompileLayer> = layers
+        .iter()
+        .map(|(label, files)| CompileLayer {
+            label: label.to_string(),
+            files,
+        })
+        .collect();
+    compile_layered(&chain, "t".to_string())
 }
 
 fn violation(res: Result<CompileOutcome, CompileError>) -> MonotonicityViolation {
@@ -342,6 +354,175 @@ spec:
     assert_eq!(
         violation(compile_chain(&global, &project)).dimension,
         Dimension::Sensitivity
+    );
+}
+
+#[test]
+fn effective_rule_records_origin_layer_and_lock() {
+    let global = ws(LOCKED_BLOCK_ON_SRC);
+    let project = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: sec.no-raw, author: team, adrRef: adr:ADR-2, reviewAfter: P6M }
+spec:
+  scope: { paths: { include: ["src/**"] } }
+  on: [file.edited]
+  validate: { using: builtin:text.regex, with: { pattern: "rawQuery" } }
+  enforcement:
+    invalid: { decision: block }
+    valid: { decision: allow }
+"#);
+    let outcome = compile_chain(&global, &project).unwrap();
+    let r = rule_of(&outcome, "sec.no-raw");
+    assert_eq!(
+        r.origin_layer.as_deref(),
+        Some("project:demo"),
+        "effective from the project layer"
+    );
+    assert_eq!(
+        r.locked_at.as_deref(),
+        Some("global"),
+        "locked at the global layer"
+    );
+}
+
+#[test]
+fn flat_compile_stamps_the_single_layer_origin() {
+    let files = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: r, author: p, adrRef: adr:ADR-1, reviewAfter: P6M }
+spec: { on: [file.edited], enforcement: { valid: { decision: allow } } }
+"#);
+    let outcome = compile(&files, "t".to_string()).unwrap();
+    let r = rule_of(&outcome, "r");
+    assert_eq!(r.origin_layer.as_deref(), Some("project"));
+    assert_eq!(r.locked_at, None, "a plain rule is not locked");
+}
+
+#[test]
+fn lock_pins_the_composition_layers() {
+    let global = ws(LOCKED_BLOCK_ON_SRC);
+    let project = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: p.local, author: t, adrRef: adr:ADR-2, reviewAfter: P6M }
+spec: { on: [file.edited], enforcement: { valid: { decision: allow } } }
+"#);
+    let outcome = compile_chain(&global, &project).unwrap();
+    let binding = ProjectBinding {
+        project: "project:demo/app".into(),
+        workspace: "org:local".into(),
+    };
+    let lock = Lock::generate(&binding, &outcome.snapshot, "0.1.0");
+    assert_eq!(
+        lock.composition,
+        vec!["global".to_string(), "project:demo".to_string()],
+        "the lock records the contributing layers (section 8.6)"
+    );
+    lock.verify(&binding, &outcome.snapshot, "0.1.0")
+        .expect("a fresh lock verifies against its own snapshot");
+
+    // A lock claiming a different composition is drift.
+    let mut drifted = lock.clone();
+    drifted.composition = vec!["global".to_string()];
+    assert!(
+        drifted
+            .verify(&binding, &outcome.snapshot, "0.1.0")
+            .unwrap_err()
+            .contains("composition drift"),
+        "a changed composition list is caught as drift"
+    );
+}
+
+#[test]
+fn a_stricter_lower_lock_becomes_the_floor_for_layers_below_it() {
+    // Three layers, TWO locks: global loosely locks `review`, org locks the
+    // stricter `block`, project tries to drop back to `review`. The org lock
+    // must be enforced — project's `review` < org's `block` is a D3 violation.
+    // (Regression: the lock anchor must advance to the stricter lower lock.)
+    let global = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: r, author: g, adrRef: adr:ADR-1, reviewAfter: P6M }
+spec:
+  locked: true
+  on: [file.edited]
+  enforcement: { invalid: { decision: review }, valid: { decision: allow } }
+"#);
+    let org = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: r, author: o, adrRef: adr:ADR-2, reviewAfter: P6M }
+spec:
+  locked: true
+  on: [file.edited]
+  enforcement: { invalid: { decision: block }, valid: { decision: allow } }
+"#);
+    let project = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: r, author: t, adrRef: adr:ADR-3, reviewAfter: P6M }
+spec:
+  on: [file.edited]
+  enforcement: { invalid: { decision: review }, valid: { decision: allow } }
+"#);
+    let v = violation(compile_labeled(&[
+        ("global", &global),
+        ("organization:nui", &org),
+        ("project:demo", &project),
+    ]));
+    assert_eq!(v.dimension, Dimension::Consequence);
+    assert_eq!(
+        v.locked_at, "organization:nui",
+        "the stricter org lock is the floor"
+    );
+    assert_eq!(v.violated_by, "project:demo");
+}
+
+#[test]
+fn two_locks_compose_when_each_layer_only_strengthens() {
+    // Same chain but the project KEEPS block → composes; effective is block.
+    let global = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: r, author: g, adrRef: adr:ADR-1, reviewAfter: P6M }
+spec:
+  locked: true
+  on: [file.edited]
+  enforcement: { invalid: { decision: review }, valid: { decision: allow } }
+"#);
+    let org = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: r, author: o, adrRef: adr:ADR-2, reviewAfter: P6M }
+spec:
+  locked: true
+  on: [file.edited]
+  enforcement: { invalid: { decision: block }, valid: { decision: allow } }
+"#);
+    let project = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: r, author: t, adrRef: adr:ADR-3, reviewAfter: P6M }
+spec:
+  on: [file.edited]
+  enforcement: { invalid: { decision: block }, valid: { decision: allow } }
+"#);
+    let outcome = compile_labeled(&[
+        ("global", &global),
+        ("organization:nui", &org),
+        ("project:demo", &project),
+    ])
+    .expect("each layer only strengthens → composes");
+    assert_eq!(
+        rule_of(&outcome, "r")
+            .enforcement
+            .invalid
+            .as_ref()
+            .unwrap()
+            .decision,
+        Decision::Block
     );
 }
 

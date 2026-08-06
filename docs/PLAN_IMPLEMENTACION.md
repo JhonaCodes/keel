@@ -29,8 +29,8 @@ commits sin `Co-Authored-By`, formato `type: short` + `Closes #N`.
 - [x] **PR8 · `feat/adapter-capability-preflight`** — #5 preflight (`keel adapter --check`). PR #18 · **merged** `01a867f`.
 
 **TODOS los PRs accionables están mergeados.** Quedan (por diseño, fuera de esta
-iniciativa): Phase 0c (medición), monotonicidad D1–D4 (sección 7.4, hasta 2ª capa),
-broker/routing agentes + máquina de fases (Phase 2), MCP gateway. Ver la sección
+iniciativa): Phase 0c (medición), broker/routing agentes + máquina de fases
+(Phase 2), MCP gateway. (Monotonicidad D1–D4 §7.4: HECHA — ver #4.) Ver la sección
 "Deliberadamente DIFERIDO".
 
 ---
@@ -117,9 +117,10 @@ Estos faltantes del inventario **no** se implementan ahora, por orden de la spec
   comparar violaciones-a-revisión con/sin `keel gate`, más la línea base honesta —,
   que no es código de producto y es el *gate de crecimiento* que la spec pone antes
   de Phase 2. Lo corre el usuario cuando decida.
-- **#4 Monotonicidad de composición D1–D4 (sección 7.4).** ⏭ YAGNI: solo aplica cuando
-  exista una **segunda capa de autoridad**. Hoy hay una sola. El lattice ya está
-  listo en `keel-core` (`composition_stub()` documentado).
+- **#4 Monotonicidad de composición D1–D4 (sección 7.4).** ✅ HECHO: existe la
+  composición por capas (§8.5 + §7.1) y `composition::compose` verifica D1–D4
+  contra cada ancestro `locked`, rechazando todo debilitamiento
+  (`MonotonicityViolation`). El lattice D3 vive en `keel-core`.
 - **#6 Broker/routing de agentes** y **#8 Máquina de fases completa sección 6.2.**
   Son **Phase 2**. La spec los gate detrás de Phase 0c. Implementarlos antes de
   medir sería prematuro. (Recordatorio: hoy el `invoke.agent` de una regla solo

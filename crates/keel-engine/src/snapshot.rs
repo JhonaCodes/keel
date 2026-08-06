@@ -196,6 +196,16 @@ pub struct CompiledRule {
     /// against the event's connection context (see `runtime::env_violation`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub constraints: Option<CompiledConstraints>,
+    /// Composition provenance (section 7.4): the layer whose definition became
+    /// effective after composing the chain (e.g. `global`, `project:con-app`).
+    /// `None` on a rule that never went through layered composition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin_layer: Option<String>,
+    /// The layer that declared this rule `locked`, if any — the ancestor the
+    /// monotonicity check protected (section 7.4). Feeds `explain` and makes the
+    /// composed snapshot self-describing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locked_at: Option<String>,
 }
 
 /// Compiled `constraints` block (section 11.4). Typed at compile time so a

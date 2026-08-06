@@ -492,6 +492,9 @@ fn compile_rule(
         validate,
         enforcement,
         constraints,
+        // Provenance is stamped by the composition step, which knows the layers.
+        origin_layer: None,
+        locked_at: None,
     })
 }
 

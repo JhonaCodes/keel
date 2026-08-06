@@ -113,7 +113,7 @@
 
 | ID | Ítem | Motivo |
 |----|---|---|
-| **D1** | Monotonicidad + composición D1–D4 (sección 7.4 / inv 15 / 7.2–7.3) | Solo aplica con una **2ª capa de autoridad**; hoy hay una. Stub honesto (`crates/keel-engine/src/compile.rs::composition_stub`); el lattice ya vive en `keel-core`. ADR-014. |
+| **D1** | Monotonicidad + composición D1–D4 (sección 7.4 / inv 15 / 7.2–7.3) | ✅ HECHO. `composition::compose` (`crates/keel-engine/src/composition.rs`) verifica D1–D4 contra cada ancestro `locked` al componer las capas del workspace (§8.5 + §7.1), rechazando todo debilitamiento. `merge:append`/`overridable` incluidos. ADR-014. |
 | **D2** | MCP gateway (sección 14.12) | ADR-005/006 diferidos; sin MCP en el alcance actual. |
 | **D3** | Packages versionados reutilizables (inv 3) | Un solo workspace por ahora. |
 | **D4** | Secrets por referencia como subsistema (inv 10) | Fuera de scope actual (el mínimo entra con T3). |

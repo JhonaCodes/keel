@@ -76,12 +76,13 @@ contexto rico de Phase 2).
 `exposes: [{capability, tool}]`). MCP es para capacidades externas; **no** es el
 mecanismo de gobernanza (la gobernanza es Keel).
 
-## P2-8 · Monotonicidad de composición D1–D4 (sección 7.4)
-**Precondición distinta:** NO Phase 0c sino una **2ª capa de autoridad** que
-componer. **Estado:** `composition_stub()` documentado; el lattice D3 ya existe en
-`keel-core`. **Qué:** al existir multicapa, verificar en el compilador D1
-cobertura, D2 sensibilidad, D3 consecuencia, D4 carga — con diff exacto de la
-dimensión debilitada.
+## P2-8 · Monotonicidad de composición D1–D4 (sección 7.4) · ✅ HECHO
+**Estado:** IMPLEMENTADO. Al existir la 2ª capa de autoridad (workspace por capas
+§8.5 + resolución §7.1), `composition::compose` verifica en el compilador D1
+cobertura, D2 sensibilidad, D3 consecuencia, D4 carga contra cada ancestro
+`locked` — con diff exacto de la dimensión debilitada y la capa culpable
+(`MonotonicityViolation`). `merge:append` y `overridable` incluidos. Ver
+`crates/keel-engine/src/composition.rs`.
 
 ---
 

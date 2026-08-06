@@ -20,6 +20,21 @@
 //!
 //! The comparator reasons over the COMPILED rule (`snapshot::CompiledRule`), so
 //! decisions are already floor-normalized (section 4.7) before D3 runs.
+//!
+//! Scope and known, SOUND-BUT-CONSERVATIVE approximations (never allow a
+//! weakening; may reject a legitimate strengthening — the escape is a governed
+//! `Exception`, section 7.4):
+//! - D1 compares `languages`/`include`/`exclude` by exact set membership, not by
+//!   glob subsumption over resolved pattern sets. Include/languages must be a
+//!   superset (or "all"); any new exclude is rejected.
+//! - D2 requires the detect/validate tool call to be IDENTICAL (a lower layer
+//!   may only ADD one the base lacked). The DSL has a single `validate` slot, so
+//!   AND-composition of MULTIPLE validators is not yet expressible; it is
+//!   deferred until `validate` is list-valued.
+//! - The `locked` guarantee covers D1–D4 (scope/detect+validate/decision/load).
+//!   `preconditions` and `constraints.environment` are NOT part of the
+//!   monotonicity check (section 7.4 does not enumerate them); a verified-locked
+//!   replacement may change them.
 
 use crate::snapshot::{
     CompiledBranch, CompiledConstraints, CompiledEnforcement, CompiledRule, CompiledScope,
@@ -109,6 +124,8 @@ fn fold_rule(
 ) -> Result<CompiledRule, MonotonicityViolation> {
     let (first_label, first_inh, first_rule) = stack[0];
     let mut effective = first_rule.clone();
+    // The layer whose definition is currently effective (provenance).
+    let mut effective_label = first_label;
     // The locked ancestor `R` and where it was declared, if any.
     let mut locked_base: Option<CompiledRule> = first_inh.locked.then(|| first_rule.clone());
     let mut locked_at: Option<String> = first_inh.locked.then(|| first_label.to_string());
@@ -125,15 +142,24 @@ fn fold_rule(
                     dimension,
                     detail,
                 })?;
+            // If the merging layer itself locks, the merged result is the new,
+            // stricter floor for lower layers (section 7.4).
+            if inh.locked {
+                locked_base = Some(effective.clone());
+                locked_at = Some(label.to_string());
+                overridable = inh.overridable;
+            }
         } else if locked_at.is_none() {
             // No locked ancestor: a lower layer replaces freely.
             effective = rule.clone();
+            effective_label = label;
             locked_base = inh.locked.then(|| rule.clone());
             locked_at = inh.locked.then(|| label.to_string());
             overridable = inh.overridable;
         } else if overridable {
             // A higher authority granted replacement (section 7.4 exemption).
             effective = rule.clone();
+            effective_label = label;
             locked_base = inh.locked.then(|| rule.clone());
             locked_at = inh.locked.then(|| label.to_string());
             overridable = inh.overridable;
@@ -151,8 +177,21 @@ fn fold_rule(
                 });
             }
             effective = rule.clone();
+            effective_label = label;
+            // A lower layer may ALSO lock: its (verified ≥) definition becomes
+            // the new, stricter floor, so a further-down layer is checked
+            // against IT, not only the original ancestor (section 7.4: every
+            // locked ancestor is enforced, not just the highest).
+            if inh.locked {
+                locked_base = Some(rule.clone());
+                locked_at = Some(label.to_string());
+                overridable = inh.overridable;
+            }
         }
     }
+    // Stamp composition provenance (section 7.4) onto the effective rule.
+    effective.origin_layer = Some(effective_label.to_string());
+    effective.locked_at = locked_at;
     Ok(effective)
 }
 

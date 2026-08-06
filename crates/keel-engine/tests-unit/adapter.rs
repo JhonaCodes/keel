@@ -32,6 +32,8 @@ fn block_rule(id: &str, on: Vec<EventKind>) -> CompiledRule {
             always: None,
         },
         constraints: None,
+        origin_layer: None,
+        locked_at: None,
     }
 }
 

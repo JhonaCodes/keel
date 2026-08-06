@@ -56,15 +56,17 @@ detallado en `RCCA_future.md:77-111` (se promueve al núcleo en Fase 2).
 **Hecho cuando:** hay un workflow que corre `keel` sobre el lock y publica
 evidencia; el job falla si el binding/lock es inválido.
 
-### 4 · Monotonicidad de composición D1–D4 (sección 7.4)  · ⏭ stub  · CÓDIGO
-**Qué:** activar la verificación de monotonicidad (D1 cobertura / D2 sensibilidad
-/ D3 consecuencia / D4 carga cognitiva) al componer capas de autoridad.
+### 4 · Monotonicidad de composición D1–D4 (sección 7.4)  · ✅ HECHO  · CÓDIGO
+**Qué:** verificación de monotonicidad (D1 cobertura / D2 sensibilidad / D3
+consecuencia / D4 carga cognitiva) al componer capas de autoridad.
 **Por qué importa:** garantiza que componer reglas nunca **afloje** una decisión
-en silencio. Hoy hay una sola capa, así que es un stub honesto.
-**Evidencia:** `compile.rs:176-197` (`composition_stub()` no-op documentado); el
-lattice D3 ya vive en `keel-core/src/lib.rs:53-94`. Spec líneas 521-562, ADR-014.
-**Hecho cuando:** existe una 2ª capa de autoridad y el compilador rechaza toda
-composición no monótona.
+en silencio.
+**Evidencia:** `composition::compose` (`crates/keel-engine/src/composition.rs`) +
+capas del workspace §8.5 (`workspace::load_layered`) + resolución §7.1
+(`resolution::resolve`); el lattice D3 vive en `keel-core/src/lib.rs`. Spec líneas
+521-562, ADR-014.
+**Hecho:** el compilador rechaza toda composición no monótona contra un ancestro
+`locked` (`MonotonicityViolation`); `merge:append`/`overridable` incluidos.
 
 ### 5 · Capability manifest + preflight del adapter (inv 8, sección 12.1)  · ✅ HECHO  · CÓDIGO
 **Qué:** que el adapter declare un manifiesto de capacidades y el compilador haga

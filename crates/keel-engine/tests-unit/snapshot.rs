@@ -19,6 +19,8 @@ fn rule(id: &str) -> CompiledRule {
         validate: None,
         enforcement: CompiledEnforcement::default(),
         constraints: None,
+        origin_layer: None,
+        locked_at: None,
     }
 }
 
