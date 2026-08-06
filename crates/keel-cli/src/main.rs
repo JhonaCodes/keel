@@ -146,6 +146,11 @@ enum Command {
         /// Print the settings wiring for the client.
         #[arg(long)]
         print: bool,
+        /// Preflight the published snapshot against the adapter's capability
+        /// manifest (§12.1, invariant 8): fail if a `block` targets an event the
+        /// client cannot prevent. Exit 1 on any unhonorable policy.
+        #[arg(long)]
+        check: bool,
         #[arg(long, default_value = ".")]
         workspace: PathBuf,
     },
@@ -257,14 +262,21 @@ fn main() -> ExitCode {
         Command::Adapter {
             client,
             print: _,
+            check,
             workspace,
-        } => match client.as_str() {
-            "claude-code" => gate::adapter_print_claude_code(&workspace),
-            other => {
-                eprintln!("error: unsupported adapter `{other}` (supported: claude-code)");
-                return ExitCode::FAILURE;
+        } => {
+            if check {
+                commands::adapter_check(&workspace, &client)
+            } else {
+                match client.as_str() {
+                    "claude-code" => gate::adapter_print_claude_code(&workspace),
+                    other => {
+                        eprintln!("error: unsupported adapter `{other}` (supported: claude-code)");
+                        return ExitCode::FAILURE;
+                    }
+                }
             }
-        },
+        }
         Command::Bind {
             workspace,
             project,
