@@ -345,43 +345,33 @@ pub fn audit(
     std::fs::create_dir_all(files.state_dir())?;
     let ledger = Ledger::open(&files.ledger_path())?;
 
-    let agent = files
-        .agents
-        .iter()
-        .find(|a| a.metadata.id == agent_id)
-        .with_context(|| format!("no agent `{agent_id}` in agents/"))?;
-    let executor_id = agent
-        .spec
-        .executor
-        .strip_prefix("executor:")
-        .unwrap_or(&agent.spec.executor);
-    let executor = files
-        .executors
-        .iter()
-        .find(|x| x.metadata.id == executor_id)
-        .with_context(|| {
-            format!("agent `{agent_id}` routes to executor `{executor_id}`, not found in agents/")
-        })?;
+    // Resolve from the SNAPSHOT (the compiled, locked artifact), not the raw
+    // workspace files: `keel audit` must run exactly the agent/executor the
+    // lock pins (invariant 14).
+    let agent = snapshot.agents.get(agent_id).with_context(|| {
+        format!("no agent `{agent_id}` in the snapshot — declare it in agents/ and recompile")
+    })?;
+    let executor = snapshot.executors.get(&agent.executor).with_context(|| {
+        format!(
+            "agent `{agent_id}` routes to executor `{}`, not in the snapshot",
+            agent.executor
+        )
+    })?;
 
     let material = std::fs::read_to_string(input)
         .with_context(|| format!("could not read material {}", input.display()))?;
 
     let agent_spec = AgentSpec {
-        id: agent.metadata.id.clone(),
-        role: agent.spec.role.clone(),
-        objective: agent.spec.objective.clone(),
-        timeout_ms: agent
-            .spec
-            .budget
-            .as_ref()
-            .and_then(|b| b.timeout_ms)
-            .unwrap_or(60_000),
+        id: agent.id.clone(),
+        role: agent.role.clone(),
+        objective: agent.objective.clone(),
+        timeout_ms: agent.timeout_ms.unwrap_or(60_000),
     };
     let exec_spec = ExecutorSpec {
-        id: executor.metadata.id.clone(),
-        command: executor.spec.command.clone(),
-        model: executor.spec.model.clone(),
-        timeout_ms: executor.spec.timeout_ms,
+        id: executor.id.clone(),
+        command: executor.command.clone(),
+        model: executor.model.clone(),
+        timeout_ms: executor.timeout_ms,
     };
 
     let out = run_audit(

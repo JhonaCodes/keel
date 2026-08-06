@@ -92,6 +92,10 @@ pub struct LockComponents {
     pub tools: Vec<String>,
     #[serde(default)]
     pub skills: Vec<String>,
+    #[serde(default)]
+    pub agents: Vec<String>,
+    #[serde(default)]
+    pub executors: Vec<String>,
 }
 
 /// `.keel/keel.lock` — the pinned resolution (section 8.6).
@@ -119,6 +123,8 @@ impl Lock {
         // BTreeMap keys are already ordered, but collect explicitly for clarity.
         let tools: Vec<String> = snapshot.tools.keys().cloned().collect();
         let skills: Vec<String> = snapshot.skills.keys().cloned().collect();
+        let agents: Vec<String> = snapshot.agents.keys().cloned().collect();
+        let executors: Vec<String> = snapshot.executors.keys().cloned().collect();
         Lock {
             project: binding.project.clone(),
             workspace: binding.workspace.clone(),
@@ -128,6 +134,8 @@ impl Lock {
                 rules,
                 tools,
                 skills,
+                agents,
+                executors,
             },
         }
     }

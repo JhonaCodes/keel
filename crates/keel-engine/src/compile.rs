@@ -28,9 +28,9 @@
 //! (invariant 9).
 
 use crate::snapshot::{
-    CompiledBranch, CompiledEnforcement, CompiledPrecondition, CompiledRule, CompiledScope,
-    CompiledSkill, CompiledToolCall, CompiledToolRef, CompiledWhen, ExternalToolDef, OutputKind,
-    Snapshot,
+    CompiledAgent, CompiledBranch, CompiledEnforcement, CompiledExecutor, CompiledPrecondition,
+    CompiledRule, CompiledScope, CompiledSkill, CompiledToolCall, CompiledToolRef, CompiledWhen,
+    ExternalToolDef, OutputKind, Snapshot,
 };
 use crate::tools::{BUILTIN_DETECTORS, BUILTIN_PRECONDITIONS};
 use crate::workspace::WorkspaceFiles;
@@ -59,6 +59,8 @@ pub enum CompileError {
         reference: String,
         hint: String,
     },
+    #[error("agent `{agent}` routes to executor `{executor}`, which is not declared in agents/ — a governed agent must resolve to a known executor (invariant 11)")]
+    UnresolvedExecutor { agent: String, executor: String },
     #[error("rule `{rule}`: invalid regex in detect/validate: {source}")]
     InvalidRegex {
         rule: String,
@@ -122,6 +124,55 @@ pub fn compile(files: &WorkspaceFiles, created_at: String) -> Result<CompileOutc
         );
     }
 
+    // ── Agent executors (section 14.1/14.8): how/where an agent runs ──
+    let mut executors: BTreeMap<String, CompiledExecutor> = BTreeMap::new();
+    for x in &files.executors {
+        if !seen.insert(x.metadata.id.clone()) {
+            return Err(CompileError::DuplicateId(x.metadata.id.clone()));
+        }
+        executors.insert(
+            x.metadata.id.clone(),
+            CompiledExecutor {
+                id: x.metadata.id.clone(),
+                command: x.spec.command.clone(),
+                model: x.spec.model.clone(),
+                timeout_ms: x.spec.timeout_ms,
+            },
+        );
+    }
+
+    // ── Agents (section 14): resolve the executor reference (invariant 11) ──
+    let mut agents: BTreeMap<String, CompiledAgent> = BTreeMap::new();
+    for a in &files.agents {
+        if !seen.insert(a.metadata.id.clone()) {
+            return Err(CompileError::DuplicateId(a.metadata.id.clone()));
+        }
+        let executor_id = a
+            .spec
+            .executor
+            .strip_prefix("executor:")
+            .unwrap_or(&a.spec.executor)
+            .to_string();
+        if !executors.contains_key(&executor_id) {
+            return Err(CompileError::UnresolvedExecutor {
+                agent: a.metadata.id.clone(),
+                executor: executor_id,
+            });
+        }
+        agents.insert(
+            a.metadata.id.clone(),
+            CompiledAgent {
+                id: a.metadata.id.clone(),
+                role: a.spec.role.clone(),
+                executor: executor_id,
+                objective: a.spec.objective.clone(),
+                output_schema: a.spec.output_schema.clone(),
+                timeout_ms: a.spec.budget.as_ref().and_then(|b| b.timeout_ms),
+                max_tokens: a.spec.budget.as_ref().and_then(|b| b.max_tokens),
+            },
+        );
+    }
+
     // ── Composition: DOCUMENTED STUB (see module header, section 7.4) ──
     composition_stub();
 
@@ -132,7 +183,7 @@ pub fn compile(files: &WorkspaceFiles, created_at: String) -> Result<CompileOutc
     }
 
     // ── Index generation + Snapshot creation (canonical hash, invariant 9) ──
-    let snapshot = Snapshot::build(rules, tools, skills, created_at)?;
+    let snapshot = Snapshot::build_full(rules, tools, skills, agents, executors, created_at)?;
     Ok(CompileOutcome { snapshot, warnings })
 }
 

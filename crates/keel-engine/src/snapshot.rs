@@ -32,6 +32,15 @@ pub struct Snapshot {
     /// and content edits do not require recompiling.
     #[serde(default)]
     pub skills: BTreeMap<String, CompiledSkill>,
+    /// Compiled agents, by id (spec section 14). Part of the governed config, so
+    /// they are hashed: a change of executor/model is drift `keel lock --verify`
+    /// and `keel ci resolve` must detect (invariant 14).
+    #[serde(default)]
+    pub agents: BTreeMap<String, CompiledAgent>,
+    /// Compiled agent executors, by id (spec section 14.1/14.8). Hashed for the
+    /// same reason: the model/command that runs an agent is part of `locked`.
+    #[serde(default)]
+    pub executors: BTreeMap<String, CompiledExecutor>,
     /// Event → candidate rules index (spec section 10.1 "Index generation").
     pub index: BTreeMap<EventKind, Vec<usize>>,
 }
@@ -43,6 +52,8 @@ struct HashableContent<'a> {
     rules: &'a Vec<CompiledRule>,
     tools: &'a BTreeMap<String, ExternalToolDef>,
     skills: &'a BTreeMap<String, CompiledSkill>,
+    agents: &'a BTreeMap<String, CompiledAgent>,
+    executors: &'a BTreeMap<String, CompiledExecutor>,
     index: &'a BTreeMap<EventKind, Vec<usize>>,
 }
 
@@ -50,10 +61,31 @@ impl Snapshot {
     /// Builds the snapshot, computing its canonical hash. The only way to
     /// construct one — there is no way to forge a snapshot with a foreign
     /// hash.
+    /// Convenience builder with no agents/executors (used by focused tests).
     pub fn build(
         rules: Vec<CompiledRule>,
         tools: BTreeMap<String, ExternalToolDef>,
         skills: BTreeMap<String, CompiledSkill>,
+        created_at: String,
+    ) -> Result<Self, serde_json::Error> {
+        Self::build_full(
+            rules,
+            tools,
+            skills,
+            BTreeMap::new(),
+            BTreeMap::new(),
+            created_at,
+        )
+    }
+
+    /// Full builder: the whole governed config, including agents/executors,
+    /// goes into the canonical hash (invariant 14).
+    pub fn build_full(
+        rules: Vec<CompiledRule>,
+        tools: BTreeMap<String, ExternalToolDef>,
+        skills: BTreeMap<String, CompiledSkill>,
+        agents: BTreeMap<String, CompiledAgent>,
+        executors: BTreeMap<String, CompiledExecutor>,
         created_at: String,
     ) -> Result<Self, serde_json::Error> {
         let mut index: BTreeMap<EventKind, Vec<usize>> = BTreeMap::new();
@@ -66,6 +98,8 @@ impl Snapshot {
             rules: &rules,
             tools: &tools,
             skills: &skills,
+            agents: &agents,
+            executors: &executors,
             index: &index,
         })?;
         Ok(Snapshot {
@@ -74,6 +108,8 @@ impl Snapshot {
             rules,
             tools,
             skills,
+            agents,
+            executors,
             index,
         })
     }
@@ -103,6 +139,8 @@ impl Snapshot {
             rules: &snap.rules,
             tools: &snap.tools,
             skills: &snap.skills,
+            agents: &snap.agents,
+            executors: &snap.executors,
             index: &snap.index,
         })?;
         if recomputed != snap.hash {
@@ -343,6 +381,38 @@ pub struct CompiledSkill {
     /// Rejected/accepted pairs feeding the packet `exemplar` (section 10.4).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub examples: Vec<(String, String)>,
+}
+
+/// Compiled agent (spec section 14): a logical responsibility run by an executor.
+/// Part of the governed config and therefore hashed (invariant 14).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompiledAgent {
+    pub id: String,
+    pub role: String,
+    /// Executor id this agent routes to (the `executor:` prefix is stripped).
+    pub executor: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub objective: Option<String>,
+    /// Workspace-relative path to the JSON Schema the AgentResult is validated
+    /// against (invariant 12).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_schema: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u64>,
+}
+
+/// Compiled agent executor (spec section 14.1/14.8): how/where an agent runs.
+/// The `model`/`command` are hashed so a change is drift the lock detects.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompiledExecutor {
+    pub id: String,
+    pub command: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
 }
 
 #[cfg(test)]
