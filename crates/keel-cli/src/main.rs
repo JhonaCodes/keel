@@ -174,6 +174,30 @@ enum Command {
         #[arg(long)]
         verify: bool,
     },
+    /// Compliance plane (spec §5.2, §8): the SAME engine run in CI over the
+    /// pinned lock. Where `locked` finally becomes a guarantee, because CI runs
+    /// on infrastructure the developer does not control.
+    Ci {
+        #[command(subcommand)]
+        command: CiCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum CiCommand {
+    /// Fail BEFORE doing work unless the binding + lock resolve: binding
+    /// present, workspace compiles + RuleTests pass, and the lock matches a
+    /// fresh compile (no drift). Exit non-zero on any failure.
+    Resolve {
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+    },
+    /// Resolve, then run the configured audit and point at the evidence. In
+    /// this minimal plane `resolve` is the gate; `run` reports the ledger.
+    Run {
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -247,6 +271,10 @@ fn main() -> ExitCode {
             org,
         } => commands::bind(&workspace, project, org),
         Command::Lock { workspace, verify } => commands::lock(&workspace, verify),
+        Command::Ci { command } => match command {
+            CiCommand::Resolve { workspace } => commands::ci_resolve(&workspace),
+            CiCommand::Run { workspace } => commands::ci_run(&workspace),
+        },
     };
 
     match result {
