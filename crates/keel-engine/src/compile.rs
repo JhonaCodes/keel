@@ -149,6 +149,7 @@ pub fn compile(files: &WorkspaceFiles, created_at: String) -> Result<CompileOutc
                 command: x.spec.command.clone(),
                 model: x.spec.model.clone(),
                 timeout_ms: x.spec.timeout_ms,
+                env: x.spec.env.clone(),
             },
         );
     }

@@ -44,7 +44,8 @@ Leyenda, sin zona gris:
 | **Cov** | Cobertura e2e del packet | ✅ **HECHO (Fase D)**: `test/tests/packet_content.rs` asserta el packet en stderr del binario real (verdict+finding+source+snapshot+evidence) | `packet_content.rs` | — | D ✅ |
 | **#12** | Aislamiento de tests vs config del usuario | `gate.rs:64-69` inyecta el env real → una precondición `env.present` puede voltearse por una var del host/CI | `gate.rs:64-69`, `tools.rs:141-149` | Flag `--no-inherit-env` + harness hermético (env scrub, clock/id fijos) | Chico-Medio | B |
 | **#7** | Re-entrega de skill tras compactación | ✅ **HECHO (Fase E)**: evento de capa-sesión `context.compacted` resetea `loaded_skills` de la sesión → el próximo match re-entrega. Extensión consciente (no uno de los 17 eventos de gobernanza). | `event.rs ContextCompacted`; `gate.rs`; `session.rs` | — | E ✅ |
-| **T3** | Baseline de seguridad del executor (secret-ref/allowlist/sandbox) — el limbo "permissions" de inv 13 | `run_executor` arma `Command` crudo, hereda env; **desbloqueado** (no gated por 0c) pero **no programado en este track** | `audit.rs::run_executor` | env_clear + allowlist + network-deny/read-only | Medio | (sin programar) |
+| **T3 (env)** | Aislamiento de env del executor (§13.1 "no secret inheritance by default") | 🔨→✅ **HECHO**: `run_executor` hace `env_clear()` + pasa solo `AgentExecutor.env` (allowlist) + PATH; default = sin herencia. | `audit.rs::run_executor`; `snapshot.rs CompiledExecutor.env` | — | ✅ |
+| **T3 (resto)** | Sandbox OS del executor (network-deny/read-only) + `secret-ref` — resto de §13.1 | NO-EMPEZADO | `audit.rs` | sandboxing por SO + subsistema de secretos (inv 10 / D4) | Medio-Grande | ⏭ (ver INVENTARIO C) |
 
 ---
 

@@ -40,6 +40,7 @@ fn real_executor_invalid_is_semantic_review() {
         ],
         model: Some("stub".into()),
         timeout_ms: Some(2000),
+        env: vec![],
     };
     let out = run_audit(
         &agent(),
@@ -71,6 +72,7 @@ fn real_executor_unvalidated_output_maps_to_unknown() {
         ],
         model: Some("stub".into()),
         timeout_ms: Some(2000),
+        env: vec![],
     };
     let out = run_audit(
         &agent(),
@@ -121,6 +123,7 @@ fn result_violating_output_schema_maps_to_unknown() {
         ],
         model: Some("stub".into()),
         timeout_ms: Some(2000),
+        env: vec![],
     };
     let schema = schema_requiring_findings();
     let out = run_audit(
@@ -155,6 +158,7 @@ fn result_matching_output_schema_is_trusted() {
         ],
         model: Some("stub".into()),
         timeout_ms: Some(2000),
+        env: vec![],
     };
     let schema = schema_requiring_findings();
     let out = run_audit(
@@ -191,6 +195,7 @@ fn real_executor_over_budget_maps_to_unknown_and_records_real_tokens() {
         ],
         model: Some("stub".into()),
         timeout_ms: Some(2000),
+        env: vec![],
     };
     let out = run_audit(
         &budgeted_agent(100),
@@ -228,6 +233,7 @@ fn real_executor_within_budget_records_real_tokens() {
         ],
         model: Some("stub".into()),
         timeout_ms: Some(2000),
+        env: vec![],
     };
     let out = run_audit(
         &budgeted_agent(100),
@@ -264,6 +270,7 @@ fn real_executor_timeout_maps_to_unknown() {
         ],
         model: Some("stub".into()),
         timeout_ms: Some(100),
+        env: vec![],
     };
     let out = run_audit(
         &agent(),
@@ -285,5 +292,67 @@ fn real_executor_timeout_maps_to_unknown() {
         out.findings.iter().any(|f| f.contains("timed out")),
         "the timeout must be reported: {:?}",
         out.findings
+    );
+}
+
+/// An executor that echoes its `$HOME`, so env inheritance is observable in the
+/// finding. `HOME` is present in this test process but is NOT auto-passed
+/// (only PATH is), so it is the probe.
+fn home_echo_executor(env: Vec<String>) -> ExecutorSpec {
+    ExecutorSpec {
+        id: "home-echo".into(),
+        command: vec![
+            "sh".into(),
+            "-c".into(),
+            r#"cat >/dev/null; printf '{"verdict":"valid","findings":["HOME=%s"]}' "$HOME""#.into(),
+        ],
+        model: Some("stub".into()),
+        timeout_ms: Some(2000),
+        env,
+    }
+}
+
+fn run_home_echo(ev: &str, env: Vec<String>) -> Vec<String> {
+    let ledger = Ledger::open_in_memory().unwrap();
+    run_audit(
+        &agent(),
+        &home_echo_executor(env),
+        "diff",
+        "sha256:x",
+        Some("s1"),
+        &ledger,
+        ev.into(),
+        "2026-01-01T00:00:00Z".into(),
+        None,
+    )
+    .findings
+}
+
+/// section 13.1 ("no secret inheritance to child sessions by default"): the executor
+/// subprocess does NOT see the parent's env unless the var is on its allowlist.
+/// `HOME` is present in the parent; without the allowlist the child's `$HOME` is
+/// empty; with `env: [HOME]` it is inherited.
+#[test]
+fn executor_does_not_inherit_host_env_unless_allowlisted() {
+    let Some(home) = std::env::var("HOME").ok().filter(|h| !h.is_empty()) else {
+        return; // no HOME in this environment → nothing to probe
+    };
+
+    // Default (empty allowlist): HOME is scrubbed — the finding is "HOME=".
+    let scrubbed = run_home_echo("ev_env1", vec![]);
+    assert!(
+        scrubbed.iter().any(|f| f == "HOME="),
+        "without an allowlist the host env must be scrubbed: {scrubbed:?}"
+    );
+    assert!(
+        !scrubbed.iter().any(|f| f.contains(&home)),
+        "the parent's HOME must NOT leak into the executor: {scrubbed:?}"
+    );
+
+    // Allowlisted: HOME is passed through.
+    let passed = run_home_echo("ev_env2", vec!["HOME".into()]);
+    assert!(
+        passed.iter().any(|f| f == &format!("HOME={home}")),
+        "an allowlisted var must be inherited: {passed:?}"
     );
 }

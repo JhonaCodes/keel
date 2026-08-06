@@ -47,6 +47,7 @@ fn semantic_invalid_maps_to_review_and_records_semantic_origin() {
         ],
         model: Some("stub".into()),
         timeout_ms: Some(2000),
+        env: vec![],
     };
     let out = run_audit(
         &agent,
