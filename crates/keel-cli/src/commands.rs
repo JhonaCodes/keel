@@ -717,3 +717,82 @@ fn parse_project_from_remote(url: &str) -> Option<String> {
     }
     Some(format!("project:{org}/{repo}"))
 }
+
+// ─────────────────────────── ci (compliance plane) ───────────────────────────
+
+/// Resolves the compliance plane: binding present, workspace compiles + tests
+/// pass, and the lock matches a FRESH compile (no drift). Returns `true` when
+/// everything resolves. This is the same engine as local, run over the pinned
+/// lock — the point where `locked` becomes a guarantee (§5.2, §8).
+fn ci_resolve_inner(root: &Path) -> Result<bool> {
+    use keel_engine::lock::{Lock, ProjectBinding};
+
+    // 1) Fail before doing work if the repo is not bound.
+    let binding = match ProjectBinding::load(root) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("ci: {e}");
+            return Ok(false);
+        }
+    };
+    println!("binding    {} → {}", binding.project, binding.workspace);
+
+    // 2) Compile from a fresh, ephemeral state and gate on RuleTests.
+    let files = workspace::load(root)?;
+    let outcome = compiler::compile(&files, now_ts())?;
+    let reports = testkit::run_tests(&outcome.snapshot, &files.tests, &files.root);
+    let failed: Vec<_> = reports.iter().filter(|r| !r.passed).collect();
+    if !failed.is_empty() {
+        eprintln!("ci: {} RuleTest(s) fail — not resolved", failed.len());
+        for r in &failed {
+            eprintln!("  FAIL {} → {}", r.test_id, r.detail);
+        }
+        return Ok(false);
+    }
+    std::fs::create_dir_all(files.state_dir())?;
+    outcome.snapshot.save(&files.snapshot_path())?;
+    println!("compiled   {} ({} rules)", outcome.snapshot.hash, outcome.snapshot.rules.len());
+
+    // 3) The lock must exist and match the fresh compile (invariant 9).
+    let lock = match Lock::load(root) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("ci: {e}");
+            return Ok(false);
+        }
+    };
+    match lock.verify(&binding, &outcome.snapshot, env!("CARGO_PKG_VERSION")) {
+        Ok(()) => {
+            println!("lock       OK ({})", lock.snapshot_hash);
+            Ok(true)
+        }
+        Err(reason) => {
+            eprintln!("ci: lock drift — {reason}");
+            Ok(false)
+        }
+    }
+}
+
+/// `keel ci resolve` — the gate: exit non-zero if the binding/lock do not
+/// resolve, before running any workflow.
+pub(crate) fn ci_resolve(root: &Path) -> Result<ExitCode> {
+    if ci_resolve_inner(root)? {
+        println!("ci resolve OK — binding + lock resolve against a fresh compile");
+        Ok(ExitCode::SUCCESS)
+    } else {
+        Ok(ExitCode::FAILURE)
+    }
+}
+
+/// `keel ci run` — resolve, then run the configured audit and point at the
+/// evidence. In this minimal plane `resolve` is the gate; `run` reports where
+/// the evidence (the append-only ledger) lives so CI can upload it.
+pub(crate) fn ci_run(root: &Path) -> Result<ExitCode> {
+    if !ci_resolve_inner(root)? {
+        return Ok(ExitCode::FAILURE);
+    }
+    let files = workspace::load(root)?;
+    println!("evidence   {}", files.ledger_path().display());
+    println!("ci run OK");
+    Ok(ExitCode::SUCCESS)
+}

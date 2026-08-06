@@ -1,0 +1,47 @@
+# Reference CI workflow for a keel-GOVERNED repository (spec §5.2, §8).
+#
+# Copy this into `.github/workflows/` of YOUR project's repo — the one that has
+# a `.keel/project.yaml` binding and a `.keel/keel.lock` (created by `keel bind`
+# and `keel lock`). This is where `locked` becomes a real guarantee: CI runs the
+# SAME engine on infrastructure the developer does not control, and fails BEFORE
+# doing work if the binding/lock do not resolve.
+#
+# NOTE: keel's own repository is the *tool*, not a governed workspace, so it does
+# not run this workflow. This file is a template for downstream projects.
+name: Keel Audit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  keel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Install the `keel` binary. Use a released binary in production; building
+      # from source is shown here for completeness.
+      - name: Install keel
+        run: cargo install --git https://github.com/JhonaCodes/keel keel-cli
+
+      # Fail before running anything if the binding + lock do not resolve
+      # (binding present, workspace compiles + RuleTests pass, no lock drift).
+      - name: Resolve binding + lock
+        run: keel ci resolve
+
+      # Run the configured audit and surface the evidence path.
+      - name: Run audit
+        run: keel ci run
+
+      # Publish the append-only evidence ledger for inspection.
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keel-evidence
+          path: .keel-state/
