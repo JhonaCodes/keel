@@ -13,7 +13,7 @@ repo — has **not been run**; that measurement, not the code, is what the spec
 makes the gate for growing further.
 
 Snapshot of the tree: 4 crates (`keel-core`, `keel-dsl`, `keel-engine`,
-`keel-cli`), **82 tests green**. Kinds: Workspace, Rule, Tool, Skill,
+`keel-cli`), **85 tests green**. Kinds: Workspace, Rule, Tool, Skill,
 Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 `observe`, `gate`, `audit`, `adapter` (+`--check` preflight), `bind`, `lock`,
 `ci resolve`/`ci run`, `explain`, `prune`, `test`, `doctor`.
@@ -53,9 +53,9 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 | **inv 9** local & CI same lock/hash | ✅ | `keel.lock` pins the snapshot hash; `keel lock --verify` / `keel ci resolve` fail on drift |
 | **inv 10** secrets by reference | ⏭ | no secrets in scope yet |
 | **inv 11** Agent declares what, Executor how/where | ✅ | `kind: Agent` / `kind: AgentExecutor` |
-| **inv 12** child result schema-validated | 🟡 | `audit.rs` validates verdict-json shape; full JSON-Schema of AgentResult pending |
+| **inv 12** child result schema-validated | ✅ | `audit.rs::schema_check` validates the AgentResult against the agent's declared `outputSchema` (jsonschema); non-conformance → unknown |
 | **inv 13** delegation limits (depth/time/cost) | 🟡 | timeout enforced; maxDepth/cost budgets partial |
-| **inv 14** executor/model change in provenance | 🟡 | recorded in ledger detail; not in a lock |
+| **inv 14** executor/model change in provenance | ✅ | agents/executors are in the snapshot hash + `keel.lock`; a model/command change is drift `keel lock --verify`/`keel ci resolve` catch |
 | **inv 15** composition monotonicity | ⏭ | one authority layer — documented stub (`compile.rs::composition_stub`) |
 | **inv 16** session append-only, non-authoritative | ✅ | `session.rs` only records deliveries; ledger has no UPDATE/DELETE |
 | **inv 17** phases owned by runtime, artifact-gated | 🟡 | completion gate exists; full phase machine section 6.2 pending |
@@ -139,7 +139,7 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 ## ADRs 1–23
 
 001 ✅ · 002 ✅ · 003 ✅ · 004 ✅ · 005 ⏭(no MCP yet) · 006 ⏭ · 007 ✅(lock file + verify) ·
-008 ✅(adapter preflight) · 009 ✅ · 010 ✅(ephemeral) · 011 ✅ · 012 🟡 · 013 🟡 · 014 🟡 · 015 ✅ ·
+008 ✅(adapter preflight) · 009 ✅ · 010 ✅(ephemeral) · 011 ✅ · 012 ✅(outputSchema validated) · 013 🟡 · 014 ✅(agents in lock) · 015 ✅ ·
 016 ✅ · 017 ✅ · 018 🟡 · 019 ✅ · 020 ✅(this doc honors it) · 021 ✅ · 022 ✅ · 023 ✅
 
 ## `RCCA_future.md`
