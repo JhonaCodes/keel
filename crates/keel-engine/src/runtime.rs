@@ -18,7 +18,7 @@
 //! compiled snapshot (ADR-004: the runtime has no types to represent
 //! authoring configuration).
 
-use crate::snapshot::{CompiledBranch, CompiledRule, Snapshot};
+use crate::snapshot::{CompiledBranch, CompiledRule, EnvConstraint, Snapshot};
 use crate::tools::{self, ExecContext};
 use keel_core::event::Event;
 use keel_core::{Decision, OriginClass, Verdict};
@@ -131,35 +131,60 @@ fn evaluate_rule(
         }
     }
 
-    // 5. Validate: the real verdict (0 tokens if the tool is deterministic).
-    let (verdict, origin, latency_ms, findings) = match &rule.validate {
-        Some(call) => {
-            let outcome = tools::run_validate(call, event, &snapshot.tools, ctx);
-            (
-                outcome.verdict,
-                outcome.origin,
-                started.elapsed().as_millis() as u64 + outcome.latency_ms,
-                outcome.findings,
-            )
-        }
-        None => {
-            if rule.enforcement.always.is_some() {
-                // Cognitive activation: does not govern an action; records
-                // the context load it would have delivered.
+    // 4.5 Environment constraints (section 11.4): a denied or non-allowed
+    // environment is a deterministic Invalid, evaluated BEFORE content — there
+    // is no point validating an action whose environment is already forbidden.
+    // It flows through the rule's `invalid` enforcement branch below, so it
+    // carries the same decision, packet and skills as any other invalid finding.
+    let constraint_finding = rule
+        .constraints
+        .as_ref()
+        .and_then(|c| c.environment.as_ref())
+        .and_then(|env| env_violation(env, event));
+
+    // 5. Validate: the real verdict (0 tokens if the tool is deterministic),
+    // unless a constraint already denied the environment.
+    let (verdict, origin, latency_ms, findings) = if let Some(reason) = constraint_finding {
+        (
+            Verdict::Invalid,
+            OriginClass::Deterministic,
+            started.elapsed().as_millis() as u64,
+            vec![tools::Finding {
+                message: reason,
+                file: None,
+                line: None,
+            }],
+        )
+    } else {
+        match &rule.validate {
+            Some(call) => {
+                let outcome = tools::run_validate(call, event, &snapshot.tools, ctx);
                 (
-                    Verdict::Valid,
-                    OriginClass::Deterministic,
-                    started.elapsed().as_millis() as u64,
-                    vec![],
+                    outcome.verdict,
+                    outcome.origin,
+                    started.elapsed().as_millis() as u64 + outcome.latency_ms,
+                    outcome.findings,
                 )
-            } else {
-                // No validate and no always: undecidable by construction.
-                (
-                    Verdict::Unknown,
-                    OriginClass::Deterministic,
-                    started.elapsed().as_millis() as u64,
-                    vec![],
-                )
+            }
+            None => {
+                if rule.enforcement.always.is_some() {
+                    // Cognitive activation: does not govern an action; records
+                    // the context load it would have delivered.
+                    (
+                        Verdict::Valid,
+                        OriginClass::Deterministic,
+                        started.elapsed().as_millis() as u64,
+                        vec![],
+                    )
+                } else {
+                    // No validate and no always: undecidable by construction.
+                    (
+                        Verdict::Unknown,
+                        OriginClass::Deterministic,
+                        started.elapsed().as_millis() as u64,
+                        vec![],
+                    )
+                }
             }
         }
     };
@@ -177,6 +202,35 @@ fn evaluate_rule(
     );
     eval.load_skills = load_skills;
     Some(eval)
+}
+
+/// Environment constraint check (section 11.4). The environment is classified from
+/// the event's connection context — its `command` and `content` (e.g. a
+/// connection string) — by case-insensitive token match (deterministic, 0
+/// tokens). `deny` blocks ALWAYS; a non-empty `allow` is a strict allowlist:
+/// the action must name an allowed environment, otherwise it is denied. Returns
+/// the reason when the constraint is violated.
+fn env_violation(env: &EnvConstraint, event: &Event) -> Option<String> {
+    let mut hay = String::new();
+    if let Some(c) = &event.command {
+        hay.push_str(&c.to_lowercase());
+        hay.push(' ');
+    }
+    if let Some(c) = &event.content {
+        hay.push_str(&c.to_lowercase());
+    }
+    for d in &env.deny {
+        if hay.contains(&d.to_lowercase()) {
+            return Some(format!("denied environment `{d}` (section 11.4)"));
+        }
+    }
+    if !env.allow.is_empty() && !env.allow.iter().any(|a| hay.contains(&a.to_lowercase())) {
+        return Some(format!(
+            "no allowed environment present (allow: {:?}) (section 11.4)",
+            env.allow
+        ));
+    }
+    None
 }
 
 fn pick_branch(rule: &CompiledRule, verdict: Verdict) -> Option<&CompiledBranch> {

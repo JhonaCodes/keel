@@ -213,3 +213,38 @@ fn declared_capabilities_are_surfaced_in_detail() {
         "declared capabilities must appear in the evidence detail: {detail}"
     );
 }
+
+/// F1 (section 11.4): the environment classifier. `deny` matches take priority and
+/// are case-insensitive; a non-empty `allow` denies when no allowed token is
+/// present; an empty constraint never fires.
+#[test]
+fn env_violation_classifies_deny_and_allowlist() {
+    use crate::snapshot::EnvConstraint;
+    let cmd = |c: &str| Event {
+        kind: EventKind::CommandRequested,
+        session_id: None,
+        file: None,
+        language: None,
+        content: None,
+        line: None,
+        command: Some(c.into()),
+        env: Default::default(),
+        files: vec![],
+    };
+    let env = EnvConstraint {
+        allow: vec!["local".into(), "docker-dev".into()],
+        deny: vec!["staging".into(), "production".into()],
+    };
+    // deny wins, case-insensitive.
+    assert!(env_violation(&env, &cmd("psql PRODUCTION-db")).is_some());
+    // allowed environment passes.
+    assert!(env_violation(&env, &cmd("psql local/app")).is_none());
+    // no allowed token present → allowlist miss.
+    assert!(env_violation(&env, &cmd("psql somewhere/app")).is_some());
+    // empty constraint never fires.
+    let empty = EnvConstraint {
+        allow: vec![],
+        deny: vec![],
+    };
+    assert!(env_violation(&empty, &cmd("psql production-db")).is_none());
+}

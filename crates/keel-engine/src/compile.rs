@@ -77,6 +77,12 @@ pub enum CompileError {
     ExternalDetect { rule: String },
     #[error("rule `{rule}`: reviewAfter `{value}` is not a valid ISO-8601 duration")]
     BadReviewAfter { rule: String, value: String },
+    #[error("rule `{rule}`: malformed `constraints` block — {source}")]
+    BadConstraints {
+        rule: String,
+        #[source]
+        source: serde_json::Error,
+    },
     #[error("snapshot not serializable: {0}")]
     Snapshot(#[from] serde_json::Error),
 }
@@ -365,6 +371,20 @@ fn compile_rule(
             ));
     }
 
+    // Type the loose DSL `constraints` Value at compile: a malformed shape is a
+    // build error, never a silently-ignored field at eval (section 11.4).
+    let constraints = match &spec.constraints {
+        Some(v) => Some(
+            serde_json::from_value::<crate::snapshot::CompiledConstraints>(v.clone()).map_err(
+                |e| CompileError::BadConstraints {
+                    rule: id.clone(),
+                    source: e,
+                },
+            )?,
+        ),
+        None => None,
+    };
+
     Ok(CompiledRule {
         id: id.clone(),
         version: rule.metadata.version.clone(),
@@ -394,7 +414,7 @@ fn compile_rule(
         preconditions,
         validate,
         enforcement,
-        constraints: spec.constraints.clone(),
+        constraints,
     })
 }
 
