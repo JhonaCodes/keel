@@ -19,12 +19,16 @@
 //! - otherwise (no `locked` ancestor) — the lower layer replaces freely.
 //!
 //! A weakening that would otherwise be rejected is ALLOWED only when a governed
-//! `Exception` (section 7.4) authorizes it — matching the rule and owned by the
-//! locking scope, unexpired as of a caller-supplied reference date. Applied
-//! exceptions are returned so the CLI records them as `human` decisions
-//! (audited, never silent). `overridable` is monotonically non-increasing as
-//! authority descends: a lower layer can drop the exemption, never grant one a
-//! higher lock withheld.
+//! `Exception` (section 7.4) authorizes it — matching the rule, owned by the
+//! locking scope, unexpired as of a caller-supplied reference date, and carrying
+//! a bounded `paths.include`. The relaxation is a BOUNDED LIFT: the waived paths
+//! are carved out of the locked rule (it no longer fires there), while the lock
+//! stands at full strength everywhere else — the lower layer's weaker rewrite is
+//! not adopted, so nothing outside the waiver is weakened. Applied exceptions
+//! are returned so the CLI records them as `human` decisions (audited, never
+//! silent). `overridable` is monotonically non-increasing as authority
+//! descends: a lower layer can drop the exemption, never grant one a higher
+//! lock withheld.
 //!
 //! The comparator reasons over the COMPILED rule (`snapshot::CompiledRule`), so
 //! decisions are already floor-normalized (section 4.7) before D3 runs.
@@ -98,26 +102,34 @@ pub struct Inheritance {
 /// A governed exception (spec section 7.4), reduced to what composition needs.
 /// `rule_id` is the bare rule id (no `rule:` prefix); `owner` is the scope that
 /// declared the lock (must equal the violation's `locked_at`); `expiry` is an
-/// ISO date (`YYYY-MM-DD`).
+/// ISO date (`YYYY-MM-DD`); `scope_include` is the BOUNDED path set the waiver
+/// applies to — the locked rule is lifted ONLY there.
 #[derive(Debug, Clone)]
 pub struct ExceptionInput {
     pub rule_id: String,
     pub owner: String,
     pub reason: String,
     pub expiry: String,
+    pub scope_include: Vec<String>,
 }
 
 /// An exception that was actually applied during composition — surfaced so the
 /// CLI can record it in the ledger as a `human` decision (section 7.4: audited,
-/// never silent).
+/// never silent). The relaxation LIFTS the locked rule within `scope` (that
+/// coverage is carved out); the lock stands at full strength elsewhere.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppliedException {
     pub rule: String,
     pub owner: String,
     pub reason: String,
     pub expiry: String,
+    /// The dimension the lower layer attempted to weaken (what triggered the
+    /// need for a waiver). The relaxation itself is a scoped lift, not a
+    /// per-dimension downgrade, so nothing outside `scope` is weakened.
     pub dimension: Dimension,
     pub violated_by: String,
+    /// The bounded coverage the lock was lifted within.
+    pub scope: Vec<String>,
 }
 
 /// One composition layer's compiled rules, tagged with the layer label used in
@@ -172,23 +184,33 @@ pub fn compose(
     })
 }
 
-/// Consults the governed exceptions for a would-be violation `v`. Records and
-/// suppresses it if a valid (matching, unexpired) exception exists; otherwise
-/// returns the violation (annotated if a matching exception was expired or
-/// unverifiable). Section 7.4: relaxation is legitimate only via an Exception.
+/// Consults the governed exceptions for a would-be violation `v`. On a valid
+/// (matching, unexpired, path-bounded) exception it records the waiver and
+/// returns `Ok(scope_include)` — the bounded coverage the caller must carve out
+/// of the locked rule. Otherwise it returns the violation, annotated if a
+/// matching exception was expired, unverifiable, or unbounded. Section 7.4:
+/// relaxation is legitimate only via a governed Exception, and it is BOUNDED.
 fn govern(
     v: MonotonicityViolation,
     exceptions: &[ExceptionInput],
     reference_date: Option<&str>,
     applied: &mut Vec<AppliedException>,
-) -> Result<(), MonotonicityViolation> {
+) -> Result<Vec<String>, MonotonicityViolation> {
     let Some(exc) = exceptions
         .iter()
         .find(|e| e.rule_id == v.rule && e.owner == v.locked_at)
     else {
         return Err(v);
     };
+    let annotate = |v: MonotonicityViolation, msg: &str| MonotonicityViolation {
+        detail: format!("{} ({msg})", v.detail),
+        ..v
+    };
     match exception_active(&exc.expiry, reference_date) {
+        Some(true) if exc.scope_include.is_empty() => Err(annotate(
+            v,
+            "a matching Exception exists but declares no path scope to bound the relaxation",
+        )),
         Some(true) => {
             applied.push(AppliedException {
                 rule: v.rule.clone(),
@@ -197,24 +219,36 @@ fn govern(
                 expiry: exc.expiry.clone(),
                 dimension: v.dimension,
                 violated_by: v.violated_by.clone(),
+                scope: exc.scope_include.clone(),
             });
-            Ok(())
+            Ok(exc.scope_include.clone())
         }
-        Some(false) => Err(MonotonicityViolation {
-            detail: format!(
-                "{} (a matching Exception exists but expired on {})",
-                v.detail, exc.expiry
-            ),
-            ..v
-        }),
-        None => Err(MonotonicityViolation {
-            detail: format!(
-                "{} (a matching Exception exists but its expiry could not be verified)",
-                v.detail
-            ),
-            ..v
-        }),
+        Some(false) => Err(annotate(
+            v,
+            &format!("a matching Exception exists but expired on {}", exc.expiry),
+        )),
+        None => Err(annotate(
+            v,
+            "a matching Exception exists but its expiry could not be verified",
+        )),
     }
+}
+
+/// Lifts a `locked` rule within a bounded scope (spec section 7.4 governed
+/// relaxation): the waived path patterns are carved OUT of the rule's coverage,
+/// so it no longer fires there. Everywhere else the locked rule is unchanged —
+/// nothing outside the waiver is weakened.
+fn carve_out(base: &CompiledRule, waived_paths: &[String]) -> CompiledRule {
+    let mut out = base.clone();
+    let mut scope = out.scope.take().unwrap_or_default();
+    for p in waived_paths {
+        if !scope.exclude.contains(p) {
+            scope.exclude.push(p.clone());
+        }
+    }
+    scope.exclude.sort();
+    out.scope = Some(scope);
+    out
 }
 
 /// `Some(true/false)` when both dates are ISO `YYYY-MM-DD` and comparable;
@@ -295,18 +329,28 @@ fn fold_rule(
             // restrictive as the ancestor (section 7.4) — unless a governed
             // Exception authorizes the relaxation.
             let base = locked_base.as_ref().expect("locked_at implies locked_base");
-            if let Err((dimension, detail)) = at_least_as_restrictive(rule, base) {
-                let v = MonotonicityViolation {
-                    rule: rule.id.clone(),
-                    locked_at: locked_at.clone().expect("locked_at set"),
-                    violated_by: label.to_string(),
-                    dimension,
-                    detail,
-                };
-                govern(v, exceptions, reference_date, applied)?;
+            match at_least_as_restrictive(rule, base) {
+                Ok(()) => {
+                    // A genuine strengthening: adopt the stricter definition.
+                    effective = rule.clone();
+                    effective_label = label;
+                }
+                Err((dimension, detail)) => {
+                    let v = MonotonicityViolation {
+                        rule: rule.id.clone(),
+                        locked_at: locked_at.clone().expect("locked_at set"),
+                        violated_by: label.to_string(),
+                        dimension,
+                        detail,
+                    };
+                    // A valid Exception LIFTS the locked rule within its bounded
+                    // scope; the lock stands at full strength elsewhere. The
+                    // lower layer's weaker rewrite is NOT adopted, so nothing
+                    // outside the waiver is weakened.
+                    let waived = govern(v, exceptions, reference_date, applied)?;
+                    effective = carve_out(base, &waived);
+                }
             }
-            effective = rule.clone();
-            effective_label = label;
             // A lower layer may ALSO lock: its (verified ≥) definition becomes
             // the new, stricter floor, so a further-down layer is checked
             // against IT, not only the original ancestor (section 7.4: every

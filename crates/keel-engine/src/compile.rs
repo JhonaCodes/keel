@@ -266,6 +266,13 @@ pub fn compile_layered(
                 owner: exc.spec.owner.clone(),
                 reason: exc.spec.reason.clone(),
                 expiry: exc.spec.expiry.clone(),
+                scope_include: exc
+                    .spec
+                    .scope
+                    .paths
+                    .as_ref()
+                    .map(|p| p.include.clone())
+                    .unwrap_or_default(),
             });
         }
     }

@@ -615,15 +615,22 @@ spec:
         "2026-06-01T00:00:00Z",
     )
     .expect("a valid exception permits the relaxation");
+    let r = rule_of(&outcome, "sec.no-raw");
+    // The waiver LIFTS the lock within its scope: the locked rule stays at full
+    // strength (block) but is carved out of the waived area — the lower layer's
+    // weaker rewrite is NOT adopted, so nothing outside the waiver is weakened.
     assert_eq!(
-        rule_of(&outcome, "sec.no-raw")
-            .enforcement
-            .invalid
+        r.enforcement.invalid.as_ref().unwrap().decision,
+        Decision::Block,
+        "the lock stands at full strength outside the waiver"
+    );
+    assert!(
+        r.scope
             .as_ref()
             .unwrap()
-            .decision,
-        Decision::Review,
-        "the relaxed (weaker) definition composes"
+            .exclude
+            .contains(&"src/reports/**".to_string()),
+        "the waived coverage is carved out of the locked rule"
     );
     assert_eq!(
         outcome.applied_exceptions.len(),
@@ -631,6 +638,51 @@ spec:
         "the exception is recorded"
     );
     assert_eq!(outcome.applied_exceptions[0].owner, "global");
+    assert_eq!(
+        outcome.applied_exceptions[0].scope,
+        vec!["src/reports/**".to_string()]
+    );
+}
+
+#[test]
+fn an_exception_without_a_path_scope_cannot_bound_the_relaxation() {
+    // A scope with only languages (no paths) cannot bound WHERE the relaxation
+    // applies, so it does not suppress the violation.
+    let global = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: sec.no-raw, author: g, adrRef: adr:ADR-1, reviewAfter: P6M }
+spec:
+  locked: true
+  on: [file.edited]
+  enforcement: { invalid: { decision: block }, valid: { decision: allow } }
+---
+apiVersion: keel/v1alpha1
+kind: Exception
+metadata: { id: langs-only }
+spec:
+  rule: rule:sec.no-raw
+  owner: global
+  reason: "no path scope to bound the relaxation"
+  scope: { languages: ["dart"] }
+  expiry: "2026-12-31"
+"#);
+    let project = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: sec.no-raw, author: t, adrRef: adr:ADR-2, reviewAfter: P6M }
+spec:
+  on: [file.edited]
+  enforcement: { invalid: { decision: review }, valid: { decision: allow } }
+"#);
+    let v = violation(compile_labeled_at(
+        &[("global", &global), ("project:demo", &project)],
+        "2026-06-01T00:00:00Z",
+    ));
+    assert!(
+        v.detail.contains("no path scope"),
+        "unbounded waiver is rejected"
+    );
 }
 
 #[test]

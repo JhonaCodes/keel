@@ -391,9 +391,11 @@ pub struct ExceptionSpec {
     pub owner: String,
     pub reason: String,
     /// BOUNDED scope the relaxation applies to (section 7.4: "reason, bounded
-    /// scope and expiry"). Mandatory — a scope-less exception would be an
-    /// unbounded weakening of a `locked` rule, the exact silent relaxation the
-    /// mechanism exists to forbid.
+    /// scope and expiry"). Mandatory. The compiler carves this coverage OUT of
+    /// the locked rule (the rule is lifted within `scope.paths.include`); the
+    /// lock stands at full strength everywhere else. An exception with no
+    /// `paths.include` cannot bound the relaxation and is rejected — an
+    /// unbounded waiver is the silent weakening the mechanism exists to forbid.
     pub scope: Scope,
     /// ISO-8601 expiry date (e.g. `2026-12-31`). An expired exception no longer
     /// suppresses the monotonicity check.
