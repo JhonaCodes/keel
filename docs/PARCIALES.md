@@ -43,7 +43,7 @@ Leyenda, sin zona gris:
 | **G4** | Exemplar garantizado en `block` + rule-debt | ✅ **HECHO (Fase D)**: `deliver_skills(force_exemplar)` re-adjunta el par en block aunque el skill esté cargado; warning de compile si un branch block carga skills sin exemplar | `session.rs deliver_skills`; `compile.rs` (rule-debt) | — | D ✅ |
 | **Cov** | Cobertura e2e del packet | ✅ **HECHO (Fase D)**: `test/tests/packet_content.rs` asserta el packet en stderr del binario real (verdict+finding+source+snapshot+evidence) | `packet_content.rs` | — | D ✅ |
 | **#12** | Aislamiento de tests vs config del usuario | `gate.rs:64-69` inyecta el env real → una precondición `env.present` puede voltearse por una var del host/CI | `gate.rs:64-69`, `tools.rs:141-149` | Flag `--no-inherit-env` + harness hermético (env scrub, clock/id fijos) | Chico-Medio | B |
-| **#7** | Re-entrega de skill tras compactación | "No recargar ya cargado" implementado; "salvo que se perdió por compact" NO existe (no hay señal) | `session.rs:130-142` | Evento `context.compacted` que resetea `loaded_skills` | Chico | E |
+| **#7** | Re-entrega de skill tras compactación | ✅ **HECHO (Fase E)**: evento de capa-sesión `context.compacted` resetea `loaded_skills` de la sesión → el próximo match re-entrega. Extensión consciente (no uno de los 17 eventos de gobernanza). | `event.rs ContextCompacted`; `gate.rs`; `session.rs` | — | E ✅ |
 | **T3** | Baseline de seguridad del executor (secret-ref/allowlist/sandbox) — el limbo "permissions" de inv 13 | `run_executor` arma `Command` crudo, hereda env; **desbloqueado** (no gated por 0c) pero **no programado en este track** | `audit.rs::run_executor` | env_clear + allowlist + network-deny/read-only | Medio | (sin programar) |
 
 ---
@@ -72,7 +72,7 @@ Unidades ENTERAS no empezadas, cada una con su **propia** precondición (no toda
 
 | # | Consideración | Estado | Dónde |
 |---|---|---|---|
-| 1 | agents ≠ skills (ortogonalidad) | ✅ verificado; test se agrega | Fase E2 |
+| 1 | agents ≠ skills (ortogonalidad) | ✅ **HECHO (Fase E)**: test `skills_and_agents_are_orthogonal_paths` | Fase E2 |
 | 1-exec | agente con proveedor/modelo seleccionable (codex/claude/haiku) | ⏭ Phase 2 | PHASE2_INITIATIVE (Fase F) |
 | 2 | tests de que el runtime funciona | 🔨 suite e2e | Fases B/D/E |
 | 3 | gate bloquea + entrega contexto/condiciones | 🔨 | Fase D |

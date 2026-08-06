@@ -16,11 +16,20 @@
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-/// The 17 reserved events (spec section 11.2).
+/// The 17 reserved governance events (spec section 11.2), plus `context.compacted`
+/// — a SESSION-LAYER signal (not a governance event): it gates no action and
+/// produces no verdict; it tells the runtime the model's context was compacted
+/// so the L2 session skill-state can be reset and skills re-delivered on the
+/// next match (section 6.5, the "re-deliver only when context is lost" rule). It is a
+/// deliberate extension beyond the spec's 17, documented in STATUS/PARCIALES.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum EventKind {
     #[serde(rename = "session.started")]
     SessionStarted,
+    /// Session-layer extension (NOT one of the 17): the client's context was
+    /// compacted; reset delivered-skill state so lost skills are re-sent.
+    #[serde(rename = "context.compacted")]
+    ContextCompacted,
     #[serde(rename = "prompt.submitted")]
     PromptSubmitted,
     #[serde(rename = "analysis.started")]
