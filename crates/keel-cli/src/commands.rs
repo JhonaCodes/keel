@@ -137,12 +137,66 @@ spec:
 
 /// ATOMIC compilation (spec section 10.2): staging → RuleTests → publish only if
 /// they pass, retaining the last valid snapshot for rollback (invariant 7).
+///
+/// Composition-aware (spec section 7): the workspace is loaded as its layers
+/// (section 8.5). If it carries a binding (`.keel/project.yaml`), the chain is
+/// resolved by repository identity (section 7.1) and composed with `locked`
+/// monotonicity verified (section 7.4). A flat workspace is a single layer, so
+/// the same path compiles it unchanged.
 pub fn compile(root: &Path) -> Result<ExitCode> {
-    let files = workspace::load(root)?;
-    let outcome = compiler::compile(&files, now_ts())?;
+    use keel_engine::lock::ProjectBinding;
+    use keel_engine::workspace::{Layer, load_layered};
 
-    // Gate: the configuration tests decide the publication.
-    let reports = testkit::run_tests(&outcome.snapshot, &files.tests, &files.root);
+    let layered = load_layered(root)?;
+    let binding = ProjectBinding::load(root).ok();
+
+    // Select the composition chain.
+    let selected: Vec<&Layer> = match &binding {
+        Some(b) => {
+            let chain = keel_engine::resolution::resolve(&layered, b, None)?;
+            if !chain.matched_project {
+                eprintln!(
+                    "warning: bound project `{}` matched no project layer — it contributes no rules",
+                    b.project
+                );
+            }
+            if let keel_engine::resolution::IdentityStatus::Advisory(msg) = &chain.identity {
+                eprintln!("warning: repository identity advisory (section 13.3): {msg}");
+            }
+            chain
+                .layer_indices
+                .iter()
+                .map(|&i| &layered.layers[i])
+                .collect()
+        }
+        None => {
+            if layered.layers.len() == 1 {
+                layered.layers.iter().collect()
+            } else {
+                bail!(
+                    "layered workspace has {} layers but no binding — run `keel bind` to select the project chain",
+                    layered.layers.len()
+                );
+            }
+        }
+    };
+
+    let chain: Vec<compiler::CompileLayer> = selected
+        .iter()
+        .map(|l| compiler::CompileLayer {
+            label: layer_label(l),
+            files: &l.files,
+        })
+        .collect();
+    let outcome = compiler::compile_layered(&chain, now_ts())?;
+
+    // Gate: the configuration tests (aggregated across the chain) decide the
+    // publication.
+    let tests: Vec<_> = selected
+        .iter()
+        .flat_map(|l| l.files.tests.iter().cloned())
+        .collect();
+    let reports = testkit::run_tests(&outcome.snapshot, &tests, root);
     let failed: Vec<_> = reports.iter().filter(|r| !r.passed).collect();
 
     if !failed.is_empty() {
@@ -157,12 +211,13 @@ pub fn compile(root: &Path) -> Result<ExitCode> {
         return Ok(ExitCode::FAILURE);
     }
 
-    let state = files.state_dir();
+    let paths = workspace::WorkspaceFiles::empty(root.to_path_buf());
+    let state = paths.state_dir();
     std::fs::create_dir_all(&state)?;
-    let snap_path = files.snapshot_path();
+    let snap_path = paths.snapshot_path();
     if snap_path.exists() {
         // Invariant 7: retain the last valid snapshot.
-        std::fs::rename(&snap_path, files.snapshot_prev_path())?;
+        std::fs::rename(&snap_path, paths.snapshot_prev_path())?;
     }
     outcome.snapshot.save(&snap_path)?;
 
@@ -179,6 +234,24 @@ pub fn compile(root: &Path) -> Result<ExitCode> {
         println!("warning: {w}");
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// The label a layer carries in composition/monotonicity reports and in the
+/// lock's `composition` list: `global`, `organization:nui`, `project:con-app`.
+fn layer_label(layer: &keel_engine::workspace::Layer) -> String {
+    use keel_engine::workspace::LayerId;
+    let kind = match layer.id {
+        LayerId::Global => "global",
+        LayerId::Organization => "organization",
+        LayerId::Platform => "platform",
+        LayerId::Project => "project",
+        LayerId::Team => "team",
+        LayerId::Profile => "profile",
+    };
+    match &layer.name {
+        Some(name) => format!("{kind}:{name}"),
+        None => kind.to_string(),
+    }
 }
 
 // ─────────────────────────── observe ───────────────────────────
