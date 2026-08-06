@@ -8,3 +8,5 @@
 # OS / tooling
 .DS_Store
 .jflow/
+.idea/
+.vscode/
