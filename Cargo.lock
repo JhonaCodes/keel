@@ -716,10 +716,14 @@ dependencies = [
 name = "keel-tests"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "keel-core",
  "keel-dsl",
  "keel-engine",
+ "rusqlite",
+ "serde",
  "serde_json",
+ "serde_yaml_ng",
 ]
 
 [[package]]

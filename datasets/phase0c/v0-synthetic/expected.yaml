@@ -1,0 +1,39 @@
+# Ground-truth labels the ledger cannot supply on its own (spec section 15.1
+# secondary metric "false positives per rule"): a `verdict=invalid` is only a
+# false positive when it SHOULD NOT have fired — that judgement lives here.
+#
+# Per task: the expected count of each outcome and the ordered `keel gate` exit
+# code per event line. The harness asserts the measured ledger matches these,
+# which is what makes false-positive counting meaningful for v0.
+id: phase0c-v0-synthetic
+tasks:
+  - id: task-001-clean
+    gate_exits: [0]
+    expected_valid: 1
+    expected_violations: 0
+    expected_unknown: 0
+    expected_prevented: 0
+  - id: task-002-inner-violation
+    gate_exits: [2]
+    expected_valid: 0
+    expected_violations: 1
+    expected_unknown: 0
+    expected_prevented: 1
+  - id: task-003-outer-violation
+    gate_exits: [0, 2]
+    expected_valid: 0
+    expected_violations: 1
+    expected_unknown: 0
+    expected_prevented: 0
+  - id: task-004-unknown-tail
+    gate_exits: [0]
+    expected_valid: 0
+    expected_violations: 0
+    expected_unknown: 1
+    expected_prevented: 0
+  - id: task-005-oscillation
+    gate_exits: [0, 0, 0]
+    expected_valid: 0
+    expected_violations: 3
+    expected_unknown: 0
+    expected_prevented: 0
