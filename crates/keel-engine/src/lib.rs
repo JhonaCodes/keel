@@ -32,6 +32,7 @@
 pub mod audit;
 pub mod compile;
 pub mod ledger;
+pub mod lock;
 pub mod packet;
 pub mod runtime;
 pub mod sarif;

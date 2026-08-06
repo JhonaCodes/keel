@@ -149,6 +149,31 @@ enum Command {
         #[arg(long, default_value = ".")]
         workspace: PathBuf,
     },
+    /// Bind this repository to a project/workspace, writing `.keel/project.yaml`
+    /// (§8.6, invariant 4: the repo holds only binding + lock, never the
+    /// component definitions).
+    Bind {
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        /// Project identity, e.g. `project:org/repo`. If omitted, derived from
+        /// the git `origin` remote.
+        #[arg(long)]
+        project: Option<String>,
+        /// Workspace reference that owns the definitions (default `org:local`).
+        #[arg(long)]
+        org: Option<String>,
+    },
+    /// Generate or verify `.keel/keel.lock` — the pinned resolution (§8.6,
+    /// invariant 9: local and CI share the same hash). `--verify` recompiles
+    /// and fails on drift (the compliance-plane check reused by CI).
+    Lock {
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        /// Verify the existing lock against the current snapshot instead of
+        /// (re)writing it. Exit 1 on drift.
+        #[arg(long)]
+        verify: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -216,6 +241,12 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         },
+        Command::Bind {
+            workspace,
+            project,
+            org,
+        } => commands::bind(&workspace, project, org),
+        Command::Lock { workspace, verify } => commands::lock(&workspace, verify),
     };
 
     match result {
