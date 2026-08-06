@@ -14,6 +14,15 @@ fn agent() -> AgentSpec {
         role: "audit".into(),
         objective: None,
         timeout_ms: 2000,
+        max_tokens: None,
+    }
+}
+
+/// An agent with a declared token ceiling (invariant 13).
+fn budgeted_agent(max_tokens: u64) -> AgentSpec {
+    AgentSpec {
+        max_tokens: Some(max_tokens),
+        ..agent()
     }
 }
 
@@ -163,5 +172,118 @@ fn result_matching_output_schema_is_trusted() {
         out.verdict,
         Verdict::Invalid,
         "a conforming result keeps its verdict"
+    );
+}
+
+/// Invariant 13: a real executor that reports usage OVER the declared
+/// `maxTokens` is not trusted — the verdict is downgraded to `unknown` with an
+/// explicit finding, and the ledger records the REAL token count (not 0).
+#[test]
+fn real_executor_over_budget_maps_to_unknown_and_records_real_tokens() {
+    let ledger = Ledger::open_in_memory().unwrap();
+    let executor = ExecutorSpec {
+        id: "echo".into(),
+        // A schema-valid `valid` verdict, but reporting 500 tokens.
+        command: vec![
+            "sh".into(),
+            "-c".into(),
+            r#"cat >/dev/null; echo '{"verdict":"valid","findings":[],"tokens":500}'"#.into(),
+        ],
+        model: Some("stub".into()),
+        timeout_ms: Some(2000),
+    };
+    let out = run_audit(
+        &budgeted_agent(100),
+        &executor,
+        "some diff",
+        "sha256:x",
+        Some("s1"),
+        &ledger,
+        "ev_it5".into(),
+        "2026-01-01T00:00:00Z".into(),
+        None,
+    );
+    assert_eq!(out.verdict, Verdict::Unknown, "over-budget is not trusted");
+    assert!(
+        out.findings.iter().any(|f| f.contains("maxTokens")),
+        "the budget breach must be reported: {:?}",
+        out.findings
+    );
+    let entry = ledger.get("ev_it5").unwrap().unwrap();
+    assert_eq!(entry.tokens, 500, "the real token count is recorded, not 0");
+}
+
+/// The converse: usage within budget keeps the verdict and still records the
+/// real token count (closing the `tokens: 0` gap for reporting executors).
+#[test]
+fn real_executor_within_budget_records_real_tokens() {
+    let ledger = Ledger::open_in_memory().unwrap();
+    let executor = ExecutorSpec {
+        id: "echo".into(),
+        command: vec![
+            "sh".into(),
+            "-c".into(),
+            r#"cat >/dev/null; echo '{"verdict":"invalid","findings":["leak"],"tokens":40}'"#
+                .into(),
+        ],
+        model: Some("stub".into()),
+        timeout_ms: Some(2000),
+    };
+    let out = run_audit(
+        &budgeted_agent(100),
+        &executor,
+        "some diff",
+        "sha256:x",
+        Some("s1"),
+        &ledger,
+        "ev_it6".into(),
+        "2026-01-01T00:00:00Z".into(),
+        None,
+    );
+    assert_eq!(
+        out.verdict,
+        Verdict::Invalid,
+        "within budget keeps the verdict"
+    );
+    let entry = ledger.get("ev_it6").unwrap().unwrap();
+    assert_eq!(entry.tokens, 40, "real tokens recorded within budget");
+}
+
+/// section 4.6 / section 14.8: a real executor that never returns within its
+/// timeout is `unknown` — the engine kills it and records honestly, it does not
+/// hang or crash.
+#[test]
+fn real_executor_timeout_maps_to_unknown() {
+    let ledger = Ledger::open_in_memory().unwrap();
+    let executor = ExecutorSpec {
+        id: "slow".into(),
+        command: vec![
+            "sh".into(),
+            "-c".into(),
+            r#"cat >/dev/null; sleep 5; echo '{"verdict":"valid","findings":[]}'"#.into(),
+        ],
+        model: Some("stub".into()),
+        timeout_ms: Some(100),
+    };
+    let out = run_audit(
+        &agent(),
+        &executor,
+        "some diff",
+        "sha256:x",
+        Some("s1"),
+        &ledger,
+        "ev_it7".into(),
+        "2026-01-01T00:00:00Z".into(),
+        None,
+    );
+    assert_eq!(
+        out.verdict,
+        Verdict::Unknown,
+        "a timed-out executor is unknown"
+    );
+    assert!(
+        out.findings.iter().any(|f| f.contains("timed out")),
+        "the timeout must be reported: {:?}",
+        out.findings
     );
 }

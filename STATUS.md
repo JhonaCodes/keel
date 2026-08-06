@@ -54,7 +54,7 @@ Agent, AgentExecutor, RuleTest. Commands: `workspace init`, `compile`,
 | **inv 10** secrets by reference | ⏭ | no secrets in scope yet |
 | **inv 11** Agent declares what, Executor how/where | ✅ | `kind: Agent` / `kind: AgentExecutor` |
 | **inv 12** child result schema-validated | ✅ | `audit.rs::schema_check` validates the AgentResult against the agent's declared `outputSchema` (jsonschema); non-conformance → unknown |
-| **inv 13** delegation limits (depth/time/cost) | 🟡 | timeout enforced; maxDepth/cost budgets partial |
+| **inv 13** delegation limits (depth/time/cost) | 🟡 | timeout + maxTokens enforced (over budget → unknown + finding, real tokens in ledger); maxDepth/cross-cost deferred (need delegation graph, Phase 2) |
 | **inv 14** executor/model change in provenance | ✅ | agents/executors are in the snapshot hash + `keel.lock`; a model/command change is drift `keel lock --verify`/`keel ci resolve` catch |
 | **inv 15** composition monotonicity | ⏭ | one authority layer — documented stub (`compile.rs::composition_stub`) |
 | **inv 16** session append-only, non-authoritative | ✅ | `session.rs` only records deliveries; ledger has no UPDATE/DELETE |
