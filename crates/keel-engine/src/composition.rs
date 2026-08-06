@@ -334,6 +334,16 @@ fn fold_rule(
                     // A genuine strengthening: adopt the stricter definition.
                     effective = rule.clone();
                     effective_label = label;
+                    // If it ALSO locks, its (verified ≥) definition becomes the
+                    // new, stricter floor for layers below it (section 7.4:
+                    // every locked ancestor is enforced, not just the highest).
+                    if inh.locked {
+                        locked_base = Some(rule.clone());
+                        locked_at = Some(label.to_string());
+                        // Exemption is non-increasing: a non-overridable ancestor
+                        // stays non-overridable no matter what a lower lock says.
+                        overridable = overridable && inh.overridable;
+                    }
                 }
                 Err((dimension, detail)) => {
                     let v = MonotonicityViolation {
@@ -345,22 +355,14 @@ fn fold_rule(
                     };
                     // A valid Exception LIFTS the locked rule within its bounded
                     // scope; the lock stands at full strength elsewhere. The
-                    // lower layer's weaker rewrite is NOT adopted, so nothing
-                    // outside the waiver is weakened.
+                    // lower layer's weaker rewrite is NOT adopted — so the lock
+                    // FLOOR is left UNCHANGED (still the original ancestor), and
+                    // the waiver cannot cascade to weaken deeper layers beyond
+                    // its scope. A locked declaration on this weaker layer does
+                    // not establish a weaker floor.
                     let waived = govern(v, exceptions, reference_date, applied)?;
                     effective = carve_out(base, &waived);
                 }
-            }
-            // A lower layer may ALSO lock: its (verified ≥) definition becomes
-            // the new, stricter floor, so a further-down layer is checked
-            // against IT, not only the original ancestor (section 7.4: every
-            // locked ancestor is enforced, not just the highest).
-            if inh.locked {
-                locked_base = Some(rule.clone());
-                locked_at = Some(label.to_string());
-                // Exemption is non-increasing: a non-overridable ancestor stays
-                // non-overridable no matter what a lower lock declares (7.4).
-                overridable = overridable && inh.overridable;
             }
         }
     }

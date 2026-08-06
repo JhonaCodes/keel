@@ -50,9 +50,8 @@ pub struct RuleSpec {
     /// Composition inheritance (section 7.3, reserved words spec 11.1). `locked`:
     /// this rule cannot be WEAKENED by lower layers — the composed effective rule
     /// must stay at least as restrictive, dimension by dimension (section 7.4).
-    /// Absent = a plain rule that lower layers may replace. NOTE: authoring only
-    /// until the composition step verifies it (a second authority layer is
-    /// required; monotonicity is still a stub, STATUS invariant 15).
+    /// Absent = a plain rule that lower layers may replace. Enforced by the
+    /// compiler's composition step (`keel-engine::composition`, section 7.4).
     #[serde(default, skip_serializing_if = "crate::is_false")]
     pub locked: bool,
     /// `overridable`: a lower layer MAY replace this rule (the exemption marker of

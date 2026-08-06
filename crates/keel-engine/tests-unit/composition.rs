@@ -645,6 +645,77 @@ spec:
 }
 
 #[test]
+fn a_bounded_exception_does_not_cascade_to_weaken_deeper_layers() {
+    // global locks block on src/** and OWNS a reports-only waiver; org locks a
+    // weaker review; project also review. The waiver must NOT let the weaker
+    // rules collapse the lock across all of src/** — outside src/reports/** the
+    // block must stand. (Regression: the lock floor must not advance to the
+    // discarded weak candidate in the waiver path.)
+    let global = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: sec.no-raw, author: g, adrRef: adr:ADR-1, reviewAfter: P6M }
+spec:
+  locked: true
+  scope: { paths: { include: ["src/**"] } }
+  on: [file.edited]
+  enforcement: { invalid: { decision: block }, valid: { decision: allow } }
+---
+apiVersion: keel/v1alpha1
+kind: Exception
+metadata: { id: reports-waiver }
+spec:
+  rule: rule:sec.no-raw
+  owner: global
+  reason: "reports only"
+  scope: { paths: { include: ["src/reports/**"] } }
+  expiry: "2027-01-01"
+"#);
+    let org = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: sec.no-raw, author: o, adrRef: adr:ADR-2, reviewAfter: P6M }
+spec:
+  locked: true
+  scope: { paths: { include: ["src/**"] } }
+  on: [file.edited]
+  enforcement: { invalid: { decision: review }, valid: { decision: allow } }
+"#);
+    let project = ws(r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: sec.no-raw, author: t, adrRef: adr:ADR-3, reviewAfter: P6M }
+spec:
+  scope: { paths: { include: ["src/**"] } }
+  on: [file.edited]
+  enforcement: { invalid: { decision: review }, valid: { decision: allow } }
+"#);
+    let outcome = compile_labeled_at(
+        &[
+            ("global", &global),
+            ("organization:nui", &org),
+            ("project:demo", &project),
+        ],
+        "2026-06-01T00:00:00Z",
+    )
+    .expect("the bounded waiver applies");
+    let r = rule_of(&outcome, "sec.no-raw");
+    assert_eq!(
+        r.enforcement.invalid.as_ref().unwrap().decision,
+        Decision::Block,
+        "block must stand — the reports-only waiver cannot collapse the lock wholesale"
+    );
+    assert!(
+        r.scope
+            .as_ref()
+            .unwrap()
+            .exclude
+            .contains(&"src/reports/**".to_string()),
+        "only the waived coverage is lifted"
+    );
+}
+
+#[test]
 fn an_exception_without_a_path_scope_cannot_bound_the_relaxation() {
     // A scope with only languages (no paths) cannot bound WHERE the relaxation
     // applies, so it does not suppress the violation.
