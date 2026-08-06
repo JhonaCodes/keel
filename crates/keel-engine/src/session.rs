@@ -101,6 +101,7 @@ pub fn deliver_skills(
     state: &mut SessionState,
     skill_refs: &[String],
     oscillating: bool,
+    force_exemplar: bool,
 ) -> Vec<String> {
     let mut payload = Vec::new();
 
@@ -133,6 +134,12 @@ pub fn deliver_skills(
                 // (the user's rule: only re-deliver when context is lost —
                 // which surfaces as oscillation and is handled below).
                 payload.push(format!("skill {skill_id} already loaded ({level:?})"));
+                // section 10.4: a BLOCK packet must still carry the exemplar even
+                // when the skill body is already loaded — the rejected/accepted
+                // pair is the difference between "don't" and "do this".
+                if force_exemplar && let Some((rejected, accepted)) = skill.examples.first() {
+                    payload.push(format!("rejected: {rejected}\naccepted: {accepted}"));
+                }
             }
             _ => {
                 let chunk = render_skill(skill, workspace_root, desired);

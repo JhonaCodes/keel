@@ -114,12 +114,16 @@ pub fn gate(
 
         // L2 cognitive activation: deliver skill content once per session,
         // escalate to full on oscillation, reference-only when loaded.
+        // section 10.4: a blocking packet must carry the exemplar even if the skill
+        // body is already loaded — force it when this eval blocks.
+        let force_exemplar = eval.effective_decision >= Decision::Block;
         let mut payload = deliver_skills(
             &snapshot,
             &files.root,
             &mut session_state,
             &eval.load_skills,
             oscillating,
+            force_exemplar,
         );
         if oscillating {
             payload.push(
@@ -132,7 +136,12 @@ pub fn gate(
         // A packet is emitted when something needs the model's attention:
         // any decision above allow, or a cognitive activation with payload.
         if eval.effective_decision >= Decision::Review || !payload.is_empty() {
-            packets.push(packet::render(eval, &entry.id, &payload));
+            packets.push(packet::render(
+                eval,
+                &entry.id,
+                &payload,
+                &snapshot.hash.to_string(),
+            ));
         }
         worst = worst.max(eval.effective_decision);
     }
