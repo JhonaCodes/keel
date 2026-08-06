@@ -139,19 +139,36 @@ fn mixed_layout_is_rejected_not_silently_dropped() {
 }
 
 #[test]
-fn org_native_components_layout_is_rejected() {
-    // section 8.5 org-native `components/` is not loadable yet: reject loudly
-    // instead of reading the org layer as empty.
+fn org_native_components_with_real_content_is_rejected() {
+    // section 8.5 org-native `components/` is not loadable yet: REAL authored
+    // content there is rejected loudly instead of read as empty.
     let ws = tmp_ws();
-    std::fs::create_dir_all(ws.0.join("organizations/nui/components/policies")).unwrap();
+    let policies = ws.0.join("organizations/my-company/components/policies");
+    std::fs::create_dir_all(&policies).unwrap();
+    std::fs::write(policies.join("p.yaml"), "apiVersion: keel/v1alpha1\n").unwrap();
 
     assert!(
         matches!(
             load_layered(&ws.0),
             Err(WorkspaceError::UnsupportedLayerLayout { .. })
         ),
-        "an org-native components/ layout must not be silently read as empty"
+        "authored content under components/ must not be silently read as empty"
     );
+}
+
+#[test]
+fn org_native_components_docs_only_is_tolerated() {
+    // The `keel init` scaffold ships components/ with only a README (+ .example)
+    // — a documented placeholder with nothing to drop. It must NOT error.
+    let ws = tmp_ws();
+    let comp = ws.0.join("organizations/my-company/components/policies");
+    std::fs::create_dir_all(&comp).unwrap();
+    std::fs::write(comp.join("README.md"), "org-scale, deferred\n").unwrap();
+    std::fs::write(comp.join("policy.yaml.example"), "# template\n").unwrap();
+
+    let layered = load_layered(&ws.0).expect("docs-only components/ is tolerated");
+    // The org layer loads (empty of rules); no error.
+    assert!(layered.layers.iter().any(|l| l.id == LayerId::Organization));
 }
 
 #[test]

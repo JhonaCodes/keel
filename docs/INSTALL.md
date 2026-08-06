@@ -40,63 +40,46 @@ workspace plano (solo `rules/`) es el caso de una sola capa — igual que antes.
 ### De cero (paso a paso)
 
 ```sh
-# 1. binario
-cargo build --release            # binario en target/release/keel
+# 1. instalar el binario (desde el repo de Keel)
+cargo install --path crates/keel-cli     # deja `keel` en ~/.cargo/bin
+keel --version
 
-# 2. workspace con capas
-WS=~/keel-workspace
-mkdir -p "$WS"/{global/rules,projects/webapp/rules}
-printf 'apiVersion: keel/v1alpha1\nkind: Workspace\nmetadata: { id: mi-ws }\nspec: {}\n' > "$WS/workspace.yaml"
+# 2. crear el workspace — arma TODO el árbol section 8.5, cada carpeta con su
+#    README + una plantilla base, y lo liga a project:local/app. Por defecto
+#    crea ./keel-workspace
+keel init ~/keel-workspace
+#   ya podés compilar (sin reglas activas aún → snapshot vacío, válido):
+keel compile --workspace ~/keel-workspace
 
-# 3a. una regla GLOBAL, locked (aplica a todo; nadie puede debilitarla)
-cat > "$WS/global/rules/no-raw.yaml" <<'YAML'
-apiVersion: keel/v1alpha1
-kind: Rule
-metadata: { id: sec.no-raw, author: yo, adrRef: adr:ADR-1, reviewAfter: P6M }
-spec:
-  locked: true
-  on: [file.edited]
-  detect: { using: builtin:text.regex, with: { pattern: "rawQuery" } }
-  enforcement:
-    invalid: { decision: block, report: { message: "usa el query builder" } }
-    valid:   { decision: allow }
-YAML
+# 3. activar una regla GLOBAL locked (aplica a todo; nadie puede debilitarla):
+#    renombrá la plantilla y editá el bloque YAML (quitando los '# ' de esas
+#    líneas; el texto explicativo de arriba se borra).
+mv ~/keel-workspace/global/rules/rule.yaml.example ~/keel-workspace/global/rules/no-raw.yaml
+$EDITOR ~/keel-workspace/global/rules/no-raw.yaml
+#    (queda algo como: locked: true, on: [file.edited],
+#     detect text.regex pattern "rawQuery", enforcement.invalid.decision block)
 
-# 3b. una regla SOLO del proyecto
-cat > "$WS/projects/webapp/rules/no-todo.yaml" <<'YAML'
-apiVersion: keel/v1alpha1
-kind: Rule
-metadata: { id: webapp.no-todo, author: yo, adrRef: adr:ADR-2, reviewAfter: P6M }
-spec:
-  on: [file.edited]
-  detect: { using: builtin:text.contains, with: { text: "TODO" } }
-  enforcement: { invalid: { decision: review }, valid: { decision: allow } }
-YAML
+# 4. (opcional) activar una regla SOLO del proyecto:
+mv ~/keel-workspace/projects/app/rules/rule.yaml.example ~/keel-workspace/projects/app/rules/no-todo.yaml
+$EDITOR ~/keel-workspace/projects/app/rules/no-todo.yaml
 
-# 4. ligar el proyecto y compilar (compone global + projects/webapp)
-#    OJO: el último segmento de `project:<org>/<nombre>` debe ser el dir bajo projects/
-keel bind --workspace "$WS" --project project:miorg/webapp --org org:local
-keel compile --workspace "$WS"        # publica el snapshot COMPUESTO en .keel-state/
+# 5. compilar → compone global + projects/app y publica el snapshot COMPUESTO
+keel compile --workspace ~/keel-workspace
 
-# 5. (demostración) si el proyecto intenta DEBILITAR la regla global locked,
-#    compile FALLA con la dimensión y la capa culpable. Para relajar de forma
-#    gobernada un área acotada, se autora un Exception en la capa dueña (global):
-mkdir -p "$WS/global/exceptions"
-cat > "$WS/global/exceptions/waiver.yaml" <<'YAML'
-apiVersion: keel/v1alpha1
-kind: Exception
-metadata: { id: reports-waiver }
-spec:
-  rule: rule:sec.no-raw
-  owner: global
-  reason: "El módulo de reportes migra el próximo trimestre."
-  scope: { paths: { include: ["src/reports/**"] } }
-  expiry: "2027-01-01"
-YAML
-keel compile --workspace "$WS"        # levanta el lock SOLO en src/reports/**; intacto el resto
+# 6. (demostración de monotonicidad) creá en projects/app/rules una regla con el
+#    MISMO id que la global locked (sec.no-raw) pero más débil (decision review):
+#    `keel compile` FALLA con la dimensión (D3) y la capa culpable. Para relajar
+#    de forma gobernada y acotada, activá un Exception (dueño = la capa del lock):
+mv ~/keel-workspace/global/exceptions/exception.yaml.example ~/keel-workspace/global/exceptions/waiver.yaml
+$EDITOR ~/keel-workspace/global/exceptions/waiver.yaml   # rule: rule:sec.no-raw, owner: global, scope acotado, expiry futura
+keel compile --workspace ~/keel-workspace   # levanta el lock SOLO en el scope del waiver; intacto el resto
 ```
 
-Enganchar el cliente y el resto (binario, uninstall) siguen igual — abajo.
+`keel init` ya deja el binding (`.keel/project.yaml` → `project:local/app`), así
+que `keel compile` compone `global/` + `projects/app/` sin más pasos. Para un
+repo real, `keel bind --project project:<org>/<nombre>` fija su proyecto.
+
+Enganchar el cliente y el resto (uninstall) siguen igual — abajo.
 
 ---
 
@@ -111,11 +94,12 @@ cargo build --release                     # binario en target/release/keel
 keel --version
 ```
 
-### 2. El workspace (donde viven tus rules/tools/skills) — vive en TU repo
+### 2. El workspace (donde viven tus rules/tools/skills)
 ```sh
-keel workspace init ~/mi-proyecto/.keel-workspace   # estructura, SIN reglas default
-#   crea: workspace.yaml, rules/, tools/, tests/, fixtures/ (+ .example) y un .gitignore
-#   escribí tus reglas en rules/ (plantilla rules/rule.yaml.example)
+keel init ~/keel-workspace   # arma el árbol section 8.5 completo, SIN reglas default
+#   cada carpeta trae un README (cómo usarla + estado) y una plantilla base .example
+#   + workspace.yaml, .gitignore y el binding .keel/project.yaml (project:local/app)
+#   activá una regla renombrando global/rules/rule.yaml.example → global/rules/<name>.yaml
 ```
 (O si el proyecto ya tiene su workspace Keel versionado, saltá este paso.)
 

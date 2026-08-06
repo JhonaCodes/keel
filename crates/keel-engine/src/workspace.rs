@@ -1,26 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Workspace loading — convention over configuration (Phase 0).
+//! Workspace loading — convention over configuration.
 //!
-//! Minimal structure (spec section 8.5 trimmed down to a single project without
-//! layers):
-//!
-//! ```text
-//! <workspace>/
-//! ├── workspace.yaml      # kind: Workspace (required)
-//! ├── rules/*.yaml        # kind: Rule
-//! ├── tools/*.yaml        # kind: Tool (manifests for external tools)
-//! ├── skills/*.yaml       # kind: Skill (compact/full/examples, section 14.12)
-//! ├── agents/*.yaml       # kind: Agent + AgentExecutor (section 14)
-//! ├── tests/*.yaml        # kind: RuleTest (compile gate, section 10.2)
-//! ├── fixtures/*.jsonl    # replay events for `keel observe`
-//! └── .keel-state/        # execution state: snapshot, ledger (IGNORED)
-//! ```
+//! Two shapes, one loader. A LAYER (or a flat workspace root) carries its
+//! components by convention: `rules/`, `tools/`, `skills/`, `agents/`,
+//! `tests/`, `exceptions/` — scanned by [`load_components`]. [`load_layered`]
+//! reads a full section 8.5 workspace as its composition layers (`global/`,
+//! `organizations/<org>/`, `platforms/`, `projects/<name>/`, `teams/`,
+//! `profiles/`), in the fixed section 7.2 order; a flat workspace (components
+//! under the root, no layer directories) loads as one degenerate `Project`
+//! layer. `keel init` scaffolds the layered layout; [`load`] returns the flat
+//! root as a single `WorkspaceFiles` (used by commands that read the published
+//! snapshot).
 //!
 //! Execution state lives in an ignored directory INSIDE the workspace
-//! (spec section 8.4 allows "outside the source tree or in an ignored directory").
-//! Workspace-local is chosen for Phase 0 for inspectability: `keel doctor`
-//! and the dev see the snapshot and ledger right next to the rules that
-//! produced them. XDG paths arrive with the installation story (Phase 1).
+//! (spec section 8.4 allows "outside the source tree or in an ignored directory")
+//! for inspectability: `keel doctor` and the dev see the snapshot and ledger
+//! next to the rules that produced them. XDG paths arrive with the installer.
 
 use keel_dsl::{
     AgentDoc, AgentExecutorDoc, Document, DslError, ExceptionDoc, RuleDoc, RuleTestDoc, SkillDoc,
@@ -79,7 +74,7 @@ impl WorkspaceFiles {
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkspaceError {
-    #[error("no workspace.yaml in `{0}` — is this an Keel workspace? (keel workspace init)")]
+    #[error("no workspace.yaml in `{0}` — is this a Keel workspace? (keel init)")]
     NotAWorkspace(PathBuf),
     #[error("I/O error reading `{path}`: {source}")]
     Io {
@@ -107,13 +102,16 @@ pub enum WorkspaceError {
     UnsupportedLayerLayout { path: PathBuf },
 }
 
-/// The component subdirectories a layer (or a flat root) may carry.
-const COMPONENT_SUBDIRS: [&str; 5] = ["rules", "tools", "skills", "agents", "tests"];
+/// The AUTHORING component subdirectories whose presence at the ROOT marks a
+/// flat (single-layer) workspace. `tests/` is deliberately EXCLUDED: the
+/// section 8.5 layered layout carries a workspace-level `tests/` at the root
+/// alongside the layer directories, so it must not be read as a flat marker.
+const FLAT_MARKER_SUBDIRS: [&str; 4] = ["rules", "tools", "skills", "agents"];
 
-/// Whether `dir` carries any component subdirectory directly (the marker of a
-/// flat/degenerate workspace root, or of a populated layer).
+/// Whether `dir` carries an authoring component subdirectory directly — the
+/// marker of a flat/degenerate workspace root.
 fn has_components(dir: &Path) -> bool {
-    COMPONENT_SUBDIRS.iter().any(|sub| dir.join(sub).is_dir())
+    FLAT_MARKER_SUBDIRS.iter().any(|sub| dir.join(sub).is_dir())
 }
 
 /// Loads and validates (schema included) all workspace documents.
@@ -359,15 +357,46 @@ pub fn load_layered(root: &Path) -> Result<LayeredWorkspace, WorkspaceError> {
     })
 }
 
-/// Rejects a layer directory that uses the not-yet-supported org-native
-/// `components/` layout, so its content is never silently ignored.
+/// Rejects a layer directory whose org-native `components/` holds REAL
+/// (loadable) content, so it is never silently ignored. A `components/` that is
+/// empty or holds only docs/templates (`README.md`, `*.example`) is tolerated —
+/// it is the documented scaffold of a future org-scale layer, with nothing to
+/// drop. Real authored YAML there is rejected loudly (the layout is not
+/// supported yet).
 fn reject_unsupported_layout(layer_dir: &Path) -> Result<(), WorkspaceError> {
-    if layer_dir.join("components").is_dir() {
+    let components = layer_dir.join("components");
+    if components.is_dir() && dir_has_loadable_yaml(&components)? {
         return Err(WorkspaceError::UnsupportedLayerLayout {
             path: layer_dir.to_path_buf(),
         });
     }
     Ok(())
+}
+
+/// Whether `dir` (recursively) contains any authored YAML — a `.yaml`/`.yml`
+/// that is not a `.example` template. Hidden entries are skipped.
+fn dir_has_loadable_yaml(dir: &Path) -> Result<bool, WorkspaceError> {
+    let entries = std::fs::read_dir(dir).map_err(|source| WorkspaceError::Io {
+        path: dir.to_path_buf(),
+        source,
+    })?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_str().unwrap_or_default();
+        if name.starts_with('.') {
+            continue;
+        }
+        if path.is_dir() {
+            if dir_has_loadable_yaml(&path)? {
+                return Ok(true);
+            }
+        } else if (name.ends_with(".yaml") || name.ends_with(".yml")) && !name.ends_with(".example")
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Immediate subdirectory names of `dir`, sorted (deterministic layer order,

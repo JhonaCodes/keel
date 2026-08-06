@@ -15,6 +15,7 @@
 
 mod commands;
 mod gate;
+mod init;
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -45,10 +46,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Workspace operations.
-    Workspace {
-        #[command(subcommand)]
-        command: WorkspaceCommand,
+    /// Scaffolds a new Keel workspace with its composition layers (spec
+    /// section 8.5): `global/` (applies to every project), `projects/<name>/`,
+    /// plus `exceptions/`, `tools/`, `tests/` and ready-to-edit templates and a
+    /// binding, so `keel compile` works immediately. Defaults to `keel-workspace`.
+    Init {
+        #[arg(default_value = "keel-workspace")]
+        path: PathBuf,
     },
     /// Compiles the workspace into an immutable snapshot (atomic: staging →
     /// RuleTests → publish only if they pass; retains last-known-good).
@@ -223,18 +227,10 @@ enum CiCommand {
     },
 }
 
-#[derive(Subcommand)]
-enum WorkspaceCommand {
-    /// Creates the minimal scaffolding of an Keel workspace.
-    Init { path: PathBuf },
-}
-
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
-        Command::Workspace {
-            command: WorkspaceCommand::Init { path },
-        } => commands::workspace_init(&path),
+        Command::Init { path } => commands::init(&path),
         Command::Compile { workspace } => commands::compile(&workspace),
         Command::Observe {
             workspace,

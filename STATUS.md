@@ -15,7 +15,7 @@ measurement, not the code, is what the spec makes the gate for growing further.
 
 Snapshot of the tree: 4 crates (`keel-core`, `keel-dsl`, `keel-engine`,
 `keel-cli`). Kinds: Workspace, Rule, Tool, Skill, Agent, AgentExecutor,
-RuleTest, RepositoryRegistry, Profile, Exception. Commands: `workspace init`, `compile`,
+RuleTest, RepositoryRegistry, Profile, Exception. Commands: `init`, `compile`,
 `observe`, `gate`, `audit`, `adapter` (+`--check` preflight), `bind`, `lock`,
 `ci resolve`/`ci run`, `explain`, `prune`, `test`, `doctor`.
 
@@ -97,7 +97,7 @@ RuleTest, RepositoryRegistry, Profile, Exception. Commands: `workspace init`, `c
 | Item | Status | Evidence |
 |---|---|---|
 | 8 architecture / workspace layout | ✅ | crates + `workspace.rs`; flat (rules/tools/skills/agents/tests) and layered (`load_layered`: global/organizations/platforms/projects/teams/profiles, section 8.5). Org-native `components/` layout deferred (rejected loudly, not dropped) |
-| 9 installation & operation | 🟡 | CLI commands; no signed installer / project attach |
+| 9 installation & operation | 🟡 | `keel init` scaffolds the full section 8.5 layered layout (each folder a README + base template) + binding, so `keel compile` composes out of the box; CLI end to end. Signed installer + `project attach`/`bindings.yaml` (org-scale distribution) still deferred |
 | 10.1 compile pipeline | ✅ | `compile.rs` (parse→schema→refs→[composition stub]→conflicts→index→snapshot) |
 | 10.2 atomic compilation | ✅ | staging → RuleTests gate → publish |
 | 10.3 hot reload | ⏭ | ephemeral process (ADR-010) |

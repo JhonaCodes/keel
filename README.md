@@ -90,14 +90,14 @@ Forbidden dependency edges (the trust model, compiled):
 ```bash
 cargo build --workspace
 
-# create your workspace (structure only — YOUR rules, no defaults)
-keel workspace init ~/my-keel-workspace
-cd ~/my-keel-workspace
-#   write rules in rules/   (template: rules/rule.yaml.example)
-#   declare tools in tools/ (template: tools/tool.yaml.example)
-#   add tests in tests/     (template: tests/test.yaml.example)
+# create your workspace — the full section 8.5 layered layout, each folder with
+# a README + a base template, YOUR rules (no defaults). Defaults to ./keel-workspace
+keel init ~/keel-workspace
+cd ~/keel-workspace
+#   activate a global rule: rename global/rules/rule.yaml.example → global/rules/<name>.yaml, edit it
+#   project rules go in projects/app/rules/ ; governed waivers in global/exceptions/
 
-keel compile                       # atomic: staging → RuleTests → publish
+keel compile                       # atomic: compose layers → RuleTests → publish
 keel observe --events events.jsonl # passive evaluation → ledger (nothing blocks)
 keel explain <ev_id>               # full traceability for one evidence entry
 keel prune                         # lifecycle proposals backed by data (section 7.7)
