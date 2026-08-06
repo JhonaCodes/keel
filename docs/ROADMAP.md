@@ -1,6 +1,8 @@
 # Keel — Roadmap de lo faltante
 
 > Hoja de ruta accionable de lo pendiente, en el **orden que impone la spec**.
+> Para el **backlog vivo tarea-por-tarea** (con porqué + contexto + criterio de
+> hecho, listo para que un agente lo siga) ver [`PROGRAMA_DE_TRABAJO.md`](PROGRAMA_DE_TRABAJO.md).
 > Complementa a [`STATUS.md`](../STATUS.md) (matriz de conformidad punto a punto)
 > y a [`FUNCIONAMIENTO_INTERNO.md`](FUNCIONAMIENTO_INTERNO.md) (cómo funciona hoy).
 > Cada ítem cita su evidencia. Estado hoy: 3 capas de intervención en modo
