@@ -116,6 +116,7 @@ impl CapabilityManager {
                 command: None,
                 env: Default::default(),
                 files: Vec::new(),
+                loaded_skills: Vec::new(),
             },
             "shell.run" | "git.run" => Event {
                 kind: EventKind::CommandRequested,
@@ -136,6 +137,7 @@ impl CapabilityManager {
                 }),
                 env: Default::default(),
                 files: Vec::new(),
+                loaded_skills: Vec::new(),
             },
             _ => return Ok(()),
         };

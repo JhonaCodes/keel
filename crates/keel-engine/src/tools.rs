@@ -55,7 +55,7 @@ pub struct Finding {
 /// IDs of builtins supported in Phase 0. This is the list the compiler uses
 /// to resolve references (spec section 10.1 "Tool validation").
 pub const BUILTIN_DETECTORS: &[&str] = &["text.contains", "text.regex", "command.classify"];
-pub const BUILTIN_PRECONDITIONS: &[&str] = &["env.present", "flag.present"];
+pub const BUILTIN_PRECONDITIONS: &[&str] = &["env.present", "flag.present", "skill.loaded"];
 
 /// Runs a builtin DETECTOR. Returns only hit/no-hit: the detector never
 /// decides (section 4.5) — a match opens the door to `validate`, nothing more.
@@ -157,6 +157,18 @@ pub fn run_precondition(
                         .command
                         .as_deref()
                         .is_some_and(|c| c.split_whitespace().any(|tok| tok == flag))
+                }
+                "skill.loaded" => {
+                    // Hard cognitive gate: the action is allowed only if the
+                    // session has already loaded the named skill through keel
+                    // (receipt in the store, surfaced on the event by the
+                    // broker). onFail → the rule blocks and the packet tells the
+                    // model which skill to load. This is how keel FORCES a skill
+                    // for a job instead of merely suggesting it.
+                    let Some(id) = with.and_then(|w| w.get("id")).and_then(|v| v.as_str()) else {
+                        return false;
+                    };
+                    event.loaded_skills.iter().any(|s| s == id)
                 }
                 _ => false,
             }

@@ -15,6 +15,7 @@ fn event_with(content: Option<&str>, command: Option<&str>) -> Event {
         command: command.map(str::to_string),
         env: Default::default(),
         files: vec![],
+        loaded_skills: vec![],
     }
 }
 
@@ -121,6 +122,30 @@ fn precondition_env_and_flag_read_the_event_not_the_process() {
         &Default::default(),
         ctx()
     ));
+}
+
+/// The cognitive gate: `skill.loaded` requires the named skill to be loaded
+/// (present in the event, supplied by the broker from the store). This is how
+/// keel FORCES a skill for a job — the command is blocked until it is loaded.
+#[test]
+fn precondition_skill_loaded_gates_on_the_session_state() {
+    let pre = CompiledPrecondition {
+        using: CompiledToolRef::Builtin("skill.loaded".into()),
+        with: Some(serde_json::json!({"id": "web-ux-ui"})),
+        on_fail_declared: keel_core::Decision::Block,
+    };
+
+    // Not loaded yet → the precondition fails (the rule will block).
+    let mut ev = event_with(None, Some("git commit -m x"));
+    assert!(!run_precondition(&pre, &ev, &Default::default(), ctx()));
+
+    // After keel.skills.load recorded it, the session carries it → passes.
+    ev.loaded_skills = vec!["web-ux-ui".into()];
+    assert!(run_precondition(&pre, &ev, &Default::default(), ctx()));
+
+    // A different loaded skill does not satisfy the gate.
+    ev.loaded_skills = vec!["meeting-notes".into()];
+    assert!(!run_precondition(&pre, &ev, &Default::default(), ctx()));
 }
 
 /// FAIL-SAFE: missing binary → `unknown`, never a crash (section 6.4).

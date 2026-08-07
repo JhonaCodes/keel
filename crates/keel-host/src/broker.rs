@@ -22,6 +22,7 @@ use keel_engine::ledger::{Ledger, new_ev_id, now_ts};
 use keel_engine::packet;
 use keel_engine::runtime::{Mode, evaluate_event};
 use keel_engine::snapshot::Snapshot;
+use keel_runtime::RuntimeStore;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Write};
@@ -67,6 +68,18 @@ impl Broker {
         }
     }
 
+    /// Skills this session has loaded through keel so far, read live from the
+    /// runtime store (a skill loaded via `keel.skills.load` a moment ago must
+    /// count now). Best-effort: on any store error, empty — which makes a
+    /// `skill.loaded` gate fail closed (block + tell the model to load it).
+    fn loaded_skills(&self) -> Vec<String> {
+        let db = self.root.join(".keel-state").join("runtime.sqlite");
+        RuntimeStore::open(&db)
+            .ok()
+            .and_then(|store| store.consumed_skill_ids(&self.session_id).ok())
+            .unwrap_or_default()
+    }
+
     /// Evaluates one interposed command. Pure with respect to the socket —
     /// used directly by unit tests.
     pub fn decide(&self, req: &ShimRequest) -> Result<ShimResponse> {
@@ -80,6 +93,7 @@ impl Broker {
             command: Some(req.argv.join(" ")),
             env: self.env.clone(),
             files: Vec::new(),
+            loaded_skills: self.loaded_skills(),
         };
 
         let evals = evaluate_event(&self.snapshot, &event, &self.root, Mode::Enforce);

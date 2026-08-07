@@ -48,6 +48,27 @@ spec:
 - **Opcionales:** `scope: { paths: { include: ["src/**"] } }` (limita por ruta),
   `detect` (prefiltro barato), `preconditions` (estado del mundo), `locked: true`
   (una capa inferior solo puede fortalecerla).
+- **Forzar un skill (o agente) para un trabajo:** una precondición
+  `builtin:skill.loaded` bloquea la acción hasta que la sesión haya cargado ese
+  skill por keel — así keel NO sugiere, OBLIGA. El packet le dice al modelo cuál
+  cargar (`keel.skills.load`); tras cargarlo, reintenta y pasa. Ejemplo: exigir
+  `web-guide` antes de un `git`:
+
+  ```yaml
+  spec:
+    on: [command.requested]
+    detect: { using: "builtin:command.classify", with: { families: ["git"] } }
+    preconditions:
+      - using: "builtin:skill.loaded"
+        with: { id: web-guide }
+        onFail: block          # deny | block | review
+    enforcement:
+      valid: { decision: allow }
+  ```
+
+  (Preconditions builtin: `env.present`, `flag.present`, `skill.loaded`.) Nota:
+  esto gobierna COMANDOS que keel ve por los shims; una escritura interna del
+  cliente que no pasa por un comando no dispara la regla.
 - **Trampa:** los detectores builtin (`text.regex`/`text.contains`) miran el
   CONTENIDO, no el string del comando. Para decidir sobre un comando por su
   texto, usá una tool externa (abajo).

@@ -732,6 +732,7 @@ pub fn doctor(root: &Path) -> Result<ExitCode> {
             command: None,
             env: Default::default(),
             files: vec![],
+            loaded_skills: vec![],
         };
         let evals = evaluate_event(&snap, &synthetic, root, Mode::Passive);
         let over_review = evals

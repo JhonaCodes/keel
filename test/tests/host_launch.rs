@@ -138,6 +138,38 @@ spec:
     .unwrap();
 }
 
+/// A rule that FORCES a skill: `git` is blocked until the session has loaded
+/// the `web-guide` skill through keel (skill.loaded precondition).
+fn author_require_skill_for_git(root: &Path) {
+    let rules = root.join("global/rules");
+    let skills = root.join("global/skills");
+    fs::create_dir_all(&rules).unwrap();
+    fs::create_dir_all(&skills).unwrap();
+    fs::write(skills.join("web-guide.md"), "Follow the house web guide.").unwrap();
+    fs::write(
+        skills.join("web-guide.yaml"),
+        "apiVersion: keel/v1alpha1\nkind: Skill\nmetadata: { id: web-guide, version: 0.1.0 }\nspec: { compact: global/skills/web-guide.md }\n",
+    )
+    .unwrap();
+    fs::write(
+        rules.join("require-web-guide.yaml"),
+        r#"apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: global.require-web-guide, author: test, adrRef: adr:ADR-002, reviewAfter: P6M }
+spec:
+  on: [command.requested]
+  detect: { using: "builtin:command.classify", with: { families: ["git"] } }
+  preconditions:
+    - using: "builtin:skill.loaded"
+      with: { id: web-guide }
+      onFail: block
+  enforcement:
+    valid: { decision: allow }
+"#,
+    )
+    .unwrap();
+}
+
 fn blocked_evidence_count(root: &Path) -> i64 {
     let ledger = Connection::open(root.join(".keel-state/ledger.sqlite")).unwrap();
     ledger
@@ -236,6 +268,52 @@ fn a_governed_rm_is_decided_before_it_exists_as_a_process() {
     // Still exactly one block in evidence: the allow left its own entry with
     // a different decision, never a second block.
     assert_eq!(blocked_evidence_count(workspace.path()), 1);
+}
+
+/// keel FORCES a skill: a rule with a `skill.loaded` precondition blocks `git`
+/// until the skill has been loaded through keel, and the block packet tells the
+/// model exactly which skill to load. This is enforcement, not a suggestion.
+#[test]
+fn a_command_is_blocked_until_the_required_skill_is_loaded() {
+    let workspace = Workspace::new();
+    let root = workspace.path().to_str().unwrap().to_string();
+    assert!(workspace.run(&["init", &root, "--json"]).status.success());
+    author_require_skill_for_git(workspace.path());
+    let compile = workspace.run(&["compile", "--workspace", &root]);
+    assert!(
+        compile.status.success(),
+        "compile failed: {}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+
+    // The session has NOT loaded web-guide → git is refused, and the packet
+    // names the skill to load.
+    let blocked = workspace.run(&[
+        "launch",
+        "--client",
+        "generic",
+        "--workspace",
+        &root,
+        "--",
+        "/bin/sh",
+        "-c",
+        "git status",
+    ]);
+    let transcript = format!(
+        "{}{}",
+        String::from_utf8_lossy(&blocked.stdout),
+        String::from_utf8_lossy(&blocked.stderr)
+    );
+    assert!(
+        !blocked.status.success(),
+        "git must be blocked without the skill: {transcript}"
+    );
+    assert!(
+        transcript.contains("BLOCKED (global.require-web-guide)")
+            && transcript.contains("web-guide")
+            && transcript.contains("keel.skills.load"),
+        "the packet must tell the model which skill to load: {transcript}"
+    );
 }
 
 /// F2: the OS-sandbox backstop closes the absolute-path bypass that shims

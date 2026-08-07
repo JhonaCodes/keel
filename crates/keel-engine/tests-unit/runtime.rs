@@ -74,6 +74,7 @@ fn edited(file: &str, content: &str) -> Event {
         command: None,
         env: Default::default(),
         files: vec![],
+        loaded_skills: vec![],
     }
 }
 
@@ -270,6 +271,7 @@ fn env_violation_classifies_deny_and_allowlist() {
         command: Some(c.into()),
         env: Default::default(),
         files: vec![],
+        loaded_skills: vec![],
     };
     let env = EnvConstraint {
         allow: vec!["local".into(), "docker-dev".into()],

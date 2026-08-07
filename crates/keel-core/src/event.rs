@@ -110,6 +110,12 @@ pub struct Event {
     /// Files touched by the task (for `when.files.touch` in phase events).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<String>,
+    /// Skills the session has already loaded through keel at request time
+    /// (populated by the broker from the runtime store). Lets a rule REQUIRE a
+    /// skill before an action via the `skill.loaded` precondition (section 6.5
+    /// cognitive activation as a hard gate). Empty when unknown.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub loaded_skills: Vec<String>,
 }
 
 #[cfg(test)]

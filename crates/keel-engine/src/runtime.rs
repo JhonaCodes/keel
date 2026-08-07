@@ -18,7 +18,9 @@
 //! compiled snapshot (ADR-004: the runtime has no types to represent
 //! authoring configuration).
 
-use crate::snapshot::{CompiledBranch, CompiledRule, EnvConstraint, Snapshot};
+use crate::snapshot::{
+    CompiledBranch, CompiledPrecondition, CompiledRule, CompiledToolRef, EnvConstraint, Snapshot,
+};
 use crate::tools::{self, ExecContext};
 use keel_core::event::Event;
 use keel_core::{Decision, OriginClass, Verdict};
@@ -167,7 +169,7 @@ fn evaluate_rule(
                 declared,
                 started.elapsed().as_millis() as u64,
                 vec![],
-                Some(format!("precondition failed: {}", pre.using)),
+                Some(precondition_detail(pre)),
                 mode,
             ));
         }
@@ -244,6 +246,25 @@ fn evaluate_rule(
     );
     eval.load_skills = load_skills;
     Some(eval)
+}
+
+/// Actionable detail for a failed precondition. `skill.loaded` names the skill
+/// and how to satisfy it, so the block packet tells the model exactly what to
+/// do (load it through keel) instead of a bare "precondition failed".
+fn precondition_detail(pre: &CompiledPrecondition) -> String {
+    if let CompiledToolRef::Builtin(id) = &pre.using
+        && id == "skill.loaded"
+        && let Some(skill) = pre
+            .with
+            .as_ref()
+            .and_then(|w| w.get("id"))
+            .and_then(|v| v.as_str())
+    {
+        return format!(
+            "this action requires the keel skill `{skill}` — load it with keel.skills.load and follow it, then retry"
+        );
+    }
+    format!("precondition failed: {}", pre.using)
 }
 
 /// Environment constraint check (section 11.4). The environment is classified from
