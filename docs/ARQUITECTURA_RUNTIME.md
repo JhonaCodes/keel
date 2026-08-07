@@ -1,3 +1,13 @@
+> **CORRECCION (D-012, 2026-08-07).** Este documento describe, en partes, el
+> diseno de "sesion propiedad de keel via API de proveedor" (RuntimeHost ->
+> ModelExecutor -> API). Esa direccion fue REVERTIDA: **keel es un runtime
+> PADRE que gobierna el ENTORNO DE EJECUCION del CLI del modelo y NO usa APIs de
+> proveedor.** Donde este texto hable de llamar a la API del modelo, de `keel
+> run` o de `keel configure executor`, esta OBSOLETO — manda `DECISIONES.md`
+> (D-012 a-d) y el flujo real en `USO_INSTALACION.md`. La reescritura integral
+> de este documento a la arquitectura de runtime-padre es trabajo pendiente
+> registrado (no un descuido).
+
 # Arquitectura del runtime
 
 ## Propiedad y limites

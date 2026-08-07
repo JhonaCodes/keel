@@ -1,5 +1,16 @@
 # Decisiones
 
+> **Correccion (D-012).** Las decisiones D-001, D-005 y D-008 fueron escritas
+> cuando el producto se penso como una sesion propiedad de keel que llama a las
+> APIs de los proveedores (`RuntimeHost -> ModelExecutor -> API`). Esa direccion
+> fue REVERTIDA: keel es un runtime PADRE que gobierna el ENTORNO DE EJECUCION
+> del CLI del modelo y NO usa APIs de proveedor. Donde D-001/D-005/D-008 hablen
+> de `ModelExecutor -> provider API` o de "sesion gobernada por API", manda
+> D-012 (y sus sub-decisiones a-d). El camino API HTTP y sus comandos (`keel
+> run`, `keel configure executor`) fueron eliminados; el executor no-mock es un
+> CLI local (`CliModelExecutor`). D-002/D-003/D-004/D-006/D-007/D-009 siguen
+> vigentes tal cual.
+
 ## D-001 Runtime soberano
 
 Keel es propietario del loop cognitivo gobernado. El flujo canonico es:
