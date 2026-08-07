@@ -1,0 +1,20 @@
+[package]
+name = "keel-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+keel-core = { path = "../keel-core" }
+keel-engine = { path = "../keel-engine" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+rusqlite = { workspace = true }
+ulid = { workspace = true }
+reqwest = { workspace = true }
+jiff = { workspace = true }
+jsonschema = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"

@@ -85,7 +85,19 @@
             "always": { "$ref": "#/$defs/branch" }
           }
         },
-        "constraints": { "type": "object" }
+        "constraints": { "type": "object" },
+        "locked": {
+          "type": "boolean",
+          "description": "section 7.3/7.4: this rule cannot be weakened by lower layers; the compiler verifies monotonicity dimension by dimension."
+        },
+        "overridable": {
+          "type": "boolean",
+          "description": "section 7.4: a lower layer may replace this rule (the exemption marker)."
+        },
+        "merge": {
+          "enum": ["append"],
+          "description": "section 7.3: lower layers may only ADD requirements, never remove."
+        }
       }
     }
   },

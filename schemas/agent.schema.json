@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:keel:schemas:v1alpha1:agent",
   "title": "Keel Agent (keel/v1alpha1)",
-  "description": "kind: Agent — spec section 14: a logical responsibility (e.g. an auditor) executed by an AgentExecutor, possibly a different model than the main session. Minimal Phase-2-seed form: role, the executor it routes to, an output schema its result is validated against, and a hard budget. A semantic verdict NEVER authorizes an irreversible action (section 4.7).",
+  "description": "kind: Agent — a logical responsibility routed by Keel to a governed ModelExecutor, possibly a different provider than the parent session.",
   "type": "object",
   "required": ["apiVersion", "kind", "metadata", "spec"],
   "additionalProperties": false,

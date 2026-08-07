@@ -1,9 +1,9 @@
 # Contributing to Keel
 
 Thanks for your interest. Keel is open core: the runtime, CLI, engine,
-adapters and specification (`docs/`) all live here under Apache-2.0.
-Organizational-scale components are out of scope for this repository (see
-`docs/RCCA_future.md`).
+runtime, compiler, CLI and specification (`docs/`) all live here under Apache-2.0.
+Organizational-scale components are out of scope for this repository; pending
+work is tracked in `docs/planificacion/`.
 
 ## Developer Certificate of Origin (DCO)
 
@@ -34,7 +34,7 @@ Keel's guarantees are structural, so contributions must preserve them:
   `crates/keel-engine/tests/arch_boundaries.rs` — do not weaken it.
 - **The ledger is append-only** and origin classes are never mixed
   (deterministic vs semantic, section 6.4).
-- **`keel observe` never blocks** (telemetry, ADR-021); only `keel gate`
+- **`keel observe` never blocks** (telemetry, ADR-021); only governed capabilities
   enforces, and only preventable events (inner ring + completion) exit 2.
 - **A semantic verdict never authorizes an irreversible action** (section 4.7).
 - Every file keeps its `SPDX-License-Identifier` header.

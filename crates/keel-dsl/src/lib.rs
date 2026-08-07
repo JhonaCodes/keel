@@ -17,12 +17,18 @@ use keel_core::{Decision, OriginClass, Verdict};
 use serde::{Deserialize, Serialize};
 
 pub use rule::{
-    Branch, Enforcement, Load, OnFail, Precondition, Report, RuleSpec, Scope, ToolCall, ToolRef,
-    When, WhenCondition,
+    Branch, Enforcement, Load, Merge, OnFail, Precondition, Report, RuleSpec, Scope, ToolCall,
+    ToolRef, When, WhenCondition,
 };
 
 /// apiVersion supported by this binary.
 pub const API_VERSION: &str = "keel/v1alpha1";
+
+/// `skip_serializing_if` helper for booleans that default to `false`: a flag
+/// that is off round-trips as absent, not as an explicit `false`.
+pub(crate) fn is_false(b: &bool) -> bool {
+    !*b
+}
 
 /// Common envelope metadata (spec section 11.1).
 ///
@@ -62,8 +68,19 @@ pub enum Document {
     Tool(Box<ToolDoc>),
     Skill(Box<SkillDoc>),
     Agent(Box<AgentDoc>),
-    AgentExecutor(Box<AgentExecutorDoc>),
     RuleTest(Box<RuleTestDoc>),
+    RepositoryRegistry(Box<RepositoryRegistryDoc>),
+    Profile(Box<ProfileDoc>),
+    Exception(Box<ExceptionDoc>),
+    Blueprint(Box<GovernedComponentDoc>),
+    Knowledge(Box<GovernedComponentDoc>),
+    Workflow(Box<GovernedComponentDoc>),
+    Contract(Box<GovernedComponentDoc>),
+    Hook(Box<GovernedComponentDoc>),
+    MCPProvider(Box<GovernedComponentDoc>),
+    ModelExecutor(Box<GovernedComponentDoc>),
+    AgentRoutingPolicy(Box<GovernedComponentDoc>),
+    Policy(Box<GovernedComponentDoc>),
 }
 
 impl Document {
@@ -74,8 +91,19 @@ impl Document {
             Document::Tool(d) => &d.metadata,
             Document::Skill(d) => &d.metadata,
             Document::Agent(d) => &d.metadata,
-            Document::AgentExecutor(d) => &d.metadata,
             Document::RuleTest(d) => &d.metadata,
+            Document::RepositoryRegistry(d) => &d.metadata,
+            Document::Profile(d) => &d.metadata,
+            Document::Exception(d) => &d.metadata,
+            Document::Blueprint(d)
+            | Document::Knowledge(d)
+            | Document::Workflow(d)
+            | Document::Contract(d)
+            | Document::Hook(d)
+            | Document::MCPProvider(d)
+            | Document::ModelExecutor(d)
+            | Document::AgentRoutingPolicy(d)
+            | Document::Policy(d) => &d.metadata,
         }
     }
 
@@ -86,10 +114,61 @@ impl Document {
             Document::Tool(_) => "Tool",
             Document::Skill(_) => "Skill",
             Document::Agent(_) => "Agent",
-            Document::AgentExecutor(_) => "AgentExecutor",
             Document::RuleTest(_) => "RuleTest",
+            Document::RepositoryRegistry(_) => "RepositoryRegistry",
+            Document::Profile(_) => "Profile",
+            Document::Exception(_) => "Exception",
+            Document::Blueprint(_) => "Blueprint",
+            Document::Knowledge(_) => "Knowledge",
+            Document::Workflow(_) => "Workflow",
+            Document::Contract(_) => "Contract",
+            Document::Hook(_) => "Hook",
+            Document::MCPProvider(_) => "MCPProvider",
+            Document::ModelExecutor(_) => "ModelExecutor",
+            Document::AgentRoutingPolicy(_) => "AgentRoutingPolicy",
+            Document::Policy(_) => "Policy",
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GovernedComponentDoc {
+    #[serde(rename = "apiVersion")]
+    pub api_version: String,
+    pub metadata: Metadata,
+    pub spec: GovernedComponentSpec,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GovernedComponentSpec {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inline: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requirements: Vec<ComponentRequirement>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capabilities: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentRequirement {
+    pub component: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub phases: Vec<String>,
+    #[serde(default = "required_by_default")]
+    pub required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+fn required_by_default() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -191,8 +270,7 @@ pub struct ExemplarPair {
     pub accepted: String,
 }
 
-/// kind: Agent (spec section 14) — a logical responsibility executed by an
-/// AgentExecutor. Minimal Phase-2-seed shape.
+/// kind: Agent — a logical responsibility routed to a governed ModelExecutor.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentDoc {
@@ -226,33 +304,6 @@ pub struct AgentBudget {
     pub timeout_ms: Option<u64>,
     #[serde(default, rename = "maxTokens", skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u64>,
-}
-
-/// kind: AgentExecutor (spec section 14.1/section 14.8) — how/where an Agent runs.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AgentExecutorDoc {
-    #[serde(rename = "apiVersion")]
-    pub api_version: String,
-    pub metadata: Metadata,
-    pub spec: AgentExecutorSpec,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AgentExecutorSpec {
-    pub command: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
-    #[serde(default, rename = "timeoutMs", skip_serializing_if = "Option::is_none")]
-    pub timeout_ms: Option<u64>,
-    /// Environment allowlist (section 13.1: "no secret inheritance to child sessions
-    /// by default"). The executor subprocess receives ONLY these host env vars
-    /// (plus PATH, needed to resolve the program) — everything else is scrubbed.
-    /// Empty (the default) = no inheritance: an executor that needs a credential
-    /// must name it here.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub env: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -292,6 +343,99 @@ pub struct Expectation {
     pub decision: Option<Decision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub origin: Option<OriginClass>,
+}
+
+/// kind: RepositoryRegistry (spec section 8.5) — links repository identities to
+/// Keel projects. This is the input to resolution by repo identity (section 7.1):
+/// which project (and therefore which composition chain) a checked-out repo
+/// resolves to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RepositoryRegistryDoc {
+    #[serde(rename = "apiVersion")]
+    pub api_version: String,
+    pub metadata: Metadata,
+    pub spec: RepositoryRegistrySpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RepositoryRegistrySpec {
+    pub repositories: Vec<RepositoryEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RepositoryEntry {
+    /// Source-control provider, e.g. `github`.
+    pub provider: String,
+    /// Provider-scoped identity, e.g. `NuiMarkets/con-app`.
+    pub id: String,
+    /// Keel project this repository binds to, e.g. `project:nui/con-app`.
+    pub project: String,
+    /// A locked mapping cannot be reassigned by a lower layer (section 7.1).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub locked: bool,
+}
+
+/// kind: Profile (spec section 8.5) — personal preferences. A profile is the
+/// LOWEST authority layer: it may select an alternative binding only where an
+/// ancestor declares it `overridable`, and it can NEVER weaken a `locked` rule.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileDoc {
+    #[serde(rename = "apiVersion")]
+    pub api_version: String,
+    pub metadata: Metadata,
+    pub spec: ProfileSpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProfileSpec {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client: Option<String>,
+    /// Free-form personal preferences (e.g. implementationStrategy, verbosity).
+    /// Non-authoritative: kept for round-trip, they govern no action.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferences: Option<serde_json::Value>,
+}
+
+/// kind: Exception (spec section 7.4, ADR-014) — the ONLY legitimate route to
+/// relax a `locked` rule in a concrete context. It is NOT composition: it is an
+/// explicit object owned at the scope that declared the lock, with a reason, a
+/// bounded scope and an expiry, recorded in the ledger as a `human` decision.
+/// Silent weakenings do not exist.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExceptionDoc {
+    #[serde(rename = "apiVersion")]
+    pub api_version: String,
+    pub metadata: Metadata,
+    pub spec: ExceptionSpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExceptionSpec {
+    /// `rule:<id>` — the locked rule this exception relaxes.
+    pub rule: String,
+    /// The scope that declared the lock and therefore owns the exception
+    /// (e.g. `organization:nui`).
+    pub owner: String,
+    pub reason: String,
+    /// BOUNDED scope the relaxation applies to (section 7.4: "reason, bounded
+    /// scope and expiry"). Mandatory. The compiler carves this coverage OUT of
+    /// the locked rule (the rule is lifted within `scope.paths.include`); the
+    /// lock stands at full strength everywhere else. An exception with no
+    /// `paths.include` cannot bound the relaxation and is rejected — an
+    /// unbounded waiver is the silent weakening the mechanism exists to forbid.
+    pub scope: Scope,
+    /// ISO-8601 expiry date (e.g. `2026-12-31`). An expired exception no longer
+    /// suppresses the monotonicity check.
+    pub expiry: String,
 }
 
 /// DSL loading/validation errors.

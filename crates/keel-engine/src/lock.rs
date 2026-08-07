@@ -95,7 +95,7 @@ pub struct LockComponents {
     #[serde(default)]
     pub agents: Vec<String>,
     #[serde(default)]
-    pub executors: Vec<String>,
+    pub components: Vec<String>,
 }
 
 /// `.keel/keel.lock` — the pinned resolution (section 8.6).
@@ -108,6 +108,14 @@ pub struct Lock {
     #[serde(rename = "keelVersion")]
     pub keel_version: String,
     pub components: LockComponents,
+    /// The composition layers that contributed to the resolved snapshot
+    /// (section 8.6: the lock pins the resolution), sorted and de-duplicated —
+    /// e.g. `["global", "project:con-app"]`. Empty for a snapshot compiled
+    /// without layer provenance. A layer appearing or disappearing is drift the
+    /// snapshot hash already reflects; recording it keeps the resolution
+    /// inspectable.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub composition: Vec<String>,
 }
 
 impl Lock {
@@ -124,7 +132,14 @@ impl Lock {
         let tools: Vec<String> = snapshot.tools.keys().cloned().collect();
         let skills: Vec<String> = snapshot.skills.keys().cloned().collect();
         let agents: Vec<String> = snapshot.agents.keys().cloned().collect();
-        let executors: Vec<String> = snapshot.executors.keys().cloned().collect();
+        let components: Vec<String> = snapshot.components.keys().cloned().collect();
+        let mut composition: Vec<String> = snapshot
+            .rules
+            .iter()
+            .filter_map(|r| r.origin_layer.clone())
+            .collect();
+        composition.sort();
+        composition.dedup();
         Lock {
             project: binding.project.clone(),
             workspace: binding.workspace.clone(),
@@ -135,8 +150,9 @@ impl Lock {
                 tools,
                 skills,
                 agents,
-                executors,
+                components,
             },
+            composition,
         }
     }
 
@@ -188,6 +204,12 @@ impl Lock {
         }
         if fresh.components != self.components {
             return Err("component drift: the resolved components differ from the lock".into());
+        }
+        if fresh.composition != self.composition {
+            return Err(format!(
+                "composition drift: resolved layers {:?} differ from the lock {:?}",
+                fresh.composition, self.composition
+            ));
         }
         Ok(())
     }

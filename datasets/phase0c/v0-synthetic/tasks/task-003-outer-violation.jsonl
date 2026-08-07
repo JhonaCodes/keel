@@ -1,2 +1,0 @@
-{"kind":"file.edited","file":"src/a.rs","content":"let x = BADPATTERN;","line":10,"session_id":"t3-outer"}
-{"kind":"completion.requested","session_id":"t3-outer"}

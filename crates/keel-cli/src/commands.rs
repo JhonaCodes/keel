@@ -9,6 +9,9 @@ use keel_engine::ledger::{Ledger, LedgerEntry};
 use keel_engine::runtime::{Evaluation, Mode, evaluate_event};
 use keel_engine::snapshot::Snapshot;
 use keel_engine::{compile as compiler, sarif, testkit, workspace};
+// The `keel init` scaffold content (READMEs + templates). Module namespace, so
+// it coexists with the `init` function below.
+use crate::init;
 use std::io::BufRead;
 use std::path::Path;
 use std::process::ExitCode;
@@ -21,115 +24,169 @@ pub(crate) fn new_ev_id() -> String {
     format!("ev_{}", ulid::Ulid::new().to_string().to_lowercase())
 }
 
-// ─────────────────────────── workspace init ───────────────────────────
+// ─────────────────────────── init ───────────────────────────
 
-/// Generates ONLY the structure: the rules are written by the user. Keel
-/// ships no default rules — it does not know what constraints your project
-/// has, and pretending it does would be exactly the generic prose it fights.
-/// The only things generated are COMMENTED-OUT TEMPLATES (they do not compile
-/// until you make them your own) that document the anatomy of the DSL.
-pub fn workspace_init(path: &Path) -> Result<ExitCode> {
+/// `keel init [path]` — scaffolds a workspace with its composition layers
+/// (spec section 8.5) and a binding, so `keel compile` works immediately.
+///
+/// Keel ships NO default rules — it does not know your project's constraints,
+/// and pretending it does would be the generic prose it fights. What init
+/// creates is the full LAYER STRUCTURE plus COMMENTED-OUT `.example` templates
+/// (the loader ignores `.example`, so nothing fires until you rename + fill it):
+///
+/// ```text
+/// <path>/
+/// ├── workspace.yaml
+/// ├── .gitignore                       # ignores .keel-state/
+/// ├── .keel/project.yaml               # binding → project:local/app (so compile resolves)
+/// ├── global/                          # applies to EVERY project
+/// │   ├── rules/rule.yaml.example      #   a `locked` global rule template
+/// │   └── exceptions/exception.yaml.example
+/// └── projects/app/                    # applies to THIS project only
+///     ├── rules/rule.yaml.example
+///     ├── tools/tool.yaml.example
+///     └── tests/test.yaml.example
+/// ```
+pub fn init(path: &Path) -> Result<ExitCode> {
+    use keel_engine::lock::ProjectBinding;
+
     if path.join("workspace.yaml").exists() {
-        bail!("`{}` is already an Keel workspace", path.display());
-    }
-    for dir in ["rules", "tools", "tests", "fixtures"] {
-        std::fs::create_dir_all(path.join(dir))?;
+        bail!("`{}` is already a Keel workspace", path.display());
     }
 
-    std::fs::write(
-        path.join("workspace.yaml"),
-        r#"apiVersion: keel/v1alpha1
-kind: Workspace
-metadata: { id: my-workspace }
-spec:
-  description: Keel workspace (Phase 0 — passive evaluation and telemetry)
-"#,
-    )?;
+    // The whole spec section 8.5 tree, each directory with a README (what it is
+    // + how to author it — context for a human OR an LLM filling it) and a base
+    // `.example` template (the loader ignores `.example`, so nothing fires until
+    // you rename + edit it). Honest about what is ACTIVE now vs org-scale /
+    // engine-generated / deferred, so nothing is mistaken for working.
+    let files: &[(&str, &str)] = &[
+        ("README.md", init::WORKSPACE_README),
+        ("workspace.yaml", init::WORKSPACE_YAML),
+        (".gitignore", ".keel-state/\n"),
+        ("global/README.md", init::GLOBAL_README),
+        ("global/rules/README.md", init::GLOBAL_RULES_README),
+        ("global/rules/rule.yaml.example", init::GLOBAL_RULE),
+        ("global/exceptions/README.md", init::EXCEPTIONS_README),
+        (
+            "global/exceptions/exception.yaml.example",
+            init::EXCEPTION_TMPL,
+        ),
+        ("organizations/README.md", init::ORGS_README),
+        (
+            "organizations/my-company/README.md",
+            init::ORG_INSTANCE_README,
+        ),
+        (
+            "organizations/my-company/organization.yaml.example",
+            init::ORGANIZATION_TMPL,
+        ),
+        (
+            "organizations/my-company/repositories.yaml.example",
+            init::REPOSITORIES_TMPL,
+        ),
+        (
+            "organizations/my-company/composition.yaml.example",
+            init::COMPOSITION_TMPL,
+        ),
+        (
+            "organizations/my-company/components/README.md",
+            init::COMPONENTS_README,
+        ),
+        ("platforms/README.md", init::PLATFORMS_README),
+        ("projects/README.md", init::PROJECTS_README),
+        ("projects/app/README.md", init::PROJECT_INSTANCE_README),
+        ("projects/app/rules/README.md", init::PROJECT_RULES_README),
+        ("projects/app/rules/rule.yaml.example", init::PROJECT_RULE),
+        ("projects/app/tools/README.md", init::TOOLS_README),
+        ("projects/app/tools/tool.yaml.example", init::TOOL_TMPL),
+        (
+            "projects/app/skills/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/knowledge/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/blueprints/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/workflows/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/workflows/default.yaml",
+            init::DEFAULT_WORKFLOW,
+        ),
+        (
+            "projects/app/contracts/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/agents/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/hooks/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/providers/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/policies/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/executors/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        ("projects/app/executors/mock.yaml", init::MOCK_EXECUTOR),
+        ("projects/app/tests/README.md", init::TESTS_README),
+        ("projects/app/tests/test.yaml.example", init::TEST_TMPL),
+        ("teams/README.md", init::TEAMS_README),
+        ("profiles/README.md", init::PROFILES_README),
+        ("profiles/profile.yaml.example", init::PROFILE_TMPL),
+        ("packages/README.md", init::PACKAGES_README),
+        ("schemas/README.md", init::SCHEMAS_README),
+        ("registry/README.md", init::REGISTRY_README),
+        ("locks/README.md", init::LOCKS_README),
+        ("migrations/README.md", init::MIGRATIONS_README),
+        ("tests/README.md", init::WS_TESTS_README),
+    ];
+    for (rel, content) in files {
+        let dest = path.join(rel);
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&dest, content)?;
+    }
 
-    // Commented-out template — .example extension: the loader does NOT load it.
-    // The user copies it to rules/<name>.yaml and makes it their own.
-    std::fs::write(
-        path.join("rules/rule.yaml.example"),
-        r#"# Keel rule template (rename to <name>.yaml to activate it).
-#
-# Anatomy (spec section 11): the rule DECLARES; the tool IMPLEMENTS (it is code).
-# author, adrRef and reviewAfter are MANDATORY (ADR-023): every rule has
-# an owner, a decision that justifies it and a review date — so that
-# `keel prune` can propose deleting it BACKED BY DATA once it dies.
-#
-# apiVersion: keel/v1alpha1
-# kind: Rule
-# metadata:
-#   id: my-project.my-rule          # unique within the workspace
-#   version: 1.0.0
-#   author: your-name
-#   adrRef: adr:ADR-001             # the design decision that originates it
-#   reviewAfter: P6M                # ISO-8601 review window
-# spec:
-#   reversibility: reversible       # irreversible => unknown escalates to a human (section 4.7)
-#   scope:
-#     languages: [python]           # optional
-#     paths: { include: ["src/**"], exclude: ["src/legacy/**"] }
-#   on: [file.edited]               # events: file.edited, command.requested, ...
-#   detect:                         # cheap prefilter — NEVER decides (section 4.5)
-#     using: builtin:text.contains  # or builtin:text.regex / builtin:command.classify
-#     with: { value: "pattern" }
-#   validate:                       # the real verdict: valid|invalid|unknown
-#     using: tool:my-analyzer       # declare the tool in tools/ (or a text builtin)
-#   enforcement:
-#     invalid:
-#       decision: block             # in Phase 0 it is recorded; nothing blocks yet
-#       report: { message: "what to fix and how" }
-#     unknown: { decision: review }
-#     valid: { decision: allow }
-"#,
-    )?;
-
-    std::fs::write(
-        path.join("tools/tool.yaml.example"),
-        r#"# External tool template (rename to <name>.yaml to activate it).
-# The tool is CODE (spec section 4.4): it receives the event as JSON via stdin and
-# responds per `output`. Relative paths resolve against this workspace.
-#
-# apiVersion: keel/v1alpha1
-# kind: Tool
-# metadata: { id: my-analyzer, version: 0.1.0 }
-# spec:
-#   command: [python3, bin/my_analyzer.py]
-#   timeoutMs: 5000
-#   output: verdict-json   # {"verdict":"valid|invalid|unknown","findings":[...]}
-#                          # also: sarif | exit-code (0=valid,1=invalid,other=unknown)
-"#,
-    )?;
-
-    std::fs::write(
-        path.join("tests/test.yaml.example"),
-        r#"# RuleTest template (rename to <name>.yaml to activate it).
-# Every rule deserves its cases: `keel compile` does NOT publish a snapshot
-# if a RuleTest fails (section 10.2). It is your safety net for editing rules
-# without fear.
-#
-# apiVersion: keel/v1alpha1
-# kind: RuleTest
-# metadata: { id: my-rule.basic-case }
-# spec:
-#   target: rule:my-project.my-rule
-#   event:
-#     kind: file.edited
-#     file: src/example.py
-#     content: "code that violates the rule"
-#   expect: { verdict: invalid, decision: block, origin: deterministic }
-"#,
-    )?;
-
-    // Runtime state kept out of version control (spec section 8.4 / invariant 5).
-    std::fs::write(path.join(".gitignore"), ".keel-state/\n")?;
+    // Binding (section 8.6): which project this workspace resolves to, so
+    // `keel compile` composes global + projects/app out of the box.
+    ProjectBinding {
+        project: "project:local/app".to_string(),
+        workspace: "org:local".to_string(),
+    }
+    .write(path)?;
 
     println!("workspace created at {}", path.display());
-    println!("structure: rules/ tools/ tests/ fixtures/ (.example templates included)");
-    println!("1. write your first rule in rules/ (see rules/rule.yaml.example)");
-    println!("2. keel compile   # publishes the snapshot");
-    println!("3. keel observe   # evaluates events passively and feeds the ledger");
+    println!(
+        "the full section 8.5 layout, each folder with a README + a base template; bound to project:local/app"
+    );
+    println!(
+        "active: rules, skills, knowledge, blueprints, workflows, contracts, agents, hooks, providers, policies and executors"
+    );
+    println!(
+        "ready: keel doctor --workspace {} --governed",
+        path.display()
+    );
+    println!(
+        "run:   keel run --workspace {} --task <task>",
+        path.display()
+    );
     Ok(ExitCode::SUCCESS)
 }
 
@@ -137,12 +194,66 @@ spec:
 
 /// ATOMIC compilation (spec section 10.2): staging → RuleTests → publish only if
 /// they pass, retaining the last valid snapshot for rollback (invariant 7).
+///
+/// Composition-aware (spec section 7): the workspace is loaded as its layers
+/// (section 8.5). If it carries a binding (`.keel/project.yaml`), the chain is
+/// resolved by repository identity (section 7.1) and composed with `locked`
+/// monotonicity verified (section 7.4). A flat workspace is a single layer, so
+/// the same path compiles it unchanged.
 pub fn compile(root: &Path) -> Result<ExitCode> {
-    let files = workspace::load(root)?;
-    let outcome = compiler::compile(&files, now_ts())?;
+    use keel_engine::lock::ProjectBinding;
+    use keel_engine::workspace::{Layer, load_layered};
 
-    // Gate: the configuration tests decide the publication.
-    let reports = testkit::run_tests(&outcome.snapshot, &files.tests, &files.root);
+    let layered = load_layered(root)?;
+    let binding = ProjectBinding::load(root).ok();
+
+    // Select the composition chain.
+    let selected: Vec<&Layer> = match &binding {
+        Some(b) => {
+            let chain = keel_engine::resolution::resolve(&layered, b, None)?;
+            if !chain.matched_project {
+                eprintln!(
+                    "warning: bound project `{}` matched no project layer — it contributes no rules",
+                    b.project
+                );
+            }
+            if let keel_engine::resolution::IdentityStatus::Advisory(msg) = &chain.identity {
+                eprintln!("warning: repository identity advisory (section 13.3): {msg}");
+            }
+            chain
+                .layer_indices
+                .iter()
+                .map(|&i| &layered.layers[i])
+                .collect()
+        }
+        None => {
+            if layered.layers.len() == 1 {
+                layered.layers.iter().collect()
+            } else {
+                bail!(
+                    "layered workspace has {} layers but no binding — run `keel bind` to select the project chain",
+                    layered.layers.len()
+                );
+            }
+        }
+    };
+
+    let chain: Vec<compiler::CompileLayer> = selected
+        .iter()
+        .map(|l| compiler::CompileLayer {
+            label: layer_label(l),
+            files: &l.files,
+        })
+        .collect();
+    let outcome = compiler::compile_layered(&chain, now_ts())?;
+
+    // Gate: the configuration tests (aggregated across the chain) decide the
+    // publication.
+    let tests: Vec<_> = selected
+        .iter()
+        .flat_map(|l| l.files.tests.iter().cloned())
+        .collect();
+    let reports = testkit::run_tests(&outcome.snapshot, &tests, root);
     let failed: Vec<_> = reports.iter().filter(|r| !r.passed).collect();
 
     if !failed.is_empty() {
@@ -157,12 +268,13 @@ pub fn compile(root: &Path) -> Result<ExitCode> {
         return Ok(ExitCode::FAILURE);
     }
 
-    let state = files.state_dir();
+    let paths = workspace::WorkspaceFiles::empty(root.to_path_buf());
+    let state = paths.state_dir();
     std::fs::create_dir_all(&state)?;
-    let snap_path = files.snapshot_path();
+    let snap_path = paths.snapshot_path();
     if snap_path.exists() {
         // Invariant 7: retain the last valid snapshot.
-        std::fs::rename(&snap_path, files.snapshot_prev_path())?;
+        std::fs::rename(&snap_path, paths.snapshot_prev_path())?;
     }
     outcome.snapshot.save(&snap_path)?;
 
@@ -170,7 +282,7 @@ pub fn compile(root: &Path) -> Result<ExitCode> {
     println!("rules               {}", outcome.snapshot.rules.len());
     if outcome.snapshot.rules.is_empty() {
         println!(
-            "  (workspace has no rules yet — write the first one in rules/, template at rules/rule.yaml.example)"
+            "  (no active rules yet — activate a template, e.g. global/rules/rule.yaml.example → global/rules/<name>.yaml)"
         );
     }
     println!("external tools      {}", outcome.snapshot.tools.len());
@@ -179,6 +291,24 @@ pub fn compile(root: &Path) -> Result<ExitCode> {
         println!("warning: {w}");
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// The label a layer carries in composition/monotonicity reports and in the
+/// lock's `composition` list: `global`, `organization:nui`, `project:con-app`.
+fn layer_label(layer: &keel_engine::workspace::Layer) -> String {
+    use keel_engine::workspace::LayerId;
+    let kind = match layer.id {
+        LayerId::Global => "global",
+        LayerId::Organization => "organization",
+        LayerId::Platform => "platform",
+        LayerId::Project => "project",
+        LayerId::Team => "team",
+        LayerId::Profile => "profile",
+    };
+    match &layer.name {
+        Some(name) => format!("{kind}:{name}"),
+        None => kind.to_string(),
+    }
 }
 
 // ─────────────────────────── observe ───────────────────────────
@@ -838,41 +968,4 @@ pub(crate) fn ci_run(root: &Path) -> Result<ExitCode> {
     println!("evidence   {}", files.ledger_path().display());
     println!("ci run OK");
     Ok(ExitCode::SUCCESS)
-}
-
-// ─────────────────────────── adapter preflight ───────────────────────────
-
-/// `keel adapter <client> --check` — preflight the published snapshot against
-/// the adapter's capability manifest (spec section 12.1, invariant 8). Rejects a
-/// `block` the client cannot honor instead of assuming it. Exit 1 on any
-/// unhonorable policy.
-pub(crate) fn adapter_check(root: &Path, client: &str) -> Result<ExitCode> {
-    use keel_engine::adapter::{AdapterManifest, preflight};
-
-    let Some(manifest) = AdapterManifest::for_client(client) else {
-        eprintln!("error: unknown adapter `{client}` (supported: claude-code)");
-        return Ok(ExitCode::FAILURE);
-    };
-    let files = workspace::load(root)?;
-    let snapshot = Snapshot::load(&files.snapshot_path())
-        .context("no published snapshot — run `keel compile` first")?;
-
-    let violations = preflight(&snapshot, &manifest);
-    if violations.is_empty() {
-        println!(
-            "adapter {} — preflight OK ({} rules honor their blocking policy)",
-            manifest.id,
-            snapshot.rules.len()
-        );
-        return Ok(ExitCode::SUCCESS);
-    }
-    eprintln!(
-        "adapter {} — preflight FAILED: {} unhonorable blocking policy(ies)",
-        manifest.id,
-        violations.len()
-    );
-    for v in &violations {
-        eprintln!("  {} → {}", v.rule_id, v.reason);
-    }
-    Ok(ExitCode::FAILURE)
 }

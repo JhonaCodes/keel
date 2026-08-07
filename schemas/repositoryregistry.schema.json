@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:keel:schemas:v1alpha1:repositoryregistry",
+  "title": "Keel RepositoryRegistry (keel/v1alpha1)",
+  "description": "kind: RepositoryRegistry — spec section 8.5. Links repository identities to Keel projects: the input to resolution by repo identity (section 7.1).",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "keel/v1alpha1" },
+    "kind": { "const": "RepositoryRegistry" },
+    "metadata": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" },
+        "author": { "type": "string" },
+        "adrRef": { "type": "string" },
+        "reviewAfter": { "type": "string" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "required": ["repositories"],
+      "additionalProperties": false,
+      "properties": {
+        "repositories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["provider", "id", "project"],
+            "additionalProperties": false,
+            "properties": {
+              "provider": { "type": "string", "minLength": 1 },
+              "id": { "type": "string", "minLength": 1 },
+              "project": { "type": "string", "minLength": 1 },
+              "locked": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

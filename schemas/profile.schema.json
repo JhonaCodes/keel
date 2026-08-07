@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:keel:schemas:v1alpha1:profile",
+  "title": "Keel Profile (keel/v1alpha1)",
+  "description": "kind: Profile — spec section 8.5. Personal preferences; the lowest authority layer (cannot weaken a locked rule, section 7.4).",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "keel/v1alpha1" },
+    "kind": { "const": "Profile" },
+    "metadata": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" },
+        "author": { "type": "string" },
+        "adrRef": { "type": "string" },
+        "reviewAfter": { "type": "string" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workflow": { "type": "string" },
+        "client": { "type": "string" },
+        "preferences": { "type": "object" }
+      }
+    }
+  }
+}

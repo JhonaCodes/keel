@@ -3,7 +3,7 @@
 //! runtime consumes.
 //!
 //! WHY IT LIVES IN CORE AND NOT IN THE DSL: the event is PROTOCOL vocabulary
-//! (adapter ⇄ runtime), not authoring vocabulary. The runtime evaluates events
+//! (capability ⇄ runtime), not authoring vocabulary. The runtime evaluates events
 //! without ever knowing the DSL (forbidden edge `runtime ⇏ dsl`); that is why
 //! the shared type lives in the leaf both can see.
 //!
@@ -21,7 +21,7 @@ use std::collections::BTreeMap;
 /// produces no verdict; it tells the runtime the model's context was compacted
 /// so the L2 session skill-state can be reset and skills re-delivered on the
 /// next match (section 6.5, the "re-deliver only when context is lost" rule). It is a
-/// deliberate extension beyond the spec's 17, documented in STATUS/PARCIALES.
+/// deliberate extension beyond the original event set, documented in STATUS.md.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum EventKind {
     #[serde(rename = "session.started")]
@@ -78,11 +78,11 @@ impl EventKind {
     }
 }
 
-/// Event envelope as delivered by the adapter (Phase 0: JSONL replay).
+/// Event envelope delivered by a governed capability or JSONL replay.
 ///
 /// REPLAY HONESTY (ADR-022): `preconditions` evaluate the state of the world
 /// AT THE MOMENT OF THE REQUEST. In replay that state is captured inside the
-/// event itself (`env`); a live adapter (Phase 1) may probe the real
+/// event itself (`env`); a governed capability may probe the real
 /// environment. That is why `env` is part of the envelope and not a query by
 /// the engine.
 #[derive(Debug, Clone, Serialize, Deserialize)]

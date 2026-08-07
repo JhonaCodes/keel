@@ -17,12 +17,13 @@ members = [
     "crates/keel-core",
     "crates/keel-dsl",
     "crates/keel-engine",
+    "crates/keel-runtime",
     "crates/keel-cli",
     "test",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "UNLICENSED"
 
@@ -46,3 +47,4 @@ globset = "0.4"
 # jiff: ISO-8601 spans (reviewAfter's "P6M", ADR-023) + RFC3339 timestamps.
 jiff = "0.2"
 ulid = "1"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }

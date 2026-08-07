@@ -1,4 +1,0 @@
-apiVersion: keel/v1alpha1
-kind: Workspace
-metadata: { id: phase0c-v0-synthetic }
-spec: {}

@@ -8,7 +8,7 @@
 //! | Mode      | effective_decision            | Entry point    | Purpose |
 //! |-----------|-------------------------------|----------------|---------|
 //! | `Passive` | `declared.min(Review)` — nothing blocks | `keel observe` | Telemetry (ADR-021): measure which constraints are alive, dead, mis-specified |
-//! | `Enforce` | `declared` — block means BLOCK | `keel gate`    | The inner ring (section 5.3): a blocked action never exists as a process |
+//! | `Enforce` | `declared` — block means BLOCK | `CapabilityManager` | A blocked action never exists as a process |
 //!
 //! Both modes write the same declared/effective pair to the ledger, so
 //! telemetry never degrades: the Phase 0c comparison (violations reaching
@@ -30,7 +30,7 @@ pub enum Mode {
     /// Telemetry only: every effective decision is capped at `review`.
     Passive,
     /// The keel holds: declared decisions apply as-is. Used exclusively by
-    /// pre-action entry points (`keel gate`) — never by `keel observe`.
+    /// pre-action entry points in `CapabilityManager` — never by `keel observe`.
     Enforce,
 }
 

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:keel:schemas:v1alpha1:governed-component",
+  "title": "Keel governed component",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "keel/v1alpha1" },
+    "kind": {
+      "enum": ["Blueprint", "Knowledge", "Workflow", "Contract", "Hook", "MCPProvider", "ModelExecutor", "AgentRoutingPolicy", "Policy"]
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" },
+        "author": { "type": "string" },
+        "adrRef": { "type": "string" },
+        "reviewAfter": { "type": "string" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "content": { "type": "string" },
+        "inline": { "type": "string" },
+        "requirements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["component"],
+            "additionalProperties": false,
+            "properties": {
+              "component": { "type": "string", "pattern": "^[a-z][a-z0-9-]*:.+$" },
+              "phases": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+              "required": { "type": "boolean" },
+              "reason": { "type": "string" }
+            }
+          }
+        },
+        "capabilities": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "config": { "type": "object" }
+      },
+      "oneOf": [
+        { "required": ["content"] },
+        { "required": ["inline"] },
+        { "required": ["requirements"] },
+        { "required": ["capabilities"] },
+        { "required": ["config"] }
+      ]
+    }
+  }
+}

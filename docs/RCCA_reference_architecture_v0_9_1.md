@@ -5,7 +5,7 @@
 **Estado:** borrador para revisión técnica
 **Versión del documento:** 0.9.1
 **Alcance:** desarrollo de software asistido por agentes y modelos de lenguaje
-**Criterio de esta revisión:** el núcleo se especifica hasta el nivel necesario para construir y medir la Fase 0. Los componentes de operación organizacional a escala (Control Plane, catálogo firmado, certificación de workflows, panel web) se trasladan a `RCCA_future.md` y se especificarán cuando la medición del núcleo lo justifique. Respecto a la v0.8, esta versión formaliza dos definiciones que aquella declaraba sin especificar —la semántica de `locked` como orden de monotonicidad verificable por el compilador, y la frontera de confianza que separa el plano de asistencia del plano de cumplimiento— e incorpora la revisión técnica de T. (NUI): el marco de las cuatro clases de conocimiento (sección 2), el reordenamiento del ledger como primer producto del sistema (secciones 6.4 y 15), el ciclo de vida de reglas con poda por evidencia (sección 7.7), las precondiciones de estado de entorno (sección 11.4), y la referencia obligatoria de cada regla a su decisión de origen (`adrRef`).
+**Criterio de esta revisión:** el núcleo se especifica para construir el runtime soberano y medir sus garantías. Las extensiones organizacionales a escala (Control Plane, catálogo firmado, certificación de workflows y panel web) quedan fuera del alcance actual y deben registrarse en `docs/planificacion/ordenes_trabajo/PLAN_MAESTRO.md`, no en documentos futuros paralelos. Respecto a la v0.8, esta versión formaliza `locked`, la frontera de confianza, el ComponentRegistry, el ciclo cognitivo propiedad del runtime y la integración por `ModelExecutor`.
 
 ---
 
@@ -20,7 +20,7 @@ RCCA separa cuatro responsabilidades:
 1. **Definición:** reglas, capacidades, contratos y ciclos de vida se describen mediante una configuración declarativa.
 2. **Compilación:** esas definiciones se validan, resuelven y convierten en un modelo interno inmutable.
 3. **Ejecución:** un runtime observa eventos, activa capacidades, ejecuta validaciones y gobierna transiciones.
-4. **Integración:** un adapter traduce el ciclo del cliente —Claude Code, Codex u otro— al protocolo interno de RCCA.
+4. **Integración:** un `ModelExecutor` traduce solicitudes y respuestas entre el runtime y la API/SDK de Claude, Codex u otro proveedor.
 
 El LLM no lee la configuración RCCA. Recibe paquetes de contexto, findings, capacidades y decisiones ya resueltas por el runtime, en el turno exacto en que aplican. El objetivo no es controlar cada paso del razonamiento, sino reducir omisiones en momentos donde faltan contexto, especialización, validación o evidencia.
 
@@ -30,7 +30,7 @@ Un agente lógico no queda ligado al modelo que mantiene la sesión principal. R
 
 Esta distinción es parte de la definición del producto, no una limitación relegada a un apéndice:
 
-- **Plano de asistencia (local).** El runtime corre en la máquina del desarrollador, junto al agente. Su función es reducir omisiones: inyectar el contexto correcto en el turno correcto, bloquear acciones antes de que ocurran cuando el cliente lo permite, y registrar evidencia. Su enforcement es **cooperativo por naturaleza**: el desarrollador es administrador de su propia máquina y puede desinstalar el adapter, editar el lock o eludir el runtime. RCCA local no pretende impedirlo y ninguna implementación debe afirmar lo contrario.
+- **Plano de asistencia (local).** El runtime corre en la máquina del desarrollador y es propietario de la sesion. Su función es reducir omisiones: inyectar el contexto correcto en el turno correcto, bloquear capabilities antes de ejecutarlas y registrar evidencia. Su enforcement es **cooperativo por naturaleza**: el desarrollador es administrador de su propia máquina y puede no iniciar Keel, editar el lock o ejecutar otro proceso fuera del runtime. Keel local no pretende impedirlo y ninguna implementación debe afirmar lo contrario.
 - **Plano de cumplimiento (CI / server-side).** El runtime corre en infraestructura que el desarrollador no controla, verifica el mismo lock y snapshot hash que el plano local, y sus decisiones bloquean la integración. Aquí —y solo aquí— una policy `locked` constituye una garantía organizacional.
 
 Una única definición, compilada al mismo snapshot, aplicada en dos planos con garantías declaradas explícitamente distintas. La matriz de garantías de la sección 5 formaliza qué promete cada plano.
@@ -43,7 +43,7 @@ La consecuencia arquitectónica: el Evidence Ledger no es un componente de sopor
 
 ### 1.3 Qué debe demostrar esta arquitectura antes de crecer
 
-La primera entrega no es el runtime completo: es un experimento comparativo (sección 15, Fase 0) que mide, sobre tareas reales en un repositorio real, si RCCA reduce las violaciones arquitectónicas que llegan a revisión frente a la línea base de instrucciones + skills + linters existentes. Las fases posteriores de implementación quedan condicionadas al resultado de esa medición. Este documento especifica el núcleo con el detalle necesario para construir la Fase 0 y las Fases 1–2; el material organizacional a escala vive en `RCCA_future.md` hasta que exista evidencia que lo justifique.
+La implementacion actual es incremental: el experimento comparativo y la telemetria siguen siendo necesarios, pero no sustituyen el objetivo del runtime. Este documento especifica el nucleo para `RuntimeHost`, `ModelExecutor`, componentes, capabilities, fases y evidencia; el estado y las dependencias se mantienen en `docs/planificacion/`.
 
 ---
 
@@ -89,7 +89,7 @@ Rule       → declara la condición y la consecuencia.
 Detector   → identifica una posible coincidencia a costo mínimo.
 Tool       → confirma o ejecuta una validación. Es código, no prosa.
 Skill      → explica cómo actuar o corregir.
-Adapter    → intercepta el evento del cliente.
+Executor   → traduce solicitudes/respuestas del proveedor sin decidir policy.
 Runtime    → decide qué ejecutar y si se permite avanzar.
 Evidence   → registra el resultado observable.
 ```
@@ -100,7 +100,7 @@ Ninguno de estos componentes, por separado, resuelve todo el problema.
 
 - **Archivos de instrucciones (CLAUDE.md, AGENTS.md):** texto inyectado al inicio de la sesión que compite por la ventana de contexto y cuyo cumplimiento es probabilístico. La industria ya recorrió la escalera instrucciones → skills → hooks descubriendo en cada peldaño que texto que el modelo *podría* leer no es gobierno.
 - **Linters y analizadores:** deterministas y valiosos, pero por lenguaje, sin noción de ciclo de vida, sin composición organizacional y sin capacidad de gobernar acciones del agente que no son código (comandos, transiciones, entrega). RCCA no los sustituye: los despacha (sección 11).
-- **Hooks del cliente:** interceptan, pero si contienen la lógica de las reglas, esta se duplica por cliente y deriva. En RCCA los hooks son transporte de eventos; la lógica vive en el runtime (principio 4.3).
+- **Hooks del cliente:** interceptan una superficie parcial y dependen de configuracion que el propio entorno puede alterar. No forman parte del runtime gobernado; Keel media al modelo desde `RuntimeHost` mediante `ModelExecutor`.
 - **Policy engines existentes para agentes:** cubren intercepción determinista de acciones, pero no el ciclo cognitivo con transiciones gobernadas por artefactos, ni la composición con semántica de monotonicidad, ni la delegación entre modelos con resultado validado por schema. Esa combinación es el espacio que RCCA ocupa.
 
 ---
@@ -166,24 +166,25 @@ YAML / Markdown / manifests
             ↓
       Runtime Snapshot
             ↓
-        RCCA Runtime
+        Keel Runtime
             ↓
-      Context Packet
+   Contexto resuelto
             ↓
             LLM
 ```
 
 Un LLM solo recibe texto en su conversación; no observa el filesystem ni la configuración. La pregunta de diseño es qué texto entra al transcript y cuándo. La respuesta del statu quo es "todo el catálogo, al inicio, esperando que sobreviva la ventana de contexto". La respuesta de RCCA es: nada al inicio; el runtime mantiene el snapshot fuera del modelo, evalúa cada evento contra él, y solo el **veredicto** entra a la conversación, en el turno en que aplica, adyacente a la acción que gobierna. Desde la perspectiva del modelo no existe una configuración: existen acciones y respuestas del entorno.
 
-### 4.3 Una sola integración lógica por cliente
+### 4.3 El runtime es la integracion canonica
 
-RCCA no debe instalar simultáneamente el mismo comportamiento mediante hooks con reglas completas, MCP con las mismas reglas, instrucciones duplicadas o archivos de contexto paralelos.
+RCCA no instala hooks, MCP ni instrucciones del proveedor para gobernar el ciclo. El runtime es propietario de la sesion, el snapshot, el contexto, las capabilities, las fases y la evidencia.
 
 ```text
-Cliente → Adapter RCCA → Runtime RCCA
+Runtime RCCA → ModelExecutor → modelo
+Runtime RCCA → ComponentRegistry / CapabilityManager / AgentBroker
 ```
 
-El adapter puede utilizar hooks, plugins, wrappers o APIs propias del cliente, pero esos mecanismos solo transportan eventos y decisiones. La lógica de reglas permanece en el runtime.
+Los CLIs interactivos, hooks y plugins de proveedor no forman parte del modo gobernado ni se mantienen como una segunda arquitectura del producto.
 
 ### 4.4 La regla declara; la tool implementa. La tool es código
 
@@ -247,10 +248,10 @@ Una implementación compatible DEBE conservar estos invariantes:
 5. Las rutas locales, credenciales y cachés no se versionan.
 6. Un snapshot solo se publica si la compilación y sus pruebas pasan.
 7. El último snapshot válido se conserva para rollback.
-8. Una policy bloqueante solo se activa si el adapter ofrece el evento o control necesario; el preflight rechaza la combinación en caso contrario.
+8. Una policy bloqueante solo se activa si `CapabilityManager` puede mediar la accion antes del side effect; el compilador rechaza la combinacion en caso contrario.
 9. Local y CI verifican el mismo lock y snapshot hash.
 10. Los secrets se resuelven por referencia y nunca se incluyen en YAML versionado.
-11. Un Agent declara una responsabilidad; un AgentExecutor declara cómo y dónde se ejecuta.
+11. Un Agent declara una responsabilidad; un ModelExecutor declara el proveedor y modelo que la ejecuta.
 12. El resultado de un agente hijo se valida contra un schema antes de entregarse al agente padre.
 13. La delegación tiene límites explícitos de profundidad, tiempo, coste y permisos.
 14. Un cambio de executor o modelo queda registrado en provenance y, si afecta reproducibilidad, en el lock.
@@ -265,7 +266,7 @@ Una implementación compatible DEBE conservar estos invariantes:
 
 ### 5.1 El modelo de amenaza honesto del plano local
 
-El runtime local corre en la máquina del desarrollador, quien es administrador de ella. Puede: no lanzar el adapter, editar o borrar el lock, apuntar el binding a un workspace propio, alterar la identidad del remote Git, o usar un cliente sin adapter. La detección local de estas alteraciones (por ejemplo, "bloquear modo gobernado si el binding fue alterado") es una decisión que toma el propio runtime local, en la máquina de quien hizo la alteración: es auto-atestación, no un control.
+El runtime local corre en la máquina del desarrollador, quien es administrador de ella. Puede no lanzar Keel, editar o borrar el lock, apuntar el binding a un workspace propio, alterar la identidad del remote Git o ejecutar herramientas fuera de la sesion gobernada. Detectar localmente estas alteraciones es auto-atestación, no un control contra el administrador.
 
 Por lo tanto:
 
@@ -283,28 +284,30 @@ Plano de cumplimiento (CI / server-side)
   Valor     : aquí `locked` significa algo. Compliance.
 ```
 
-La atestación local fuerte (firma de evidencia con claves fuera del alcance del usuario, verificación server-side de la cadena) es un proyecto en sí mismo y queda explícitamente fuera del alcance de esta versión (`RCCA_future.md`).
+La atestación local fuerte (firma de evidencia con claves fuera del alcance del usuario, verificación server-side de la cadena) es un proyecto en sí mismo y queda explícitamente fuera del alcance de esta versión; se registra como trabajo pendiente en `docs/planificacion/ordenes_trabajo/PLAN_MAESTRO.md`.
 
-### 5.2 Matriz de garantías por plano y modo
+### 5.2 Matriz de garantías por plano
 
-| Garantía | Local compatible | Local gobernado | CI |
-|---|---:|---:|---:|
-| Resolver proyecto antes de iniciar | Sí | Sí | Sí |
-| Validar ediciones observadas | Según adapter | Sí, si pasan por proxy | Sí |
-| Bloquear comandos antes de ejecutar | Según adapter | Sí | Sí |
-| Impedir acceso externo al filesystem | No | Parcial, dentro del sandbox | Sí, dentro del runner |
-| Exigir evidencia antes del cierre | Según evento de cierre | Sí | Sí |
-| Resistir elusión por el desarrollador | No | No | Sí |
-| Demostrar que el modelo entendió | No | No | No |
+| Garantía | Local gobernado | CI |
+|---|---:|---:|
+| Resolver proyecto antes de iniciar | Sí | Sí |
+| Validar ediciones mediadas | Sí | Sí |
+| Bloquear comandos antes de ejecutar | Sí | Sí |
+| Impedir acceso fuera de capabilities | Parcial, dentro del sandbox | Sí, dentro del runner |
+| Exigir evidencia antes del cierre | Sí | Sí |
+| Resistir elusión por el desarrollador | No | Sí |
+| Demostrar que el modelo entendió | No | No |
 
-Las celdas "Según adapter" se resuelven en tiempo de instalación mediante el capability manifest del adapter y el preflight (sección 12): una policy que exige un control no soportado se rechaza en compilación, nunca se degrada en silencio.
+Una policy que exige una capability o aislamiento no soportados se rechaza al
+compilar/configurar; nunca se degrada en silencio ni depende de un manifest del
+cliente.
 
 ### 5.3 Momento de intercepción y anillos de protección
 
 El momento disponible de intercepción depende del tipo de acción, y el diseño lo explota en dos anillos:
 
-- **Anillo interior — siempre pre-acción:** `command.requested`, transiciones de fase, `delivery.requested`. El LLM solo produce texto que solicita la acción; quien ejecuta es el cliente, y el cliente pregunta antes. Un comando bloqueado jamás llegó a existir como proceso. Toda acción potencialmente irreversible vive en este anillo.
-- **Anillo exterior — puede ser post-hoc:** `file.edited` en clientes donde la edición aterriza antes del evento. Es aceptable porque un archivo editado es reversible y es inerte: su peligro solo se materializa cuando algo lo ejecuta o entrega, y esos caminos cruzan el anillo interior. El modo gobernado (sección 12.4) convierte también las ediciones en pre-acción para quien lo necesite.
+- **Anillo interior — siempre pre-acción:** `command.requested`, escritura de archivos, transiciones y `delivery.requested`. El modelo solo solicita; `CapabilityManager` autoriza y ejecuta. Un comando bloqueado nunca llega a existir como proceso.
+- **Anillo exterior — verificación posterior:** resultados de tools, diffs y artefactos ya producidos dentro del sandbox se validan antes de habilitar la siguiente capability o fase. No sustituye el control preaccion del anillo interior.
 
 La composición de anillos responde el caso del script indirecto (`python cleanup.py` que internamente ejecuta SQL): el archivo fue validado al editarse; el comando que lo ejecuta se clasifica en `command.requested`; y la red final no es RCCA sino la higiene del entorno: el agente no debe poseer credenciales de entornos protegidos (sección 13). RCCA gobierna al agente; no sustituye que el entorno del agente esté correctamente desprovisto de poder.
 
@@ -318,17 +321,17 @@ La composición de anillos responde el caso del script indirecto (`python cleanu
 
 **Detector.** Mecanismo económico para localizar una posible condición: texto, regex, tokens, AST, tipos, diff, paths, dependencias, grafo, resultado de comando. Nunca decide (principio 4.5).
 
-**Tool.** Programa ejecutable que recibe entrada estructurada y devuelve salida estructurada de tres estados. Puede ser script, binario, servicio HTTP, tool MCP o wrapper de una herramienta existente (phpstan, ruff, eslint, sqlglot, dart analyzer). Una tool local no consume tokens salvo que ella misma invoque un modelo, en cuyo caso su tipo es `llm-evaluator` y declara modelo, presupuesto y motivo.
+**Tool.** Programa ejecutable que recibe entrada estructurada y devuelve salida estructurada de tres estados. Puede ser script, binario, servicio o wrapper de una herramienta existente. Una tool local no consume tokens salvo que ella misma invoque un modelo, en cuyo caso su tipo es `llm-evaluator` y declara modelo, presupuesto y motivo. Un MCPProvider puede suministrar una capability externa, pero no es el runtime ni la autoridad de la operación.
 
 **Skill.** Conocimiento operativo que ayuda al agente a analizar, diseñar o implementar. No constituye enforcement por sí sola.
 
 **Agent.** Unidad de razonamiento con responsabilidad delimitada. Se utiliza cuando conviene separar contexto, objetivo o criterio de evaluación.
 
-**AgentExecutor.** Backend que materializa un `Agent` como ejecución concreta: proceso CLI no interactivo, SDK local, API de modelo, servicio remoto u otro runtime compatible. Define transporte, aislamiento, autenticación, formatos y capacidades técnicas. No define el objetivo del agente.
+**ModelExecutor.** Driver API/SDK que materializa una llamada de modelo. Define proveedor, transporte, autenticacion, formatos, cancelacion y telemetria; no define el objetivo del agente ni ejecuta capabilities.
 
 ```text
 Agent         → qué responsabilidad cumple.
-AgentExecutor → cómo, dónde y con qué runtime se ejecuta.
+ModelExecutor → con que proveedor y modelo se ejecuta el razonamiento.
 ```
 
 **Capability.** Nombre semántico de una capacidad, independiente de su implementación (`flutter.widget-impact`, `reactive-state.validate-access`, `testing.run-e2e`).
@@ -341,7 +344,7 @@ AgentExecutor → cómo, dónde y con qué runtime se ejecuta.
 
 **Artifact.** Salida persistida de una etapa: Investigation Report, Solution Contract, Implementation Record, Evidence Report, Audit Report, Correction Contract, Acceptance Record, Delivery Record.
 
-**Adapter.** Integración específica del cliente principal. Traduce eventos nativos al protocolo RCCA y aplica las decisiones devueltas. No materializa agentes hijos; esa responsabilidad es del AgentExecutor.
+**ModelExecutor.** Driver de API/SDK que traduce requests y responses del proveedor. No materializa policy, contexto, capabilities ni fases. La sesion se inicia en RuntimeHost y los agentes hijos pasan por AgentBroker.
 
 **Runtime Snapshot.** Configuración efectiva, inmutable y versionada de una sesión: reglas compiladas, capabilities, contratos, hashes y permisos.
 
@@ -434,7 +437,7 @@ evidence_complete: true
 Una guarda separa por tipo sus condiciones. Las `observable` las verifica el runtime (existencia de artefacto, schema válido, tool ejecutada, tests en verde). Las `attested` son juicios semánticos (¿los desconocidos críticos están resueltos?) que un evaluador o un humano afirma; se registran como afirmación con autor y evidencia de soporte, nunca como hecho.
 
 ```yaml
-apiVersion: rcca.dev/v1alpha1
+apiVersion: keel/v1alpha1
 kind: Policy
 metadata:
   id: lifecycle.analysis-to-implementation
@@ -498,11 +501,11 @@ Un `block` sobre `file.edited` post-hoc significa "esto no avanza: se exige una 
 Las reglas se aplican por identidad del repositorio, no por identidad global del desarrollador:
 
 ```text
-~/work/con-app      → repository ID NuiMarkets/con-app → organización nui → políticas Nui
-~/personal/my-app   → repository ID jhonatan/my-app    → profile personal → sin políticas Nui
+~/work/con-app      → repository ID my-company/con-app → organización my-company → políticas my-company
+~/personal/my-app   → repository ID jhonatan/my-app    → profile personal → sin políticas my-company
 ```
 
-Consecuencia declarada: RCCA no expresa permisos por persona (junior/senior, empleado/contractor, quién aprueba excepciones). Esa dimensión pertenece al plano de cumplimiento y a los sistemas de identidad de la organización; incorporarla se evalúa en `RCCA_future.md`.
+Consecuencia declarada: RCCA no expresa todavía permisos por persona (junior/senior, empleado/contractor, quién aprueba excepciones). Esa dimensión pertenece al plano de cumplimiento y a los sistemas de identidad de la organización; queda como trabajo futuro explícito en la planificación canónica.
 
 ### 7.2 Orden de composición
 
@@ -549,8 +552,8 @@ allow < review < block < deny-pending-approval   (para irreversibles)
 
 ```yaml
 status: monotonicity-violation
-rule: rule:org/nui/security.no-raw-queries
-lockedAt: organization:nui
+rule: rule:org/my-company/security.no-raw-queries
+lockedAt: organization:my-company
 violatedBy: profile:jhonatan
 dimension: D1-scope
 detail: "exclude added: src/Reports/** intersects locked coverage src/**"
@@ -589,7 +592,7 @@ Toda configuración de reglas conocida —lint, CI, policy— tiende al cementer
 ```text
    crear ──► medir ──► revisar ──► (mantener | ajustar | podar)
      │         │           │                        │
-  author     ledger    reviewAfter          rcca prune + decisión
+  author     ledger    reviewAfter          keel prune + decisión
   adrRef   fire-rate    vencido             humana en el ledger
 ```
 
@@ -597,10 +600,10 @@ Toda configuración de reglas conocida —lint, CI, policy— tiende al cementer
 
 **Vida.** El ledger acumula por regla: evaluaciones, fire-rate por veredicto, costo, oscilación (sección 6.4).
 
-**Revisión.** Al vencer `reviewAfter`, `rcca prune` propone el destino con los datos:
+**Revisión.** Al vencer `reviewAfter`, `keel prune` propone el destino con los datos:
 
 ```text
-$ rcca prune
+$ keel prune
 rule: php.no-raw-queries        adr: ADR-031   author: jhonatan
   evaluations: 2,412   invalid: 37   unknown: 3   last fire: 6 days ago
   → keep (active, healthy)
@@ -619,46 +622,40 @@ rule: legacy.no-moment-js       adr: ADR-009   author: (departed)
 ### 8.1 Vista general
 
 ```text
-Repositorio ──► Adapter ──► Runtime RCCA ──► Runtime Snapshot
-                    │             │
-                    │             ├── Compiler / Resolver
-                    │             ├── Rule Engine
-                    │             ├── Capability Registry
-                    │             ├── Tool Runner
-                    │             ├── Agent Invocation Broker
-                    │             ├── Executor Registry
-                    │             ├── MCP Gateway
-                    │             ├── Evidence Ledger
-                    │             └── Session Manager
-                    │                         │
-                    ▼                         ├──► Claude executor
-            Cliente principal                 ├──► Codex executor
-       Claude Code / Codex / otro             └──► executor remoto
+Workspace ──► Compiler / Snapshot ──► Keel RuntimeHost
+                                      ├── ComponentRegistry / ContextResolver
+                                      ├── Policy / Rule / PhaseController
+                                      ├── CapabilityManager / Tool Runner
+                                      ├── AgentBroker / AgentScheduler
+                                      ├── Evidence Ledger
+                                      └── ModelExecutor
+                                           ├── Claude
+                                           ├── Codex
+                                           └── executor remoto
 ```
 
-El Control Plane organizacional (catálogo firmado, distribución, auditoría central) existe como extensión futura sobre esta misma topología y se especifica en `RCCA_future.md`. Nada en el núcleo depende de su existencia: la fuente de verdad del modo standalone es el workspace versionado.
+El Control Plane organizacional (catálogo firmado, distribución, auditoría central) es una extensión futura sobre esta misma topología y no es dependencia del núcleo. La fuente de verdad del modo standalone es el workspace versionado.
 
 ### 8.2 Modo standalone
 
-Un usuario opera únicamente con CLI, workspace local, runtime local, adapters locales, y executors locales o remotos si utiliza delegación.
+Un usuario opera con CLI, workspace, runtime local y executors API/SDK locales o remotos. El runtime media todas las capabilities de la sesion.
 
 ### 8.3 Perfiles de operación del núcleo
 
 | Perfil | Componentes requeridos | Uso |
 |---|---|---|
-| Standalone | CLI, workspace, project binding, lock, un adapter, executors opcionales | Proyectos personales y evaluación local |
+| Standalone | CLI, workspace, project binding, lock, runtime y al menos un executor | Proyectos personales y evaluación local |
 | Team | Standalone + packages compartidos, tests de configuración, CI | Equipos con varios desarrolladores |
 
-El perfil Enterprise (organizations con registry firmado, Control Plane, certificación de workflows, roles) se define en `RCCA_future.md`. El modelo de composición y la semántica de `locked` de la sección 7 son los mismos en todos los perfiles: lo que Enterprise añade es distribución, firma y administración, no semántica nueva.
+El perfil Enterprise (registry firmado, Control Plane, certificación de workflows y roles) queda fuera de esta entrega. El modelo de composición y la semántica de `locked` son los mismos en todos los perfiles; Enterprise añade distribución, firma y administración.
 
 ### 8.4 Cuatro ubicaciones distintas
 
-**Instalación local.** Binario, adapters, caché y estado operativo:
+**Instalación local.** Binario, configuracion local, caché y estado operativo:
 
 ```text
-Linux   ~/.local/bin/rcca · ~/.config/rcca/ · ~/.local/share/rcca/ · ~/.cache/rcca/
-macOS   /usr/local/bin/rcca · ~/Library/Application Support/RCCA/
-Windows %LOCALAPPDATA%\RCCA\
+Linux   ~/.local/bin/keel · ~/.config/keel/ · ~/.local/share/keel/ · ~/.cache/keel/
+macOS   ~/.local/bin/keel · ~/Library/Application Support/Keel/
 ```
 
 No contiene la definición completa de los proyectos.
@@ -676,7 +673,7 @@ workspace/
 ├── workspace.yaml
 ├── global/                  # defaults del usuario
 ├── organizations/           # composición por organización (políticas, contratos, permisos)
-│   └── nui/
+│   └── my-company/
 │       ├── organization.yaml
 │       ├── repositories.yaml
 │       ├── composition.yaml
@@ -686,8 +683,14 @@ workspace/
 ├── teams/                   # variantes autorizadas por equipo
 ├── profiles/                # preferencias personales (no pueden debilitar locked)
 ├── packages/                # componentes reutilizables versionados
-├── clients/                 # configuración de adapters
-├── executors/               # manifiestos de AgentExecutors
+├── skills/                  # compact/full y conocimiento operativo
+├── knowledge/               # fuentes consultables y provenance
+├── blueprints/              # patrones de trabajo y requisitos
+├── workflows/               # fases, guards y transiciones
+├── policies/                # decisiones y restricciones
+├── hooks/                   # triggers internos de Keel
+├── providers/               # capabilities externas declaradas
+├── executors/               # manifiestos de ModelExecutors
 ├── schemas/                 # schemas de artefactos, requests, results, findings
 ├── registry/                # índice resuelto de componentes
 ├── locks/                   # locks de resolución
@@ -698,22 +701,22 @@ workspace/
 `repositories.yaml` enlaza identidades de repositorio con proyectos RCCA:
 
 ```yaml
-apiVersion: rcca.dev/v1alpha1
+apiVersion: keel/v1alpha1
 kind: RepositoryRegistry
 metadata:
-  id: nui-repositories
+  id: my-company-repositories
 spec:
   repositories:
     - provider: github
-      id: NuiMarkets/con-app
-      project: project:nui/con-app
+      id: my-company/con-app
+      project: project:my-company/con-app
       locked: true
 ```
 
 Profile de ejemplo:
 
 ```yaml
-apiVersion: rcca.dev/v1alpha1
+apiVersion: keel/v1alpha1
 kind: Profile
 metadata:
   id: jhonatan
@@ -730,15 +733,15 @@ Un profile puede seleccionar un `AgentBinding` alternativo solo cuando la organi
 ### 8.6 Estructura del repositorio de código
 
 ```yaml
-# .rcca/project.yaml — lo único versionado en el repo, junto al lock
-project: project:nui/con-app
-workspace: org:nui
+# .keel/project.yaml — lo único versionado en el repo, junto al lock
+project: project:my-company/con-app
+workspace: org:my-company
 ```
 
 ```text
-.rcca/
+.keel/
 ├── project.yaml       # binding
-├── rcca.lock          # resolución fijada: componentes, versiones, hashes
+├── keel.lock          # resolución fijada: componentes, versiones, hashes
 └── ci.yaml            # opcional: workflow de CI
 ```
 
@@ -748,36 +751,44 @@ El `.gitignore` del repositorio excluye estado de ejecución; el del workspace e
 
 ## 9. Instalación y operación
 
-Los comandos son propuesta de interfaz; la implementación puede distribuirse mediante package manager o instalador firmado.
+La interfaz normativa se implementa mediante el CLI Keel. El instalador actual
+compila un checkout fijado por `Cargo.lock`; la distribucion firmada es un gate
+pendiente para la version estable.
 
 ```bash
-rcca-install                       # descarga firmada, checksum, doctor; no toca clientes
-rcca workspace init ~/rcca-workspace
-rcca organization add nui --source git@github.com:NuiMarkets/rcca-config.git
-cd ~/work/con-app && rcca project attach --organization nui --project con-app
-rcca adapter install claude-code   # bridge mínimo; emite matriz de capacidades
-rcca adapter install codex
-rcca executor install claude-code.local
-rcca doctor                        # pruebas sintéticas end-to-end
+./install.sh
+keel init ~/keel-workspace --executor mock --json
+keel doctor --workspace ~/keel-workspace --governed
+keel configure executor add claude --workspace ~/keel-workspace \
+  --provider anthropic --model <model> --credential-env ANTHROPIC_API_KEY
+keel configure executor add codex --workspace ~/keel-workspace \
+  --provider openai --model <model> --credential-env OPENAI_API_KEY
+keel run --workspace ~/keel-workspace --task "Implementar el cambio"
 ```
 
-`project attach`: detecta la raíz Git, contrasta la identidad del remote con `repositories.yaml`, genera `.rcca/project.yaml`, registra la ruta en `bindings.yaml` fuera del repo, ejecuta la resolución y genera `.rcca/rcca.lock`. No copia componentes al repositorio.
+`keel init` crea el workspace y su binding local, compila un snapshot, genera el
+lock, configura el executor mock y crea el store. Un repositorio externo puede
+vincularse mediante `keel bind`; no se copian componentes al repositorio.
 
-`adapter install`: detecta versión del cliente, lee el manifiesto de compatibilidad, respalda la configuración a modificar, instala un bridge mínimo versionado, registra el endpoint del runtime, ejecuta prueba sintética y emite la matriz de capacidades:
+La instalacion no escribe reglas, skills, policies, hooks o MCP en configuracion
+del proveedor. `keel run` inicia `RuntimeHost` y registra los executors resueltos:
 
 ```text
-Adapter: claude-code 0.3.0
-session.started       OK
-file.edited           OK
-command.requested     OK
-completion.requested  OK
-pre-action blocking   OK
-context injection     OK
+RuntimeHost: governed
+snapshot loaded       OK
+skill.read receipts   OK
+phase guards           OK
+executor boundary     OK
+evidence ledger        OK
 ```
 
-**Runtime embebido y daemon.** El runtime puede ejecutarse embebido en el adapter, como daemon local o como proceso efímero de CI. El daemon es una optimización operativa: la persistencia de configuración no depende de que esté encendido (ADR-010).
+**Runtime como proceso.** La primera entrega ejecuta un proceso efimero por
+sesion, local o CI. El proceso es el host; la persistencia permite reanudar y no
+depende de un daemon (ADR-010).
 
-**Actualización y rollback.** El último snapshot válido se conserva; `rcca rollback` restaura el last-known-good.
+**Actualización y rollback.** La compilacion atomica conserva el ultimo snapshot
+valido si la nueva configuracion falla. El comando de rollback de distribucion
+todavia no forma parte del CLI publicado.
 
 ---
 
@@ -817,24 +828,20 @@ El hot reload cambia el snapshot de futuras acciones. Una sesión activa puede c
 
 ### 10.4 Qué recibe el modelo
 
-Ejemplo de `ContextPacket` bloqueante:
+Ejemplo de respuesta bloqueante de `skill.read`:
 
-```yaml
-kind: capability-context
-id: reactive-state.access
-reason: "The edited code accesses notifier state directly."
-constraints:
-  - "Do not read implementation data through the notifier instance."
-requiredActions:
-  - "Use an approved provider-facing state access pattern."
-exemplar:
-  rejected: "final v = ref.read(orderProvider.notifier).data;"
-  accepted: "final v = ref.watch(orderProvider.select((s) => s.value));"
-availableCapabilities:
-  - reactive-state.inspect-consumers
-source:
-  rule: reactive-notifier.no-direct-data
-  snapshot: sha256:example
+```json
+{
+  "skill_id": "reactive-state.access",
+  "version": "1.2.0",
+  "content_hash": "sha256:example",
+  "content": "Use an approved provider-facing state access pattern.",
+  "receipt_id": "receipt-01...",
+  "required": true,
+  "session_id": "session-123",
+  "phase": "planning",
+  "reason": "workflow requirement"
+}
 ```
 
 El modelo no recibe la ubicación del YAML ni el árbol del workspace. El campo `exemplar` es obligatorio para reglas con `decision: block` cuando la skill asociada provee pares; su ausencia se reporta como deuda de la regla (sección 6.5).
@@ -868,7 +875,7 @@ Resumen del contrato de contexto:
 ### 11.1 Envelope común
 
 ```yaml
-apiVersion: rcca.dev/v1alpha1
+apiVersion: keel/v1alpha1
 kind: Rule
 metadata:
   id: example
@@ -888,11 +895,11 @@ Kinds del núcleo:
 ```text
 Workspace · Organization · RepositoryRegistry · Platform · Project
 ProjectBinding · ResolutionLock · Team · Profile · Package
-Rule · Skill · Agent · AgentExecutor · AgentRoutingPolicy · Tool
+Rule · Skill · Agent · ModelExecutor · AgentRoutingPolicy · Tool
 MCPProvider · Workflow · Policy · Contract · Exception · ClientPolicy · CIExecution
 ```
 
-Nota de linaje: el envelope adopta deliberadamente el patrón `apiVersion/kind/metadata/spec` de los admission controllers de Kubernetes (Kyverno, Gatekeeper), y hereda con él su dolor conocido: depurar por qué una policy disparó exige trazabilidad de primera clase. Por eso todo veredicto referencia regla, versión, snapshot hash y evidencia (sección 11.6), y el CLI provee `rcca explain <finding-id>`.
+Nota de linaje: el envelope adopta deliberadamente el patrón `apiVersion/kind/metadata/spec` de los admission controllers de Kubernetes (Kyverno, Gatekeeper), y hereda con él su dolor conocido: depurar por qué una policy disparó exige trazabilidad de primera clase. Por eso todo veredicto referencia regla, versión, snapshot hash y evidencia (sección 11.6), y el CLI provee `keel explain <finding-id>`.
 
 ### 11.2 Eventos reservados
 
@@ -909,7 +916,7 @@ Los eventos de fase (`analysis.started`, `implementation.started`, `verification
 ### 11.3 Regla con detector, tool y escalada — reversible
 
 ```yaml
-apiVersion: rcca.dev/v1alpha1
+apiVersion: keel/v1alpha1
 kind: Rule
 metadata:
   id: reactive-notifier.no-direct-data
@@ -1022,7 +1029,7 @@ spec:
 
   preconditions:                                   # estado del entorno, no del comando
     - using: builtin:env.present
-      with: { name: NUI_PROD_WRITE }
+      with: { name: PROD_WRITE_ENABLED }
       onFail: deny
     - using: builtin:flag.present
       with: { flag: --allow-production-write }
@@ -1136,63 +1143,45 @@ No consume tokens si la tool es determinista y local.
 
 ### 11.6 Formato de findings: SARIF como esquema normativo
 
-Los findings se emiten en SARIF (Static Analysis Results Interchange Format) con extensiones RCCA en `properties` (clase de evidencia, regla RCCA, snapshot hash, decisión). Justificación: un formato propio obligaría a mantener adaptadores bidireccionales con cada analizador envuelto; SARIF ya es el formato nativo o exportable de la mayoría (phpstan, eslint, semgrep, dart analyzer vía conversores), aporta semántica resuelta de localización, baseline y deduplicación, e ingesta directa en GitHub code scanning e IDEs. `finding.v1` de la v0.8 queda deprecado (ADR-016).
+Los findings se emiten en SARIF (Static Analysis Results Interchange Format) con extensiones RCCA en `properties` (clase de evidencia, regla RCCA, snapshot hash, decisión). Justificación: un formato propio obligaría a mantener conversiones con cada analizador envuelto; SARIF ya es el formato nativo o exportable de la mayoría (phpstan, eslint, semgrep, dart analyzer vía conversores), aporta semántica resuelta de localización, baseline y deduplicación, e ingesta directa en GitHub code scanning e IDEs. `finding.v1` no forma parte de esta version (ADR-016).
 
 ---
 
-## 12. Integración con clientes mediante adapters
+## 12. Integracion con proveedores mediante ModelExecutor
 
-### 12.1 Contrato del adapter
+### 12.1 Contrato de capacidad del executor
 
-```yaml
-adapter:
-  id: claude-code
-  version: 0.3.0
-  events:
-    session.started: supported
-    prompt.submitted: supported
-    file.opened: supported
-    file.edited: supported
-    command.requested: supported
-    command.completed: supported
-    completion.requested: supported
-  controls:
-    preActionBlock: true
-    postEditFeedback: true
-    contextInjection: true
-```
+Cada executor declara proveedor, modelo, API/SDK, structured output, tool calls,
+cancelacion, limites de contexto, residencia de datos y aislamiento. La
+configuracion cruza esos datos con policies y capabilities requeridas: una
+combinacion no soportada falla antes de iniciar la sesion.
 
-El preflight de compilación cruza cada policy contra este manifiesto: una policy que requiere un control no soportado es error de compilación, no degradación silenciosa (invariante 8). Esta es la respuesta arquitectónica a la asimetría real entre clientes: la garantía se declara, no se aparenta.
+El manifest no autoriza acciones ni expone tools del proveedor. Solo permite a
+Keel decidir si ese executor puede materializar una sesion bajo el snapshot.
 
-### 12.2 Una integración lógica
+### 12.2 Una integracion logica
 
-El adapter puede usar los mecanismos nativos del cliente (por ejemplo, hooks de pre/post acción). Esos mecanismos no contienen las reglas; solo llaman al runtime y aplican su decisión:
+La integracion canonica es una sesion iniciada por Keel y un `ModelExecutor` que normaliza al proveedor:
 
 ```text
-Provider-native hook/API → thin RCCA bridge → Runtime decision → client-native response
+Keel Runtime → ModelExecutor → Provider API/SDK → respuesta normalizada
 ```
 
-RCCA no expone además un MCP de gobierno con las mismas reglas; MCP queda para capabilities externas (sección 14.6).
+Hooks, plugins, wrappers y MCP del proveedor no son mecanismos de gobierno ni
+modos legacy de la entrega. Una capability MCP declarada puede ser consumida por
+Keel, nunca registrada directamente por el executor.
 
 ### 12.3 Bootstrap cognitivo mínimo
 
-Al iniciar la sesión, el adapter inserta una instrucción breve:
+El RuntimeHost entrega al executor solo el contexto resuelto para la fase. Las instrucciones persistentes del proveedor no son fuente de autoridad y no se requieren para leer skills o policies.
 
-```text
-Esta sesión está gobernada por RCCA.
-Un finding BLOCKED requiere corrección antes de continuar.
-La finalización requiere autorización del runtime.
-```
+### 12.4 Modo gobernado
 
-No se insertan las políticas del proyecto.
-
-### 12.4 Modo compatible y modo gobernado
-
-**Compatible:** usa los eventos disponibles del cliente. Menor fricción, mejor convivencia con funciones nativas; solo controla acciones observables por el adapter.
-
-**Gobernado:** el cliente se lanza con filesystem, shell, Git y capabilities sensibles mediados por RCCA (`LLM → adapter → RCCA proxy → recurso`). Mayor cobertura y decisiones de preacción también para ediciones; integración más compleja y posibles incompatibilidades con funciones nativas. No controla procesos externos al runtime.
-
-La matriz de garantías por plano y modo está en la sección 5.2.
+El modelo recibe solicitudes y capabilities a traves de Keel (`RuntimeHost ->
+ModelExecutor` y `RuntimeHost -> CapabilityManager`). Shell, filesystem, Git y
+MCP no son accesos directos del modelo. Para resistencia contra un usuario
+administrador se requiere sandbox/CI adicional. La matriz de garantias por plano
+esta en la seccion 5.2.
 
 ---
 
@@ -1256,7 +1245,7 @@ Se justifica cuando existe: objetivo independiente; contexto aislado; auditoría
 ### 14.3 Manifiesto de agente con executor
 
 ```yaml
-apiVersion: rcca.dev/v1alpha1
+apiVersion: keel/v1alpha1
 kind: Agent
 metadata:
   id: architecture.reviewer
@@ -1310,7 +1299,7 @@ En una instalación simple, `execution` puede referenciar directamente un execut
 ### 14.4 AgentRoutingPolicy
 
 ```yaml
-apiVersion: rcca.dev/v1alpha1
+apiVersion: keel/v1alpha1
 kind: AgentRoutingPolicy
 metadata:
   id: architecture-review
@@ -1320,7 +1309,7 @@ spec:
   selection:
     mode: ordered
     candidates:
-      - executor: executor:claude-code.local
+      - executor: executor:codex
         profile: review-high
         when:
           repositoryClassification: [public, internal]
@@ -1358,14 +1347,14 @@ El agente principal puede solicitar una invocación explícita mediante una capa
 ```text
 1. El agente padre solicita architecture.reviewer.
 2. RCCA valida que la invocación esté permitida.
-3. El Agent Broker resuelve Agent + AgentExecutor + snapshot.
+3. El Agent Broker resuelve Agent + ModelExecutor + snapshot.
 4. RCCA construye AgentRequest con contexto seleccionado.
 5. RCCA crea un workspace aislado o vista de solo lectura.
 6. El executor inicia el modelo secundario.
 7. RCCA captura eventos, uso, stderr y resultado final.
 8. El resultado se valida contra el output schema.
 9. Se crea AgentResult con provenance y evidencia.
-10. El adapter devuelve al padre el resultado compacto.
+10. AgentBroker devuelve al padre el resultado compacto.
 11. El padre continúa con la misma sesión.
 ```
 
@@ -1374,7 +1363,7 @@ No existe conexión cognitiva directa Codex → Claude: RCCA media solicitud y r
 ### 14.7 AgentRequest y AgentResult
 
 ```yaml
-apiVersion: rcca.dev/v1alpha1
+apiVersion: keel/v1alpha1
 kind: AgentRequest
 metadata:
   runId: run-child-8f31
@@ -1394,7 +1383,7 @@ spec:
 ```
 
 ```yaml
-apiVersion: rcca.dev/v1alpha1
+apiVersion: keel/v1alpha1
 kind: AgentResult
 metadata:
   runId: run-child-8f31
@@ -1405,7 +1394,7 @@ spec:
   output:
     artifact: audit-report-77
   provenance:
-    executor: claude-code.local@1.0.0
+    executor: codex@1.0.0
     model: claude-sonnet
     snapshot: sha256:project-snapshot
     inputHashes: [sha256:solution-42, sha256:diff-88]
@@ -1419,31 +1408,16 @@ spec:
 
 El padre recibe el `output` validado y una síntesis de provenance; la traza completa permanece en el Evidence Ledger. No se reenvía por defecto la conversación del padre ni su razonamiento: solo artefactos y contexto declarados.
 
-### 14.8 Traducción a runtimes de proveedor (no normativa)
+### 14.8 Traduccion a APIs de proveedor
 
-El driver del executor mantiene la traducción y detecta compatibilidad por versión. Ejecución puntual con Claude Code (`claude -p`), modo limpio, JSON validado por schema:
+El driver mantiene la traduccion y detecta compatibilidad por version. Claude se
+integra mediante Messages API y Codex/OpenAI mediante Responses API. Tool calls,
+structured output, uso y errores se normalizan al contrato `ModelExecutor`.
 
-```bash
-claude --bare -p \
-  --output-format json \
-  --json-schema "${RCCA_OUTPUT_SCHEMA}" \
-  "${RCCA_AGENT_PROMPT}"
-```
-
-Codex con sandbox explícito, ejecución efímera y output schema:
-
-```bash
-codex exec \
-  --ephemeral \
-  --ignore-user-config \
-  --ignore-rules \
-  --sandbox read-only \
-  --output-schema "${RCCA_SCHEMA_FILE}" \
-  --output-last-message "${RCCA_RESULT_FILE}" \
-  "${RCCA_AGENT_PROMPT}"
-```
-
-El driver construye el proceso mediante argumentos estructurados, nunca concatenando shell con contenido del modelo. Para un agente implementador, la policy puede cambiar el sandbox a `workspace-write` dentro de un worktree aislado. Los SDK oficiales son alternativas válidas al CLI; la elección pertenece al `AgentExecutor`.
+El driver no registra tools nativas con acceso lateral. Keel entrega unicamente
+las operaciones permitidas y ejecuta sus handlers en `CapabilityManager`. Un
+agente implementador puede recibir una capability de escritura dentro de un
+worktree aislado; el proveedor nunca recibe acceso general al host.
 
 ### 14.9 Evitar redundancia cognitiva
 
@@ -1475,10 +1449,10 @@ Auditor             → evaluación independiente y sin escritura por defecto.
 
 ### 14.12 Tools, MCP y capabilities externas
 
-RCCA puede consumir MCP, pero MCP no es el mecanismo de gobierno (ADR-005). El modelo ve la capability activada; no conoce transporte, credencial ni ubicación del servidor.
+RCCA puede consumir MCP como `MCPProvider`, pero MCP no es el mecanismo de gobierno (ADR-005). Keel resuelve el proveedor desde el snapshot, valida version, endpoint y permisos, oculta transporte/credenciales, normaliza la tool y aplica policy antes y despues de la llamada. El modelo no controla fases, receipts ni autorizacion a traves de MCP.
 
 ```yaml
-apiVersion: rcca.dev/v1alpha1
+apiVersion: keel/v1alpha1
 kind: MCPProvider
 metadata: { id: widget-impact }
 spec:
@@ -1491,7 +1465,7 @@ spec:
 ```
 
 ```yaml
-apiVersion: rcca.dev/v1alpha1
+apiVersion: keel/v1alpha1
 kind: MCPProvider
 metadata: { id: company-api }
 spec:
@@ -1506,7 +1480,7 @@ spec:
 Manifiesto de Tool:
 
 ```yaml
-apiVersion: rcca.dev/v1alpha1
+apiVersion: keel/v1alpha1
 kind: Tool
 metadata:
   id: reactive-notifier.validate-access
@@ -1542,44 +1516,54 @@ El runtime selecciona `compact` o `full` según fase, presupuesto de contexto y 
 
 ---
 
-## 15. Validación, métricas y secuencia de implementación
+## 15. Validacion, metricas y secuencia de implementacion
 
-### 15.1 Fase 0 — las tres pruebas que deciden el proyecto, en orden de costo
+### 15.1 Gates del baseline gobernado
 
-La Fase 0 se divide en tres pruebas secuenciales; cada una es más barata que la siguiente y puede terminar el proyecto temprano con evidencia.
+El baseline se acepta solo con evidencia automatizada de:
 
-**Fase 0a — expresividad del DSL (días, papel y schema).** Tomar gates de protección reales ya desplegados en herramientas internas (el gate de escritura a producción de la sección 11.4 es el caso de referencia) y expresarlos en el DSL **sin perder nada**: precondiciones de entorno, humano en el loop, environment deny. Si el DSL no puede expresar protecciones que ya existen en scripts, el hueco se corrige antes de escribir el runtime. Criterio de paso: equivalencia funcional verificada contra el comportamiento de la herramienta original, caso por caso.
+- `init -> doctor -> run -> resume` sin configuracion de un cliente;
+- snapshot y lock coincidentes antes de iniciar una sesion;
+- reanudacion con tarea, executor y fase persistidos;
+- lectura obligatoria mediante receipt, no mediante una afirmacion textual;
+- artefactos validos antes de cada transicion;
+- capabilities denegadas sin side effect y confinadas al workspace;
+- policy evaluada antes de filesystem, shell o Git;
+- routing logico Agent -> ModelExecutor mediante scheduler;
+- parsing normalizado de Anthropic Messages y OpenAI Responses;
+- tests, lints, formato, links documentales y busqueda de referencias retiradas.
 
-**Fase 0b — evaluación pasiva y telemetría (semanas, sin enforcement).** Runtime embebido, un adapter, 5–10 reglas reales del proyecto con sus tools deterministas, y el ledger — con **toda decisión forzada a `review`**: nada bloquea, todo se registra. El producto de esta fase es la telemetría de la sección 6.4: fire-rates, colas `unknown`, costos por regla, oscilación. Esta fase entrega valor independiente del enforcement —responde qué restricciones del proyecto están vivas, muertas o mal especificadas, algo que ningún archivo de instrucciones puede responder— y opera el loop de poda de 7.7 desde el primer día. Criterio de paso: la telemetría produce al menos una decisión de poda o reespecificación con evidencia; el costo de latencia por edición se mantiene bajo el presupuesto.
+Los comandos verificables son `cargo test --workspace --locked`,
+`cargo clippy --workspace --all-targets -- -D warnings` y
+`cargo fmt --all -- --check`.
 
-**Fase 0c — experimento de enforcement (el comparativo original).**
+### 15.2 Metricas de operacion continua
 
-- **Métrica primaria:** violaciones arquitectónicas que llegan a revisión humana, con y sin enforcement activo, sobre N tareas reales en un repositorio real, con las mismas reglas de fondo, el mismo modelo y el mismo cliente.
-- **Línea base honesta:** la configuración actual completa (instrucciones + skills + linters del proyecto), no una configuración desnuda. La comparación incluye, cuando exista, la alternativa por lenguaje (plugin de analizador nativo para las mismas reglas): si el delta frente a esa alternativa no es material, el proyecto correcto es más pequeño que esta especificación.
-- **Métricas secundarias:** falsos positivos por regla; latencia añadida por edición; tokens de la cola `unknown`; correcciones por finding; tiempo hasta aceptación.
-- **Criterio de continuación:** delta material y sostenido. El resultado —positivo o negativo— se documenta; las Fases 2+ quedan condicionadas a él.
+Porcentaje de acciones mediadas; reglas omitidas; falsos positivos/negativos;
+latencia por fase y capability; coste de tools y tokens; correcciones por finding;
+tiempo hasta aceptacion; reproducibilidad local/CI; estabilidad del snapshot;
+tasa de AgentResult invalidos; latencia y coste por agente hijo; frecuencia y
+causa de fallback; profundidad y concurrencia del grafo; tasa de oscilacion por
+regla y tasa de downgrade en la cola `unknown`.
 
-Nota de orden: si la Fase 0b demuestra valor de telemetría pero la 0c no demuestra delta de enforcement, el proyecto viable es el subconjunto ledger + evaluación pasiva — más pequeño que esta especificación, y aun así inédito.
+### 15.3 Secuencia restante para version estable
 
-### 15.2 Métricas de operación continua
+1. Workflow y Contract compilados sustituyen la maquina y schemas internos.
+2. El ledger incorpora model calls, usage, coste, capabilities y delegaciones.
+3. Scheduler y broker incorporan grafos, budgets, limites y cancelacion.
+4. MCPProvider e hooks internos obtienen transports/dispatcher gobernados.
+5. Runners aislados aplican limites de filesystem, procesos, red y secretos.
+6. La distribucion entrega binarios firmados, checksums, update y rollback.
 
-Porcentaje de acciones interceptadas; reglas omitidas; falsos positivos/negativos; latencia por edición; coste de tools; coste de tokens; correcciones por finding; tiempo hasta aceptación; diferencias entre clientes; reproducibilidad local/CI; estabilidad del snapshot; findings válidos del auditor; tasa de AgentResult inválidos; latencia y coste por agente hijo; frecuencia y causa de fallback; diferencias de calidad entre executors; profundidad y concurrencia media del grafo; **tasa de oscilación por regla** (sección 6.5); **tasa de downgrade en la cola `unknown`** (sección 13.2).
-
-### 15.3 Secuencia de implementación
-
-**Fase 0 — medición (bloqueante para todo lo demás):** las tres pruebas de 15.1, en orden.
-
-**Fase 1 — núcleo local, ledger primero:** DSL y schemas (con `author`/`adrRef`/`reviewAfter` obligatorios y `preconditions`); Compiler con verificación de monotonicidad; Runtime Snapshot; Rule Engine; Tool Runner con veredictos de tres estados; **Evidence Ledger con clases de origen y telemetría por regla, y `rcca prune` — se construyen antes que cualquier decisión bloqueante**; adapter completo para un cliente; eventos `session.started`, `file.edited`, `command.requested`, `completion.requested`; enforcement activable por regla; detección de oscilación; `rcca explain`.
-
-**Fase 2 — ciclo completo y cross-model:** artifacts de análisis y solución; transition guards con condiciones observable/attested; fases propiedad del runtime; auditor independiente; direct fix y localized reanalysis; CI resolviendo el mismo lock (activación del plano de cumplimiento); Agent Invocation Broker; AgentExecutor para un segundo proveedor; AgentRequest/AgentResult; límites de delegación y budgets; delimitación adversarial en evaluadores.
-
-**Fase 3 — organización a escala:** definida en `RCCA_future.md`; su especificación detallada se redacta después de que las Fases 0–2 produzcan datos de operación.
+La fuente de verdad ejecutable de este trabajo es
+`docs/planificacion/ordenes_trabajo/PLAN_MAESTRO.md`; no se crean roadmaps
+paralelos.
 
 ---
 
 ## 16. Limitaciones
 
-- Un adapter solo controla eventos expuestos por el cliente.
+- Keel solo controla acciones que pasan por las capabilities de su sesion; un proceso externo queda fuera del plano local.
 - El modo gobernado aumenta cobertura, no control absoluto del sistema operativo.
 - El enforcement local es cooperativo: no resiste a un desarrollador decidido (sección 5.1).
 - Detectores textuales producen falsos positivos; por eso nunca deciden (4.5).
@@ -1596,8 +1580,8 @@ Porcentaje de acciones interceptadas; reglas omitidas; falsos positivos/negativo
 - La independencia de proveedor no garantiza independencia de error o de datos de entrenamiento; dos modelos pueden discrepar sin árbitro objetivo.
 - La ejecución cross-provider puede estar limitada por políticas legales, de privacidad o residencia de datos.
 - Los CLIs y SDKs de proveedores cambian; los drivers deben versionarse y probarse.
-- Por debajo de un umbral bajo de reglas y un solo cliente, la solución simple (hooks con scripts) es superior en coste total; RCCA se justifica pasado ese umbral, y la Fase 0 debe estimarlo.
-- La intercepción de `command.requested` no tiene paridad entre clientes: en unos es un hook de pre-ejecución de primera clase, en otros la superficie es más delgada. Cualquier escenario "multi-cliente sin configuración" describe el caso en que ambos adapters declaran `preActionBlock`; el capability manifest y el preflight existen precisamente porque esa paridad no puede asumirse.
+- Por debajo de un umbral bajo de reglas y un solo proveedor, una solucion mas pequena puede ser superior en coste total; la Fase 0 debe estimarlo.
+- Los proveedores no ofrecen paridad en tool calls, structured output, cancelacion o aislamiento. El manifest del ModelExecutor declara la diferencia y una policy incompatible falla antes de iniciar.
 - El ciclo de vida de reglas mitiga el cementerio de configuraciones; no lo hace imposible. Una organización que ignora las propuestas de `prune` reconstruye el cementerio con mejores lápidas.
 
 ---
@@ -1606,9 +1590,9 @@ Porcentaje de acciones interceptadas; reglas omitidas; falsos positivos/negativo
 
 **ADR-001 — Fuente única de verdad.** Las definiciones completas viven en el workspace (o Control Plane futuro). El repositorio solo mantiene binding, lock y configuración opcional de CI.
 
-**ADR-002 — No existe `.rcca/agent/` en el repositorio.** Los agentes son componentes resueltos desde el workspace.
+**ADR-002 — No existe `.keel/agent/` en el repositorio.** Los agentes son componentes resueltos desde el workspace.
 
-**ADR-003 — Una integración lógica por cliente.** El adapter centraliza hooks, plugins, wrappers o APIs nativas; no se duplican reglas entre esos mecanismos.
+**ADR-003 — Una frontera por proveedor.** Cada proveedor se implementa mediante un ModelExecutor; rules, contexto, capabilities y fases permanecen en RuntimeHost.
 
 **ADR-004 — El LLM no lee la configuración RCCA.** El runtime entrega paquetes compactos y estructurados en el turno en que aplican.
 
@@ -1624,7 +1608,7 @@ Porcentaje de acciones interceptadas; reglas omitidas; falsos positivos/negativo
 
 **ADR-010 — El daemon es una optimización operativa.** La persistencia de configuración no depende de que esté encendido.
 
-**ADR-011 — El agente lógico es independiente del executor.** `Agent` define responsabilidad, contratos y permisos; `AgentExecutor` define el runtime concreto.
+**ADR-011 — El agente lógico es independiente del executor.** `Agent` define responsabilidad, contratos y permisos; `ModelExecutor` define el proveedor/modelo concreto.
 
 **ADR-012 — Los agentes hijos reciben contexto aislado.** La conversación del padre no se hereda por defecto; RCCA construye un `AgentRequest` explícito y valida un `AgentResult`.
 
@@ -1634,7 +1618,7 @@ Porcentaje de acciones interceptadas; reglas omitidas; falsos positivos/negativo
 
 **ADR-015 — Dos planos de ejecución con garantías declaradas.** El plano local es de asistencia y su enforcement es cooperativo; el plano de cumplimiento (CI/server-side) verifica el mismo lock y es donde `locked` constituye garantía. Ninguna implementación afirma lo contrario.
 
-**ADR-016 — SARIF es el formato normativo de findings.** RCCA extiende SARIF en `properties` en lugar de mantener un formato propio, para interoperar con los analizadores que envuelve y con el tooling existente. `finding.v1` queda deprecado.
+**ADR-016 — SARIF es el formato normativo de findings.** RCCA extiende SARIF en `properties` en lugar de mantener un formato propio, para interoperar con los analizadores que envuelve y con el tooling existente. `finding.v1` no forma parte de esta version.
 
 **ADR-017 — La reversibilidad de la acción determina el destino de `unknown`.** Reversible → evaluación semántica con `review`; irreversible → `deny-pending-approval` y escalada a humano. Un modelo nunca autoriza una acción irreversible.
 
@@ -1642,33 +1626,30 @@ Porcentaje de acciones interceptadas; reglas omitidas; falsos positivos/negativo
 
 **ADR-019 — La capa de sesión es append-only y no autoritativa.** No puede modificar enforcement, scope, validación ni executors; sus entradas se registran con origen.
 
-**ADR-020 — La especificación sigue a la medición.** El material organizacional a escala se detalla después de que la Fase 0 demuestre delta material y las Fases 1–2 produzcan datos de operación. Esta versión traslada ese material a `RCCA_future.md`.
+**ADR-020 — La especificación sigue a la medición.** El material organizacional a escala se detalla después de que la Fase 0 demuestre delta material y las Fases 1–2 produzcan datos de operación. El trabajo pendiente se registra en la planificación canónica sin crear documentos duplicados.
 
 **ADR-021 — El ledger es el primer producto; el enforcement, el segundo.** La capa de evaluación es la infraestructura común; la telemetría de restricciones (fire-rates, colas `unknown`, costos, oscilación) se entrega antes y con independencia del bloqueo, opera en modo pasivo desde la Fase 0b, y fundamenta el ciclo de vida de reglas. Origen: revisión técnica de T., que identificó "¿bajaron las violaciones?" como la pregunta más débil que el ledger responde.
 
 **ADR-022 — Las precondiciones de estado de entorno son una categoría propia del DSL.** `preconditions` evalúa condiciones sobre el mundo en el momento de la petición (credencial viva, flag presente, env explícito, rama, frescura del lock), distintas de las propiedades del contenido de la acción que evalúa `validate`. Fallan cerrado por defecto en reglas irreversibles. Origen: el gate de producción de mysql-toolkit como caso que el DSL v0.9 no podía expresar completo.
 
-**ADR-023 — Ninguna regla sin procedencia ni ventana de revisión.** `author`, `adrRef` y `reviewAfter` son obligatorios en `kind: Rule`; `rcca prune` propone bajas con evidencia del ledger al vencer la ventana, y toda baja es decisión humana registrada. Es la respuesta estructural al cementerio de configuraciones: borrar con datos en lugar de conservar por miedo.
+**ADR-023 — Ninguna regla sin procedencia ni ventana de revisión.** `author`, `adrRef` y `reviewAfter` son obligatorios en `kind: Rule`; `keel prune` propone bajas con evidencia del ledger al vencer la ventana, y toda baja es decisión humana registrada. Es la respuesta estructural al cementerio de configuraciones: borrar con datos en lugar de conservar por miedo.
 
 ---
 
 ## 18. Definición de trabajo
 
-> RCCA es un runtime que compila configuraciones declarativas de ingeniería y las aplica a sesiones y grafos de agentes mediante adapters, executors, rules, tools, capabilities, contratos de transición y evidencia observable, en dos planos de ejecución con garantías explícitamente distintas: asistencia cooperativa en local y cumplimiento verificable en CI.
+> Keel implementa RCCA como un runtime que compila configuraciones declarativas de ingeniería y gobierna sesiones y grafos de agentes mediante `RuntimeHost`, `ModelExecutor`, rules, tools, capabilities, contratos de transición y evidencia observable. El modo local sigue siendo cooperativo y CI aporta cumplimiento reproducible.
 
-La definición no implica que el razonamiento interno del modelo sea determinista, que todos los clientes ofrezcan el mismo nivel de enforcement, ni que el plano local resista la elusión deliberada.
+La definición no implica que el razonamiento interno del modelo sea determinista, que todos los proveedores ofrezcan las mismas capacidades, ni que el plano local resista la elusión deliberada.
 
 ---
 
 ## 19. Referencias de integración no normativas
 
-Superficies actuales que un adapter o driver podría utilizar. No forman parte del contrato estable y deben verificarse al implementar:
+Superficies actuales que un driver de ModelExecutor podria utilizar. No forman parte del contrato estable y deben verificarse al implementar:
 
-- Claude Code CLI reference: https://code.claude.com/docs/en/cli-reference
-- Claude Code programmatic mode: https://code.claude.com/docs/en/headless
-- Claude Agent SDK structured outputs: https://code.claude.com/docs/en/agent-sdk/structured-outputs
-- Codex non-interactive mode: https://learn.chatgpt.com/docs/non-interactive-mode
-- Codex SDK: https://learn.chatgpt.com/docs/codex-sdk
+- Anthropic Messages API: https://docs.anthropic.com/en/api/messages
+- OpenAI Responses API: https://platform.openai.com/docs/api-reference/responses
 - MCP transports: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports
 - SARIF 2.1.0 (OASIS): formato normativo de findings (ADR-016)
 

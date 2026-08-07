@@ -1,7 +1,0 @@
-{"kind":"file.edited","file":"lib/features/order/order_screen.dart","content":"final value = orderState.notifier.data;","session_id":"demo-session"}
-{"kind":"file.edited","file":"lib/features/order/order_screen.dart","content":"final v = ref.watch(orderProvider.select((s) => s.value));","session_id":"demo-session"}
-{"kind":"command.requested","command":"psql -c \"SELECT * FROM orders LIMIT 5\"","session_id":"demo-session"}
-{"kind":"command.requested","command":"psql -h prod -c \"DELETE FROM orders\"","session_id":"demo-session"}
-{"kind":"command.requested","command":"mysql --allow-production-write -e \"$STMT\"","env":{"NUI_PROD_WRITE":"1","AWSUME_EXPIRATION":"2026-12-31"},"session_id":"demo-session"}
-{"kind":"file.edited","file":"lib/features/order/order_screen.dart","line":42,"content":"final value = orderState.notifier.data;","session_id":"demo-session"}
-{"kind":"file.edited","file":"lib/features/order/order_screen.dart","line":42,"content":"final value = orderState.notifier.data;","session_id":"demo-session"}

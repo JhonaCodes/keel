@@ -37,10 +37,10 @@ pub struct Snapshot {
     /// and `keel ci resolve` must detect (invariant 14).
     #[serde(default)]
     pub agents: BTreeMap<String, CompiledAgent>,
-    /// Compiled agent executors, by id (spec section 14.1/14.8). Hashed for the
-    /// same reason: the model/command that runs an agent is part of `locked`.
+    /// Open-ended Keel-owned resources such as blueprints, knowledge,
+    /// workflows, contracts, hooks, providers, policies and model executors.
     #[serde(default)]
-    pub executors: BTreeMap<String, CompiledExecutor>,
+    pub components: BTreeMap<String, CompiledComponent>,
     /// Event → candidate rules index (spec section 10.1 "Index generation").
     pub index: BTreeMap<EventKind, Vec<usize>>,
 }
@@ -53,7 +53,7 @@ struct HashableContent<'a> {
     tools: &'a BTreeMap<String, ExternalToolDef>,
     skills: &'a BTreeMap<String, CompiledSkill>,
     agents: &'a BTreeMap<String, CompiledAgent>,
-    executors: &'a BTreeMap<String, CompiledExecutor>,
+    components: &'a BTreeMap<String, CompiledComponent>,
     index: &'a BTreeMap<EventKind, Vec<usize>>,
 }
 
@@ -61,31 +61,33 @@ impl Snapshot {
     /// Builds the snapshot, computing its canonical hash. The only way to
     /// construct one — there is no way to forge a snapshot with a foreign
     /// hash.
-    /// Convenience builder with no agents/executors (used by focused tests).
+    /// Convenience builder with no agents (used by focused tests).
     pub fn build(
         rules: Vec<CompiledRule>,
         tools: BTreeMap<String, ExternalToolDef>,
         skills: BTreeMap<String, CompiledSkill>,
         created_at: String,
     ) -> Result<Self, serde_json::Error> {
-        Self::build_full(
-            rules,
-            tools,
-            skills,
-            BTreeMap::new(),
-            BTreeMap::new(),
-            created_at,
-        )
+        Self::build_full(rules, tools, skills, BTreeMap::new(), created_at)
     }
 
-    /// Full builder: the whole governed config, including agents/executors,
-    /// goes into the canonical hash (invariant 14).
+    /// Full builder: governed agents go into the canonical hash.
     pub fn build_full(
         rules: Vec<CompiledRule>,
         tools: BTreeMap<String, ExternalToolDef>,
         skills: BTreeMap<String, CompiledSkill>,
         agents: BTreeMap<String, CompiledAgent>,
-        executors: BTreeMap<String, CompiledExecutor>,
+        created_at: String,
+    ) -> Result<Self, serde_json::Error> {
+        Self::build_with_components(rules, tools, skills, agents, BTreeMap::new(), created_at)
+    }
+
+    pub fn build_with_components(
+        rules: Vec<CompiledRule>,
+        tools: BTreeMap<String, ExternalToolDef>,
+        skills: BTreeMap<String, CompiledSkill>,
+        agents: BTreeMap<String, CompiledAgent>,
+        components: BTreeMap<String, CompiledComponent>,
         created_at: String,
     ) -> Result<Self, serde_json::Error> {
         let mut index: BTreeMap<EventKind, Vec<usize>> = BTreeMap::new();
@@ -99,7 +101,7 @@ impl Snapshot {
             tools: &tools,
             skills: &skills,
             agents: &agents,
-            executors: &executors,
+            components: &components,
             index: &index,
         })?;
         Ok(Snapshot {
@@ -109,7 +111,7 @@ impl Snapshot {
             tools,
             skills,
             agents,
-            executors,
+            components,
             index,
         })
     }
@@ -140,7 +142,7 @@ impl Snapshot {
             tools: &snap.tools,
             skills: &snap.skills,
             agents: &snap.agents,
-            executors: &snap.executors,
+            components: &snap.components,
             index: &snap.index,
         })?;
         if recomputed != snap.hash {
@@ -196,6 +198,16 @@ pub struct CompiledRule {
     /// against the event's connection context (see `runtime::env_violation`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub constraints: Option<CompiledConstraints>,
+    /// Composition provenance (section 7.4): the layer whose definition became
+    /// effective after composing the chain (e.g. `global`, `project:con-app`).
+    /// `None` on a rule that never went through layered composition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin_layer: Option<String>,
+    /// The layer that declared this rule `locked`, if any — the ancestor the
+    /// monotonicity check protected (section 7.4). Feeds `explain` and makes the
+    /// composed snapshot self-describing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locked_at: Option<String>,
 }
 
 /// Compiled `constraints` block (section 11.4). Typed at compile time so a
@@ -260,7 +272,7 @@ impl CompiledScope {
 }
 
 /// Minimal language inference by extension, for fixtures that do not
-/// declare it. Deliberate and small: the real adapter (Phase 1) declares it.
+/// declare it. Deliberate and small: the CapabilityManager declares it.
 fn infer_language(file: &str) -> Option<String> {
     let ext = file.rsplit('.').next()?;
     let lang = match ext {
@@ -397,6 +409,9 @@ pub enum OutputKind {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompiledSkill {
     pub id: String,
+    /// Component version from the authored metadata.
+    #[serde(default = "default_component_version")]
+    pub version: String,
     /// Workspace-relative path to the compact variant.
     pub compact: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -404,6 +419,38 @@ pub struct CompiledSkill {
     /// Rejected/accepted pairs feeding the packet `exemplar` (section 10.4).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub examples: Vec<(String, String)>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CompiledComponent {
+    pub kind: String,
+    pub id: String,
+    pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inline: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requirements: Vec<CompiledRequirement>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capabilities: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CompiledRequirement {
+    pub kind: String,
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub phases: Vec<String>,
+    pub required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+fn default_component_version() -> String {
+    "unversioned".to_string()
 }
 
 /// Compiled agent (spec section 14): a logical responsibility run by an executor.
@@ -424,22 +471,6 @@ pub struct CompiledAgent {
     pub timeout_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u64>,
-}
-
-/// Compiled agent executor (spec section 14.1/14.8): how/where an agent runs.
-/// The `model`/`command` are hashed so a change is drift the lock detects.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CompiledExecutor {
-    pub id: String,
-    pub command: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timeout_ms: Option<u64>,
-    /// Environment allowlist (section 13.1): the only host env vars the executor
-    /// subprocess inherits. Empty = none (no secret inheritance by default).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub env: Vec<String>,
 }
 
 #[cfg(test)]

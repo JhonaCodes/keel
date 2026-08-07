@@ -13,9 +13,20 @@ fn files_from_yaml(yaml: &str) -> WorkspaceFiles {
             Document::Tool(t) => files.tools.push(*t),
             Document::Skill(k) => files.skills.push(*k),
             Document::Agent(a) => files.agents.push(*a),
-            Document::AgentExecutor(x) => files.executors.push(*x),
             Document::RuleTest(t) => files.tests.push(*t),
-            Document::Workspace(_) => {}
+            Document::Workspace(_)
+            | Document::RepositoryRegistry(_)
+            | Document::Profile(_)
+            | Document::Exception(_)
+            | Document::Blueprint(_)
+            | Document::Knowledge(_)
+            | Document::Workflow(_)
+            | Document::Contract(_)
+            | Document::Hook(_)
+            | Document::MCPProvider(_)
+            | Document::ModelExecutor(_)
+            | Document::AgentRoutingPolicy(_)
+            | Document::Policy(_) => {}
         }
     }
     files

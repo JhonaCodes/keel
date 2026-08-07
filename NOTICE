@@ -4,7 +4,7 @@ Copyright 2026 JhonaCodes
 This product includes software and architectural concepts developed by
 JhonaCodes.
 
-The entire repository — the runtime, CLI, engine and adapters (source under
+The entire repository — the runtime, CLI and engine (source under
 crates/, schemas/, examples/) and the specification and design documents
 under docs/ (the "Agentic Cognitive Cycle" architecture, referred to in the
 specification by its technical name RCCA) — is licensed under the Apache
