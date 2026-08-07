@@ -1,6 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0
+//! The provider-facing boundary of the governed runtime.
+//!
+//! Keel does NOT call model provider APIs (D-012): the runtime governs the
+//! model's local execution environment, it does not become the model's API
+//! client. The only concrete executor is a LOCAL CLI (`CliModelExecutor`,
+//! F4b) — keel runs a governed command and treats its stdout as the response.
+//! `MockModelExecutor` is the deterministic test double.
+
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -80,7 +88,9 @@ pub enum ExecutorError {
     Failed(String),
 }
 
-/// The only provider-facing contract in the governed runtime.
+/// The only provider-facing contract in the governed runtime. Implemented by
+/// a local CLI (`CliModelExecutor`) and the test double below — never by an
+/// HTTP client to a model provider (D-012).
 pub trait ModelExecutor {
     fn provider_id(&self) -> &str;
     fn model_id(&self) -> &str;
@@ -115,260 +125,6 @@ impl MockModelExecutor {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HttpProvider {
-    Anthropic,
-    OpenAi,
-}
-
-pub struct HttpModelExecutor {
-    provider: HttpProvider,
-    model: String,
-    endpoint: String,
-    api_key: String,
-    client: reqwest::blocking::Client,
-    closed: bool,
-}
-
-impl HttpModelExecutor {
-    pub fn new(
-        provider: HttpProvider,
-        model: impl Into<String>,
-        endpoint: impl Into<String>,
-        api_key: impl Into<String>,
-    ) -> Result<Self, ExecutorError> {
-        let client = reqwest::blocking::Client::builder()
-            .timeout(Duration::from_secs(120))
-            .build()
-            .map_err(|error| ExecutorError::Failed(error.to_string()))?;
-        Ok(Self {
-            provider,
-            model: model.into(),
-            endpoint: endpoint.into(),
-            api_key: api_key.into(),
-            client,
-            closed: false,
-        })
-    }
-
-    pub fn anthropic(
-        model: impl Into<String>,
-        api_key: impl Into<String>,
-    ) -> Result<Self, ExecutorError> {
-        Self::new(
-            HttpProvider::Anthropic,
-            model,
-            "https://api.anthropic.com/v1/messages",
-            api_key,
-        )
-    }
-
-    pub fn openai(
-        model: impl Into<String>,
-        api_key: impl Into<String>,
-    ) -> Result<Self, ExecutorError> {
-        Self::new(
-            HttpProvider::OpenAi,
-            model,
-            "https://api.openai.com/v1/responses",
-            api_key,
-        )
-    }
-
-    fn complete_anthropic(&self, request: ModelRequest) -> Result<ModelResponse, ExecutorError> {
-        let messages = request
-            .messages
-            .iter()
-            .filter(|message| message.role != "system")
-            .map(|message| serde_json::json!({"role": message.role, "content": message.content}))
-            .collect::<Vec<_>>();
-        let system = request
-            .messages
-            .iter()
-            .filter(|message| message.role == "system")
-            .map(|message| message.content.as_str())
-            .chain(request.context.iter().map(String::as_str))
-            .collect::<Vec<_>>()
-            .join("\n\n");
-        let mut body = serde_json::json!({
-            "model": self.model,
-            "max_tokens": 4096,
-            "messages": messages,
-        });
-        if !system.is_empty() {
-            body["system"] = serde_json::Value::String(system);
-        }
-        if !request.tools.is_empty() {
-            body["tools"] = serde_json::Value::Array(
-                request
-                    .tools
-                    .iter()
-                    .map(|tool| {
-                        serde_json::json!({
-                            "name": tool.name,
-                            "description": tool.description,
-                            "input_schema": tool.input_schema,
-                        })
-                    })
-                    .collect(),
-            );
-        }
-        let response = self
-            .client
-            .post(&self.endpoint)
-            .header("x-api-key", &self.api_key)
-            .header("anthropic-version", "2023-06-01")
-            .json(&body)
-            .send()
-            .map_err(|error| ExecutorError::Failed(error.to_string()))?;
-        let status = response.status();
-        let value: serde_json::Value = response
-            .json()
-            .map_err(|error| ExecutorError::Failed(error.to_string()))?;
-        if !status.is_success() {
-            return Err(ExecutorError::Failed(format!(
-                "Anthropic HTTP {status}: {value}"
-            )));
-        }
-        Ok(parse_anthropic_response(&value, &self.model))
-    }
-
-    fn complete_openai(&self, request: ModelRequest) -> Result<ModelResponse, ExecutorError> {
-        let mut input = request
-            .messages
-            .iter()
-            .map(|message| serde_json::json!({"role": message.role, "content": message.content}))
-            .collect::<Vec<_>>();
-        if !request.context.is_empty() {
-            input.insert(
-                0,
-                serde_json::json!({"role": "system", "content": request.context.join("\n\n")}),
-            );
-        }
-        let tools = request
-            .tools
-            .iter()
-            .map(|tool| {
-                serde_json::json!({
-                    "type": "function",
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.input_schema,
-                })
-            })
-            .collect::<Vec<_>>();
-        let mut body = serde_json::json!({"model": self.model, "input": input});
-        if !tools.is_empty() {
-            body["tools"] = serde_json::Value::Array(tools);
-        }
-        let response = self
-            .client
-            .post(&self.endpoint)
-            .bearer_auth(&self.api_key)
-            .json(&body)
-            .send()
-            .map_err(|error| ExecutorError::Failed(error.to_string()))?;
-        let status = response.status();
-        let value: serde_json::Value = response
-            .json()
-            .map_err(|error| ExecutorError::Failed(error.to_string()))?;
-        if !status.is_success() {
-            return Err(ExecutorError::Failed(format!(
-                "OpenAI HTTP {status}: {value}"
-            )));
-        }
-        Ok(parse_openai_response(&value, &self.model))
-    }
-}
-
-impl ModelExecutor for HttpModelExecutor {
-    fn provider_id(&self) -> &str {
-        match self.provider {
-            HttpProvider::Anthropic => "anthropic",
-            HttpProvider::OpenAi => "openai",
-        }
-    }
-
-    fn model_id(&self) -> &str {
-        &self.model
-    }
-
-    fn complete(&mut self, request: ModelRequest) -> Result<ModelResponse, ExecutorError> {
-        if self.closed {
-            return Err(ExecutorError::Closed);
-        }
-        match self.provider {
-            HttpProvider::Anthropic => self.complete_anthropic(request),
-            HttpProvider::OpenAi => self.complete_openai(request),
-        }
-    }
-
-    fn cancel(&mut self, _session_id: &str) -> Result<(), ExecutorError> {
-        self.closed = true;
-        Ok(())
-    }
-}
-
-fn parse_anthropic_response(value: &serde_json::Value, model: &str) -> ModelResponse {
-    let content = value["content"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|item| item["type"] == "text")
-        .filter_map(|item| item["text"].as_str())
-        .collect::<Vec<_>>()
-        .join("\n");
-    let tool_calls = value["content"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|item| item["type"] == "tool_use")
-        .filter_map(|item| {
-            Some(ToolCall {
-                name: item["name"].as_str()?.to_string(),
-                arguments: item["input"].clone(),
-            })
-        })
-        .collect();
-    ModelResponse {
-        content,
-        tool_calls,
-        provider_id: "anthropic".to_string(),
-        model_id: value["model"].as_str().unwrap_or(model).to_string(),
-    }
-}
-
-fn parse_openai_response(value: &serde_json::Value, model: &str) -> ModelResponse {
-    let output = value["output"].as_array().cloned().unwrap_or_default();
-    let content = output
-        .iter()
-        .flat_map(|item| item["content"].as_array().into_iter().flatten())
-        .filter(|item| item["type"] == "output_text")
-        .filter_map(|item| item["text"].as_str())
-        .collect::<Vec<_>>()
-        .join("\n");
-    let tool_calls = output
-        .iter()
-        .filter(|item| item["type"] == "function_call")
-        .filter_map(|item| {
-            let arguments = item["arguments"]
-                .as_str()
-                .and_then(|raw| serde_json::from_str(raw).ok())
-                .unwrap_or_else(|| item["arguments"].clone());
-            Some(ToolCall {
-                name: item["name"].as_str()?.to_string(),
-                arguments,
-            })
-        })
-        .collect();
-    ModelResponse {
-        content,
-        tool_calls,
-        provider_id: "openai".to_string(),
-        model_id: value["model"].as_str().unwrap_or(model).to_string(),
-    }
-}
-
 impl ModelExecutor for MockModelExecutor {
     fn provider_id(&self) -> &str {
         "mock"
@@ -391,42 +147,5 @@ impl ModelExecutor for MockModelExecutor {
     fn cancel(&mut self, _session_id: &str) -> Result<(), ExecutorError> {
         self.closed = true;
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod provider_tests {
-    use super::{parse_anthropic_response, parse_openai_response};
-
-    #[test]
-    fn parses_anthropic_text_and_tool_use() {
-        let response = parse_anthropic_response(
-            &serde_json::json!({
-                "model": "claude-test",
-                "content": [
-                    {"type": "text", "text": "ready"},
-                    {"type": "tool_use", "name": "skill.read", "input": {"skill_id": "rust"}}
-                ]
-            }),
-            "fallback",
-        );
-        assert_eq!(response.content, "ready");
-        assert_eq!(response.tool_calls[0].name, "skill.read");
-    }
-
-    #[test]
-    fn parses_openai_text_and_function_call() {
-        let response = parse_openai_response(
-            &serde_json::json!({
-                "model": "gpt-test",
-                "output": [
-                    {"type": "message", "content": [{"type": "output_text", "text": "ready"}]},
-                    {"type": "function_call", "name": "skill.read", "arguments": "{\"skill_id\":\"rust\"}"}
-                ]
-            }),
-            "fallback",
-        );
-        assert_eq!(response.content, "ready");
-        assert_eq!(response.tool_calls[0].arguments["skill_id"], "rust");
     }
 }

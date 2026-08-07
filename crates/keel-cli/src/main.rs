@@ -52,8 +52,6 @@ enum Command {
     Init {
         #[arg(default_value = "keel-workspace")]
         path: PathBuf,
-        #[arg(long, default_value = "mock")]
-        executor: String,
         #[arg(long)]
         json: bool,
     },
@@ -159,24 +157,6 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Runs or resumes a Keel-owned governed model session.
-    Run {
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long, conflicts_with = "resume", required_unless_present = "resume")]
-        task: Option<String>,
-        #[arg(long, conflicts_with = "task")]
-        resume: Option<String>,
-        #[arg(long)]
-        executor: Option<String>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Manages runtime-owned executor configuration and credentials.
-    Configure {
-        #[command(subcommand)]
-        command: ConfigureCommand,
-    },
     /// Bind this repository to a project/workspace, writing `.keel/project.yaml`
     /// (section 8.6, invariant 4: the repo holds only binding + lock, never the
     /// component definitions).
@@ -212,62 +192,6 @@ enum Command {
 }
 
 #[derive(Subcommand)]
-enum ConfigureCommand {
-    Executor {
-        #[command(subcommand)]
-        command: ExecutorCommand,
-    },
-}
-
-#[derive(Subcommand)]
-enum ExecutorCommand {
-    Add {
-        id: String,
-        #[arg(long)]
-        provider: String,
-        #[arg(long)]
-        model: String,
-        #[arg(long)]
-        endpoint: Option<String>,
-        #[arg(long)]
-        credential_env: Option<String>,
-        #[arg(long)]
-        api_key_stdin: bool,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-    List {
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-    Test {
-        id: String,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-    Remove {
-        id: String,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-    Default {
-        id: String,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-}
-
-#[derive(Subcommand)]
 enum CiCommand {
     /// Fail BEFORE doing work unless the binding + lock resolve: binding
     /// present, workspace compiles + RuleTests pass, and the lock matches a
@@ -299,11 +223,7 @@ fn parse_containment(value: &str) -> anyhow::Result<keel_host::ContainmentMode> 
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
-        Command::Init {
-            path,
-            executor,
-            json,
-        } => governed::init(&path, &executor, json),
+        Command::Init { path, json } => governed::init(&path, json),
         Command::Compile { workspace } => commands::compile(&workspace),
         Command::Launch {
             client,
@@ -377,62 +297,6 @@ fn main() -> ExitCode {
                 commands::doctor(&workspace)
             }
         }
-        Command::Run {
-            workspace,
-            task,
-            resume,
-            executor,
-            json,
-        } => governed::run(
-            &workspace,
-            task.as_deref(),
-            resume.as_deref(),
-            executor.as_deref(),
-            json,
-        ),
-        Command::Configure { command } => match command {
-            ConfigureCommand::Executor { command } => match command {
-                ExecutorCommand::Add {
-                    id,
-                    provider,
-                    model,
-                    endpoint,
-                    credential_env,
-                    api_key_stdin,
-                    workspace,
-                    json,
-                } => governed::configure_executor_add(
-                    &workspace,
-                    governed::ExecutorConfiguration {
-                        id,
-                        provider,
-                        model,
-                        endpoint,
-                        credential_env,
-                        api_key_stdin,
-                        json_output: json,
-                    },
-                ),
-                ExecutorCommand::List { workspace, json } => {
-                    governed::configure_executor_list(&workspace, json)
-                }
-                ExecutorCommand::Test {
-                    id,
-                    workspace,
-                    json,
-                } => governed::configure_executor_test(&workspace, &id, json),
-                ExecutorCommand::Remove {
-                    id,
-                    workspace,
-                    json,
-                } => governed::configure_executor_remove(&workspace, &id, json),
-                ExecutorCommand::Default {
-                    id,
-                    workspace,
-                    json,
-                } => governed::configure_executor_default(&workspace, &id, json),
-            },
-        },
         Command::Bind {
             workspace,
             project,
