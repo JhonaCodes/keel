@@ -89,6 +89,16 @@ enum Command {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         cmd: Vec<String>,
     },
+    /// Keel's MCP endpoint over stdio (spec section 12): the convergence plane
+    /// a launched client consumes to discover and load governed skills/agents.
+    /// keel wires this into the child at launch; it is not run by hand.
+    #[command(hide = true)]
+    Mcp {
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long, default_value = "anonymous")]
+        session: String,
+    },
     /// `keel claude [args...]` / `keel codex [args...]` — shorthand for
     /// `keel launch --client <name> -- [args...]`.
     #[command(external_subcommand)]
@@ -334,6 +344,10 @@ fn main() -> ExitCode {
                 })
             }
         }
+        Command::Mcp { workspace, session } => match keel_host::mcp::serve(&workspace, &session) {
+            Ok(()) => Ok(ExitCode::SUCCESS),
+            Err(e) => Err(e),
+        },
         Command::Observe {
             workspace,
             events,

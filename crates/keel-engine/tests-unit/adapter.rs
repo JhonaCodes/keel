@@ -87,4 +87,14 @@ fn unknown_client_has_no_manifest_and_generic_has_no_base_command() {
     let generic = AdapterManifest::for_client("generic").unwrap();
     assert!(generic.command.is_empty());
     assert!(generic.shim_commands.iter().any(|c| c == "rm"));
+    // generic makes no assumptions about the client's flags: convergence is
+    // opt-in there (no MCP wiring), while the hard rings still apply.
+    assert!(generic.mcp.is_none());
+}
+
+#[test]
+fn known_clients_declare_how_to_inject_the_keel_mcp_endpoint() {
+    // Convergence wiring is DATA per client, not code.
+    assert!(AdapterManifest::for_client("claude").unwrap().mcp.is_some());
+    assert!(AdapterManifest::for_client("codex").unwrap().mcp.is_some());
 }

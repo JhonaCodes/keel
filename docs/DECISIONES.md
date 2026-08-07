@@ -129,5 +129,28 @@ Evidencia: `crates/keel-host/src/sandbox.rs`, `schemas/containment.schema.json`,
 `crates/keel-engine/src/snapshot.rs` (`CompiledContainment`),
 `test/tests/host_launch.rs` (`the_os_sandbox_blocks_an_absolute_path_bypass`).
 
+### D-012.b Convergencia: los modelos consultan skills/agentes A TRAVES de keel
+
+Keel es el punto UNICO donde convergen los modelos: en vez de que cada CLI lea
+sus skills/agentes de SU propia configuracion, el hijo se los pide a KEEL por un
+endpoint MCP (`keel mcp`, stdio JSON-RPC 2.0 servido a mano — cero deps) que
+keel cablea al lanzar la sesion (config efimera por proceso). Tools: `keel.
+skills.list`, `keel.skills.load` (entrega el contenido al contexto y registra el
+receipt en el store — la evidencia es de keel, no la palabra del modelo, D-003),
+`keel.rules.query` (que reglas aplican, advisory, NUNCA bloquea) y
+`keel.agent.invoke` (stub honesto hasta F4). Cada cliente declara en el
+`AdapterManifest` COMO se inyecta el MCP (claude `--mcp-config`, codex `-c
+mcp_servers…`) y COMO se le anuncia al modelo que esta gobernado
+(`--append-system-prompt` o linea al PTY); `generic` no asume flags (convergencia
+opt-in). **La convergencia (P2) NO es enforcement**: si el hijo ignora o borra la
+config, no se rompe nada — los anillos duros (shims, sandbox) son independientes y
+siempre activos; P1 nunca depende de P2. `deliver_skills`/`SessionStore`
+(recuperados de git) implementan la economia de contexto (compact→full por
+oscilacion).
+
+Evidencia: `crates/keel-host/src/mcp.rs`, `crates/keel-host/src/launch.rs`
+(`wire_convergence`), `crates/keel-engine/src/{session,adapter}.rs`,
+`test/tests/mcp_stdio.rs`.
+
 Evidencia: `crates/keel-host/**` (pty/broker/shims/launch), `crates/keel-shim`,
 `crates/keel-engine/src/{packet,adapter}.rs`, `test/tests/host_launch.rs`.

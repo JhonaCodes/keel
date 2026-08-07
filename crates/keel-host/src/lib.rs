@@ -20,6 +20,7 @@
 
 pub mod broker;
 pub mod launch;
+pub mod mcp;
 pub mod pty;
 pub mod sandbox;
 pub mod shims;

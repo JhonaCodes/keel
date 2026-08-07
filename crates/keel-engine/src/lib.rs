@@ -48,6 +48,7 @@ pub mod packet;
 pub mod resolution;
 pub mod runtime;
 pub mod sarif;
+pub mod session;
 pub mod snapshot;
 pub mod testkit;
 pub mod tools;

@@ -42,6 +42,7 @@ fn runtime_side_modules_never_import_the_dsl() {
         "sarif.rs",
         "packet.rs",
         "adapter.rs",
+        "session.rs",
     ] {
         let source = src(module);
         assert!(
