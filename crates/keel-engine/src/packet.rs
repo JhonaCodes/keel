@@ -26,51 +26,85 @@ pub fn render(
     skill_payload: &[String],
     snapshot_hash: &str,
 ) -> String {
-    let mut lines = Vec::new();
-
-    let header = match eval.effective_decision {
+    // Rendered as a plain-ASCII framed block so the OPERATOR reads it at a
+    // glance in the transcript, while staying compact and parseable for the
+    // model: the canonical tokens `BLOCKED (<rule>)`, `source: rule=…`,
+    // `Evidence: …` remain verbatim on their own lines. No emojis or symbols
+    // the operator might not recognize.
+    let title = match eval.effective_decision {
         Decision::Block => format!("BLOCKED ({})", eval.rule_id),
-        Decision::DenyPendingApproval => format!("DENIED — pending approval ({})", eval.rule_id),
+        Decision::DenyPendingApproval => format!("DENIED - pending approval ({})", eval.rule_id),
         Decision::Review => format!("REVIEW ({})", eval.rule_id),
         Decision::Allow => format!("OK ({})", eval.rule_id),
     };
-    lines.push(header);
 
-    // The constraint and what happened: findings first (localized), then the
-    // rule's own detail (report message / failed precondition).
+    let mut body: Vec<String> = vec![title];
+
+    // Why: findings first (localized), then the rule's own detail.
     for f in &eval.findings {
         match (&f.file, f.line) {
-            (Some(file), Some(line)) => lines.push(format!("{} — {file}:{line}", f.message)),
-            _ => lines.push(f.message.clone()),
+            (Some(file), Some(line)) => body.push(format!("- {} ({file}:{line})", f.message)),
+            _ => body.push(format!("- {}", f.message)),
         }
     }
     if let Some(detail) = &eval.detail {
-        lines.push(detail.clone());
+        body.push(format!("- {detail}"));
     }
 
     // section 4.7 / ADR-017: uncertainty over an irreversible action escalates
-    // to a human — the packet says so explicitly, so the model does not retry.
+    // to a human — say so explicitly so the model does not retry.
     if eval.effective_decision == Decision::DenyPendingApproval {
-        lines.push(
-            "requires human approval — a model never authorizes an irreversible action (section 4.7)"
+        body.push(
+            "- requires human approval - a model never authorizes an irreversible action (section 4.7)"
                 .to_string(),
         );
     }
 
-    // L2 payload (skill content / exemplar), delivered by the Session Manager.
+    // What to do next: the L2 skill content / exemplar, if delivered.
     for chunk in skill_payload {
-        lines.push(chunk.clone());
+        body.push(format!("-> {chunk}"));
     }
 
-    // Source (section 10.4 `source: {rule, snapshot}`): pins the packet to the
-    // exact rule and the immutable snapshot that produced it — reproducible and
-    // citable, without ever exposing the rule body or workspace paths (ADR-004).
-    lines.push(format!(
+    // Source + evidence (section 10.4): reproducible and citable, without
+    // exposing the rule body or workspace paths (ADR-004).
+    body.push(format!(
         "source: rule={} snapshot={snapshot_hash}",
         eval.rule_id
     ));
-    lines.push(format!("Evidence: {ev_id} logged"));
-    lines.join("\n")
+    body.push(format!("Evidence: {ev_id} logged"));
+
+    frame(&body)
+}
+
+/// Wraps lines in an ASCII `keel` frame, so a block reads as one distinct unit
+/// in the transcript. `+-- keel --...--+` on top, indented body, matching
+/// bottom rule.
+fn frame(lines: &[String]) -> String {
+    const LABEL: &str = "+-- keel ";
+    let width = lines
+        .iter()
+        .flat_map(|l| l.lines())
+        .map(|l| l.chars().count())
+        .max()
+        .unwrap_or(0)
+        .clamp(LABEL.len(), 100);
+    let top = format!(
+        "{LABEL}{}+",
+        "-".repeat(width.saturating_sub(LABEL.len()) + 3)
+    );
+    let bottom = format!("+{}+", "-".repeat(width + 2));
+    let mut out = String::new();
+    out.push_str(&top);
+    out.push('\n');
+    for line in lines {
+        for wrapped in line.lines() {
+            out.push_str("  ");
+            out.push_str(wrapped);
+            out.push('\n');
+        }
+    }
+    out.push_str(&bottom);
+    out
 }
 
 #[cfg(test)]

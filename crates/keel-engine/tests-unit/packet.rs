@@ -29,7 +29,7 @@ fn eval(effective: Decision) -> Evaluation {
 #[test]
 fn blocked_packet_carries_constraint_evidence_and_source() {
     let p = render(&eval(Decision::Block), "ev_1", &[], "sha256:abc123");
-    assert!(p.starts_with("BLOCKED (db.gate-sql-execution)"));
+    assert!(p.contains("BLOCKED (db.gate-sql-execution)"));
     assert!(p.contains("DROP is destructive"));
     assert!(p.contains("Evidence: ev_1 logged"));
     // section 10.4 `source`: pins the packet to the rule + immutable snapshot.
