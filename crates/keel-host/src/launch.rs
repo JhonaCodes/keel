@@ -229,7 +229,10 @@ fn wire_convergence(
     let catalog = if skill_ids.is_empty() {
         String::new()
     } else {
-        format!(" Governed skills you can load right now: {}.", skill_ids.join(", "))
+        format!(
+            " Governed skills you can load right now: {}.",
+            skill_ids.join(", ")
+        )
     };
     let notice = format!(
         "You are running under keel, a local governance runtime. Your skills and agents \
