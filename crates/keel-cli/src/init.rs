@@ -354,9 +354,12 @@ pub const MOCK_EXECUTOR: &str = r#"apiVersion: keel/v1alpha1
 kind: ModelExecutor
 metadata: { id: mock, version: 1.0.0 }
 spec:
+  # A governed executor is a LOCAL CLI (D-012): keel runs `command`, writes the
+  # prompt to its stdin and treats stdout as the response. Keel never speaks a
+  # provider API. `cat` is a deterministic echo executor for wiring/tests;
+  # replace with e.g. `[codex, exec, --json]` or `[claude, -p]`.
   config:
-    provider: mock
-    model: mock
+    command: [cat]
 "#;
 
 pub const SCHEMAS_README: &str = r#"# schemas/  [scaffold]
