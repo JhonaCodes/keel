@@ -101,9 +101,11 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
     // so a short unique name is enough. Cleaned up on teardown.
     let socket_path = std::env::temp_dir().join(format!("keel-{}.sock", short_id(&session_id)));
     let ledger = Ledger::open(&files.ledger_path())?;
-    // Capture the containment before the snapshot moves into the broker: the
-    // sandbox is generated from it just below.
+    // Capture what the announce and sandbox need before the snapshot moves
+    // into the broker: the containment, and the governed skill ids (so keel
+    // can name them to the model up front, not just say "go list them").
     let snapshot_containment = snapshot.containment.clone();
+    let skill_ids: Vec<String> = snapshot.skills.keys().cloned().collect();
     let broker = Broker::new(snapshot, ledger, root.clone(), session_id.clone());
     let (join, handle) = spawn_broker(broker, &socket_path)?;
 
@@ -126,7 +128,7 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
     // model discovers/loads its governed skills through keel, and announce it.
     // Ephemeral, per-session config; if the child ignores or deletes it, the
     // hard rings are unaffected (P1 never depends on P2).
-    let argv = wire_convergence(argv, &manifest, &host_dir, &root, &session_id)?;
+    let argv = wire_convergence(argv, &manifest, &host_dir, &root, &session_id, &skill_ids)?;
 
     // The hard ring: wrap argv in the OS sandbox when the snapshot declares a
     // containment AND a provider can honor it. Any downgrade is announced.
@@ -185,6 +187,7 @@ fn wire_convergence(
     host_dir: &std::path::Path,
     root: &std::path::Path,
     session_id: &str,
+    skill_ids: &[String],
 ) -> Result<Vec<String>> {
     use keel_engine::adapter::{Announce, McpMethod};
 
@@ -223,14 +226,19 @@ fn wire_convergence(
         }
     }
 
-    let notice = "You are running under keel, a local governance runtime. Your skills \
-                  and agents are provided BY keel through MCP tools (keel.skills.list, \
-                  keel.skills.load, keel.rules.query, keel.agent.invoke). At the START of \
-                  any non-trivial task, call keel.skills.list; if a skill matches the task \
-                  (e.g. building a website/UI, a given domain), load it with \
-                  keel.skills.load and FOLLOW it before acting — do not rely on your \
-                  defaults when keel offers a skill. Some actions are contained by keel \
-                  and will be refused; read the block message and adjust.";
+    let catalog = if skill_ids.is_empty() {
+        String::new()
+    } else {
+        format!(" Governed skills you can load right now: {}.", skill_ids.join(", "))
+    };
+    let notice = format!(
+        "You are running under keel, a local governance runtime. Your skills and agents \
+         are provided BY keel through MCP tools (keel.skills.list, keel.skills.load, \
+         keel.rules.query, keel.agent.invoke).{catalog} BEFORE starting a task that one \
+         of them covers, load it with keel.skills.load and FOLLOW it — do not use your \
+         own defaults when keel offers a skill. Some actions are contained by keel and \
+         will be refused; read the block message and adjust."
+    );
     match &mcp.announce {
         Announce::SystemPromptFlag { flag } => {
             argv.push(flag.clone());
