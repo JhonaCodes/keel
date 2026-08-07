@@ -18,8 +18,8 @@
 //! next to the rules that produced them. XDG paths arrive with the installer.
 
 use keel_dsl::{
-    AgentDoc, Document, DslError, ExceptionDoc, GovernedComponentDoc, RuleDoc, RuleTestDoc,
-    SkillDoc, ToolDoc, WorkspaceDoc, parse_documents,
+    AgentDoc, ContainmentDoc, Document, DslError, ExceptionDoc, GovernedComponentDoc, RuleDoc,
+    RuleTestDoc, SkillDoc, ToolDoc, WorkspaceDoc, parse_documents,
 };
 use std::path::{Path, PathBuf};
 
@@ -41,6 +41,9 @@ pub struct WorkspaceFiles {
     /// Governed exceptions (section 7.4): the only route to relax a `locked`
     /// rule, owned at the locking scope with reason, bounded scope and expiry.
     pub exceptions: Vec<ExceptionDoc>,
+    /// OS-sandbox backstop declarations (section 5.2 runner). Composed by
+    /// UNION across layers (restrictions only add) into the snapshot.
+    pub containments: Vec<ContainmentDoc>,
 }
 
 impl WorkspaceFiles {
@@ -55,6 +58,7 @@ impl WorkspaceFiles {
             components: Vec::new(),
             tests: Vec::new(),
             exceptions: Vec::new(),
+            containments: Vec::new(),
         }
     }
 
@@ -175,6 +179,7 @@ pub fn load_components(dir: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
         ("executors", "ModelExecutor"),
         ("tests", "RuleTest"),
         ("exceptions", "Exception"),
+        ("containment", "Containment"),
     ] {
         let dir_path = dir.join(sub);
         if !dir_path.is_dir() {
@@ -214,6 +219,7 @@ pub fn load_components(dir: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
                     }
                     (Document::RuleTest(t), "RuleTest") => files.tests.push(*t),
                     (Document::Exception(e), "Exception") => files.exceptions.push(*e),
+                    (Document::Containment(c), "Containment") => files.containments.push(*c),
                     (other, _) => {
                         return Err(WorkspaceError::MisplacedKind {
                             path: path.clone(),

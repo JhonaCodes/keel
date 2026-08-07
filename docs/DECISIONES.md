@@ -100,9 +100,34 @@ Consecuencias:
   nunca desde su propia configuracion.
 - La contencion por interposicion de PATH gobierna la superficie de PATH; una
   invocacion por ruta absoluta la evade por construccion. Esa es tarea del
-  plano de sandbox del SO (fase siguiente), y el preflight (invariante 8) es
-  honesto al respecto: no promete un `block` que la contencion activa no puede
-  honrar.
+  plano de sandbox del SO, y el preflight (invariante 8) es honesto al
+  respecto: no promete un `block` que la contencion activa no puede honrar.
+
+### D-012.a Anillo duro: sandbox del SO desde `kind: Containment`
+
+El anillo duro es un `kind: Containment` (subdir `containment/` por capa, p.ej.
+`global/containment/`) que declara SOLO lo que el kernel puede imponer: borrado
+de archivos por glob (`denyUnlink`), escritura fuera del workspace
+(`denyWriteOutside`), red (`denyNetwork`). Compone por UNION entre capas
+(restricciones solo suman) y **entra al hash del snapshot** (`Snapshot::
+with_containment`), asi que `keel lock --verify` detecta su drift — no hay
+contencion "fuera del artefacto".
+
+- macOS: perfil SBPL generado y aplicado con `sandbox-exec` (`keel-host::
+  sandbox::seatbelt`). El CLI esta deprecado pero la tecnologia (Seatbelt) es
+  la que usan Bazel/Nix/Chromium hoy; se PRUEBA disponibilidad antes de
+  confiar en ella.
+- Linux (Landlock) es un provider posterior tras el mismo trait
+  `SandboxProvider`; hasta que aterrice, Linux degrada a shims.
+- Regla de honestidad: la contencion NUNCA se degrada en silencio. Sin
+  provider disponible, o con `--containment shims`, el nivel efectivo baja a
+  shims CON BANNER, y la garantia del kernel deja de aplicar (el bypass por
+  ruta absoluta vuelve a ser posible, dicho explicitamente). El sandbox impone
+  exactamente lo declarado, ni mas ni menos.
+
+Evidencia: `crates/keel-host/src/sandbox.rs`, `schemas/containment.schema.json`,
+`crates/keel-engine/src/snapshot.rs` (`CompiledContainment`),
+`test/tests/host_launch.rs` (`the_os_sandbox_blocks_an_absolute_path_bypass`).
 
 Evidencia: `crates/keel-host/**` (pty/broker/shims/launch), `crates/keel-shim`,
 `crates/keel-engine/src/{packet,adapter}.rs`, `test/tests/host_launch.rs`.

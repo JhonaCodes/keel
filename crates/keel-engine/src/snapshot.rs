@@ -41,8 +41,33 @@ pub struct Snapshot {
     /// workflows, contracts, hooks, providers, policies and model executors.
     #[serde(default)]
     pub components: BTreeMap<String, CompiledComponent>,
+    /// OS-sandbox backstop (section 5.2 runner). Part of the governed config,
+    /// so it is hashed: a change to what the kernel must deny is drift that
+    /// `keel lock --verify` detects. `None` when the workspace declares no
+    /// containment — skipped from the hash so existing snapshots are stable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub containment: Option<CompiledContainment>,
     /// Event → candidate rules index (spec section 10.1 "Index generation").
     pub index: BTreeMap<EventKind, Vec<usize>>,
+}
+
+/// The compiled OS-sandbox backstop. Composed by union across layers
+/// (restrictions only add — the same monotonicity philosophy as `locked`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompiledContainment {
+    /// Globs whose matching files the child may not delete (file-write-unlink).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deny_unlink: Vec<String>,
+    /// Deny writes outside the workspace root.
+    #[serde(default, skip_serializing_if = "crate::snapshot::is_false")]
+    pub deny_write_outside: bool,
+    /// Deny outbound network for the child and its descendants.
+    #[serde(default, skip_serializing_if = "crate::snapshot::is_false")]
+    pub deny_network: bool,
+}
+
+pub(crate) fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// The hashable part of the snapshot. It exists as a separate type so that
@@ -54,6 +79,10 @@ struct HashableContent<'a> {
     skills: &'a BTreeMap<String, CompiledSkill>,
     agents: &'a BTreeMap<String, CompiledAgent>,
     components: &'a BTreeMap<String, CompiledComponent>,
+    // Skipped when None so snapshots authored before containment existed keep
+    // their exact hash; present → the containment is part of the identity.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    containment: &'a Option<CompiledContainment>,
     index: &'a BTreeMap<EventKind, Vec<usize>>,
 }
 
@@ -96,12 +125,14 @@ impl Snapshot {
                 index.entry(*kind).or_default().push(i);
             }
         }
+        let containment = None;
         let hash = ContentHash::of_canonical(&HashableContent {
             rules: &rules,
             tools: &tools,
             skills: &skills,
             agents: &agents,
             components: &components,
+            containment: &containment,
             index: &index,
         })?;
         Ok(Snapshot {
@@ -112,8 +143,29 @@ impl Snapshot {
             skills,
             agents,
             components,
+            containment,
             index,
         })
+    }
+
+    /// Attaches the OS-sandbox backstop and RECOMPUTES the canonical hash so
+    /// the containment is part of the snapshot identity (drift-detectable via
+    /// the lock). The compiler calls this after `build_with_components`.
+    pub fn with_containment(
+        mut self,
+        containment: Option<CompiledContainment>,
+    ) -> Result<Self, serde_json::Error> {
+        self.containment = containment;
+        self.hash = ContentHash::of_canonical(&HashableContent {
+            rules: &self.rules,
+            tools: &self.tools,
+            skills: &self.skills,
+            agents: &self.agents,
+            components: &self.components,
+            containment: &self.containment,
+            index: &self.index,
+        })?;
+        Ok(self)
     }
 
     /// Candidate rules for an event.
@@ -143,6 +195,7 @@ impl Snapshot {
             skills: &snap.skills,
             agents: &snap.agents,
             components: &snap.components,
+            containment: &snap.containment,
             index: &snap.index,
         })?;
         if recomputed != snap.hash {

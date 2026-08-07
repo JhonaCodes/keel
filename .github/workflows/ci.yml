@@ -25,6 +25,20 @@ jobs:
       - run: cargo build --workspace --locked
       - run: cargo test --workspace --locked
 
+  # macOS is REQUIRED, not optional: the OS-sandbox backstop (Seatbelt) and its
+  # kernel-level guarantee — e.g. `the_os_sandbox_blocks_an_absolute_path_bypass`
+  # — are `cfg(target_os = "macos")` and would never run on the ubuntu job. A
+  # security ring that is only exercised on a developer's laptop is not a ring.
+  test-macos:
+    name: build + test (macOS — sandbox)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --workspace --locked
+      - run: cargo test --workspace --locked
+
   lint:
     name: fmt + clippy
     runs-on: ubuntu-latest

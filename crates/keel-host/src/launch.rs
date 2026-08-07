@@ -6,7 +6,7 @@
 //! and only then does the client CLI get to exist — inside it.
 
 use crate::broker::{Broker, spawn as spawn_broker};
-use crate::{pty, shims};
+use crate::{pty, sandbox, shims};
 use anyhow::{Context, Result, bail};
 use keel_engine::adapter::AdapterManifest;
 use keel_engine::ledger::Ledger;
@@ -32,6 +32,20 @@ pub struct LaunchOptions {
     pub task: Option<String>,
     /// Resume a keel session identity; a fresh ulid otherwise.
     pub session: Option<String>,
+    /// Requested containment level. `Full` (default) uses the OS sandbox when
+    /// available; `Shims` skips it deliberately (the banner says so).
+    pub containment: ContainmentMode,
+}
+
+/// What the operator asked for. The EFFECTIVE level (see `sandbox::Level`) can
+/// be lower — always with a banner, never silently.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ContainmentMode {
+    /// Shims + OS sandbox when a provider is available.
+    #[default]
+    Full,
+    /// Shims only — explicit opt-out of the hard ring.
+    Shims,
 }
 
 pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
@@ -84,6 +98,9 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
     // so a short unique name is enough. Cleaned up on teardown.
     let socket_path = std::env::temp_dir().join(format!("keel-{}.sock", short_id(&session_id)));
     let ledger = Ledger::open(&files.ledger_path())?;
+    // Capture the containment before the snapshot moves into the broker: the
+    // sandbox is generated from it just below.
+    let snapshot_containment = snapshot.containment.clone();
     let broker = Broker::new(snapshot, ledger, root.clone(), session_id.clone());
     let (join, handle) = spawn_broker(broker, &socket_path)?;
 
@@ -102,8 +119,13 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
     env.insert("KEEL_SESSION".into(), session_id.clone());
     env.insert("KEEL_WORKSPACE".into(), root.display().to_string());
 
+    // The hard ring: wrap argv in the OS sandbox when the snapshot declares a
+    // containment AND a provider can honor it. Any downgrade is announced.
+    let (argv, level) = apply_sandbox(argv, &snapshot_containment, &root, opts.containment);
+
     eprintln!(
-        "[keel] session {session_id} — containment: shims ({}) — workspace {}",
+        "[keel] session {session_id} — containment: {} ({}) — workspace {}",
+        level_label(level),
         manifest.id,
         root.display()
     );
@@ -123,6 +145,57 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
     } else {
         ExitCode::from(code.clamp(0, 255) as u8)
     })
+}
+
+/// Wraps `argv` in the OS sandbox when the snapshot declares a containment
+/// and a provider can honor it. Returns the (possibly wrapped) argv and the
+/// EFFECTIVE level. Every downgrade from what was requested is announced —
+/// a security boundary must never weaken silently.
+fn apply_sandbox(
+    argv: Vec<String>,
+    containment: &Option<keel_engine::snapshot::CompiledContainment>,
+    workspace: &std::path::Path,
+    mode: ContainmentMode,
+) -> (Vec<String>, sandbox::Level) {
+    let Some(containment) = containment else {
+        // Nothing to enforce at the kernel: shims are the only ring by design.
+        return (argv, sandbox::Level::Shims);
+    };
+    if mode == ContainmentMode::Shims {
+        eprintln!(
+            "[keel] containment: shims-only by request — the OS sandbox is OFF; \
+             an absolute-path command can bypass interposition"
+        );
+        return (argv, sandbox::Level::Shims);
+    }
+    match sandbox::provider() {
+        Some(provider) if provider.available() => (
+            provider.wrap(&argv, containment, workspace),
+            sandbox::Level::Full,
+        ),
+        Some(provider) => {
+            eprintln!(
+                "[keel] containment: DEGRADED to shims — the `{}` sandbox is not \
+                 available here; an absolute-path command can bypass interposition",
+                provider.name()
+            );
+            (argv, sandbox::Level::Shims)
+        }
+        None => {
+            eprintln!(
+                "[keel] containment: DEGRADED to shims — no OS sandbox provider on \
+                 this platform yet; an absolute-path command can bypass interposition"
+            );
+            (argv, sandbox::Level::Shims)
+        }
+    }
+}
+
+fn level_label(level: sandbox::Level) -> &'static str {
+    match level {
+        sandbox::Level::Full => "shims + os-sandbox",
+        sandbox::Level::Shims => "shims",
+    }
 }
 
 /// The tail of the session ulid — enough to keep the socket name unique and
