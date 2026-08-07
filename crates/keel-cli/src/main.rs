@@ -83,6 +83,10 @@ enum Command {
         /// interposition).
         #[arg(long, default_value = "full")]
         containment: String,
+        /// Disable the supervisor's cognitive-direction suggestions (P3).
+        /// Enforcement is unaffected.
+        #[arg(long)]
+        no_suggest: bool,
         /// Command (for `generic`) or extra args appended to the client CLI.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         cmd: Vec<String>,
@@ -231,6 +235,7 @@ fn main() -> ExitCode {
             task,
             session,
             containment,
+            no_suggest,
             cmd,
         } => match parse_containment(&containment) {
             Ok(mode) => keel_host::launch(keel_host::LaunchOptions {
@@ -240,6 +245,7 @@ fn main() -> ExitCode {
                 task,
                 session,
                 containment: mode,
+                no_suggest,
             }),
             Err(e) => Err(e),
         },
@@ -261,6 +267,7 @@ fn main() -> ExitCode {
                     task: None,
                     session: None,
                     containment: keel_host::ContainmentMode::Full,
+                    no_suggest: false,
                 })
             }
         }

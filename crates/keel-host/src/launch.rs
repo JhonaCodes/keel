@@ -6,7 +6,7 @@
 //! and only then does the client CLI get to exist — inside it.
 
 use crate::broker::{Broker, spawn as spawn_broker};
-use crate::{pty, sandbox, shims};
+use crate::{pty, sandbox, shims, supervisor};
 use anyhow::{Context, Result, bail};
 use keel_engine::adapter::AdapterManifest;
 use keel_engine::ledger::Ledger;
@@ -35,6 +35,9 @@ pub struct LaunchOptions {
     /// Requested containment level. `Full` (default) uses the OS sandbox when
     /// available; `Shims` skips it deliberately (the banner says so).
     pub containment: ContainmentMode,
+    /// When true, the supervisor does not surface cognitive-direction
+    /// suggestions (P3). Enforcement is unaffected.
+    pub no_suggest: bool,
 }
 
 /// What the operator asked for. The EFFECTIVE level (see `sandbox::Level`) can
@@ -136,10 +139,27 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
         root.display()
     );
 
+    // Cognitive direction (P3): a supervisor watches the live ledger and
+    // surfaces suggestions (oscillation) to the operator's transcript — never
+    // into the model's input stream (that would interfere with its reasoning).
+    let supervisor_shutdown = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let supervisor = (!opts.no_suggest).then(|| {
+        supervisor::spawn(
+            files.ledger_path(),
+            session_id.clone(),
+            supervisor_shutdown.clone(),
+        )
+    });
+
     let cwd = std::env::current_dir()?;
     let code = pty::run(&argv, &env, &cwd);
 
-    // Teardown: broker down, ephemeral dir + socket gone; evidence stays.
+    // Teardown: supervisor + broker down, ephemeral dir + socket gone; evidence
+    // stays.
+    supervisor_shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
+    if let Some(supervisor) = supervisor {
+        let _ = supervisor.join();
+    }
     handle.stop();
     let _ = join.join();
     let _ = std::fs::remove_dir_all(&host_dir);

@@ -24,5 +24,6 @@ pub mod mcp;
 pub mod pty;
 pub mod sandbox;
 pub mod shims;
+pub mod supervisor;
 
 pub use launch::{ContainmentMode, LaunchOptions, launch};
