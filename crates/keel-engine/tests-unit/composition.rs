@@ -222,7 +222,7 @@ fn dropping_a_loaded_skill_is_a_d4_violation() {
 apiVersion: keel/v1alpha1
 kind: Skill
 metadata: { id: guide }
-spec: { compact: guide.md }
+spec: { compact: guide_keel.md }
 ---
 apiVersion: keel/v1alpha1
 kind: Rule

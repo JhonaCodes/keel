@@ -143,12 +143,16 @@ apiVersion: keel/v1alpha1
 kind: Skill
 metadata: { id: access-patterns, version: 0.1.0 }
 spec:
-  compact: global/skills/access.md       # variante corta (primera entrega)
-  full: global/skills/access-full.md     # opcional: variante completa (escala en oscilación)
-  examples:                              # opcional: pares para el exemplar del packet
+  compact: global/skills/access-patterns_keel.md   # variante corta (primera entrega)
+  full: global/skills/access-patterns-full_keel.md # opcional: variante completa (escala en oscilación)
+  examples:                                        # opcional: pares para el exemplar del packet
     - ["raw SQL query", "use the query builder"]
 ```
 
+- **CONDICIÓN (enforced en compile):** los archivos de contenido de una skill
+  DEBEN terminar en `_keel.md`. Un `compact`/`full` que no lo cumpla es un error
+  de compilación (`SkillNaming`). El sufijo hace legible la procedencia —
+  entregado POR keel — dondequiera que se lea el contenido.
 - El `.md` es texto libre; keel lo entrega tal cual al contexto.
 - Una regla puede pedir cargarla: `enforcement.invalid.load.skills: ["skill:access-patterns"]`.
 

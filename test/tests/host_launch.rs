@@ -145,10 +145,14 @@ fn author_require_skill_for_git(root: &Path) {
     let skills = root.join("global/skills");
     fs::create_dir_all(&rules).unwrap();
     fs::create_dir_all(&skills).unwrap();
-    fs::write(skills.join("web-guide.md"), "Follow the house web guide.").unwrap();
+    fs::write(
+        skills.join("web-guide_keel.md"),
+        "Follow the house web guide.",
+    )
+    .unwrap();
     fs::write(
         skills.join("web-guide.yaml"),
-        "apiVersion: keel/v1alpha1\nkind: Skill\nmetadata: { id: web-guide, version: 0.1.0 }\nspec: { compact: global/skills/web-guide.md }\n",
+        "apiVersion: keel/v1alpha1\nkind: Skill\nmetadata: { id: web-guide, version: 0.1.0 }\nspec: { compact: global/skills/web-guide_keel.md }\n",
     )
     .unwrap();
     fs::write(

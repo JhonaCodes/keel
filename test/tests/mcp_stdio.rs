@@ -49,7 +49,7 @@ fn author_skill(root: &Path) {
     let skills = root.join("global/skills");
     fs::create_dir_all(&skills).unwrap();
     fs::write(
-        skills.join("access.md"),
+        skills.join("access_keel.md"),
         "USE the query builder, not raw SQL.",
     )
     .unwrap();
@@ -61,7 +61,7 @@ metadata:
   id: access-patterns
   version: 0.1.0
 spec:
-  compact: global/skills/access.md
+  compact: global/skills/access_keel.md
 "#,
     )
     .unwrap();

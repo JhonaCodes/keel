@@ -195,3 +195,33 @@ fn same_workspace_same_hash() {
     let b = compile(&files, "2026-12-31T23:59:59Z".into()).unwrap();
     assert_eq!(a.snapshot.hash, b.snapshot.hash);
 }
+
+const SKILL_BAD_NAME: &str = r#"
+apiVersion: keel/v1alpha1
+kind: Skill
+metadata: { id: access-patterns, version: 0.1.0 }
+spec: { compact: global/skills/access.md }
+"#;
+
+const SKILL_KEEL_NAME: &str = r#"
+apiVersion: keel/v1alpha1
+kind: Skill
+metadata: { id: access-patterns, version: 0.1.0 }
+spec: { compact: global/skills/access_keel.md }
+"#;
+
+/// A skill's content file MUST end in `_keel.md` — enforced at compile so the
+/// provenance suffix is a rule, not a convention.
+#[test]
+fn a_skill_content_file_must_end_in_keel_md() {
+    let bad = files_from_yaml(SKILL_BAD_NAME);
+    assert!(matches!(
+        compile(&bad, "t".into()).unwrap_err(),
+        CompileError::SkillNaming { .. }
+    ));
+
+    // The same skill with the `_keel.md` suffix compiles (a missing file is
+    // only a warning, not an error).
+    let ok = files_from_yaml(SKILL_KEEL_NAME);
+    assert!(compile(&ok, "t".into()).is_ok());
+}

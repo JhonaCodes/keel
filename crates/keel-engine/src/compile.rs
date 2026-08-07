@@ -59,6 +59,10 @@ pub enum CompileError {
         "duplicate id `{0}`: two components at the same authority level (section 7.6) — resolution required, never silent"
     )]
     DuplicateId(String),
+    #[error(
+        "skill `{skill}`: content file `{path}` must end in `_keel.md` — keel skills carry that suffix so their provenance (delivered by keel) is legible wherever they are read"
+    )]
+    SkillNaming { skill: String, path: String },
     #[error("rule `{rule}`: unresolvable reference `{reference}` — {hint}")]
     UnresolvedTool {
         rule: String,
@@ -155,6 +159,21 @@ pub fn compile_layered(
         for skill in &layer.files.skills {
             if !seen.insert(skill.metadata.id.clone()) {
                 return Err(CompileError::DuplicateId(skill.metadata.id.clone()));
+            }
+            // Naming condition: a skill's content files MUST end in `_keel.md`,
+            // so their provenance (delivered BY keel) is legible wherever they
+            // are read. Enforced at compile so every skill that ever enters a
+            // workspace follows it — it is a rule, not a convention.
+            for path in [Some(&skill.spec.compact), skill.spec.full.as_ref()]
+                .into_iter()
+                .flatten()
+            {
+                if !path.ends_with("_keel.md") {
+                    return Err(CompileError::SkillNaming {
+                        skill: skill.metadata.id.clone(),
+                        path: path.clone(),
+                    });
+                }
             }
             if !layer.files.root.join(&skill.spec.compact).exists() {
                 warnings.push(format!(
