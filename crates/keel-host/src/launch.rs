@@ -225,8 +225,12 @@ fn wire_convergence(
 
     let notice = "You are running under keel, a local governance runtime. Your skills \
                   and agents are provided BY keel through MCP tools (keel.skills.list, \
-                  keel.skills.load, keel.rules.query) — consult them instead of assuming. \
-                  Some actions are contained by keel and will be refused.";
+                  keel.skills.load, keel.rules.query, keel.agent.invoke). At the START of \
+                  any non-trivial task, call keel.skills.list; if a skill matches the task \
+                  (e.g. building a website/UI, a given domain), load it with \
+                  keel.skills.load and FOLLOW it before acting — do not rely on your \
+                  defaults when keel offers a skill. Some actions are contained by keel \
+                  and will be refused; read the block message and adjust.";
     match &mcp.announce {
         Announce::SystemPromptFlag { flag } => {
             argv.push(flag.clone());
