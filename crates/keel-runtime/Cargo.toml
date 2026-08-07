@@ -12,7 +12,6 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 rusqlite = { workspace = true }
 ulid = { workspace = true }
-reqwest = { workspace = true }
 jiff = { workspace = true }
 jsonschema = { workspace = true }
 

@@ -155,7 +155,7 @@ fn a_governed_rm_is_decided_before_it_exists_as_a_process() {
     let workspace = Workspace::new();
     let root = workspace.path().to_str().unwrap().to_string();
 
-    let init = workspace.run(&["init", &root, "--executor", "mock", "--json"]);
+    let init = workspace.run(&["init", &root, "--json"]);
     assert!(
         init.status.success(),
         "init failed: {}",
@@ -248,7 +248,7 @@ fn the_os_sandbox_blocks_an_absolute_path_bypass() {
     let workspace = Workspace::new();
     let root = workspace.path().to_str().unwrap().to_string();
 
-    let init = workspace.run(&["init", &root, "--executor", "mock", "--json"]);
+    let init = workspace.run(&["init", &root, "--json"]);
     assert!(init.status.success());
     author_containment_no_md(workspace.path());
     let compile = workspace.run(&["compile", "--workspace", &root]);
@@ -292,7 +292,7 @@ fn shims_only_mode_leaves_the_absolute_path_bypass_open_and_says_so() {
     let workspace = Workspace::new();
     let root = workspace.path().to_str().unwrap().to_string();
 
-    let init = workspace.run(&["init", &root, "--executor", "mock", "--json"]);
+    let init = workspace.run(&["init", &root, "--json"]);
     assert!(init.status.success());
     author_containment_no_md(workspace.path());
     assert!(

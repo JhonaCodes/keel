@@ -72,11 +72,7 @@ fn a_toy_client_lists_and_loads_a_governed_skill_over_stdio() {
     let ws = Workspace::new();
     let root = ws.path().to_str().unwrap().to_string();
 
-    assert!(
-        ws.run(&["init", &root, "--executor", "mock", "--json"])
-            .status
-            .success()
-    );
+    assert!(ws.run(&["init", &root, "--json"]).status.success());
     author_skill(ws.path());
     let compile = ws.run(&["compile", "--workspace", &root]);
     assert!(
