@@ -37,6 +37,42 @@ pub struct AdapterManifest {
     /// Commands interposed via the session shim dir.
     pub shim_commands: Vec<String>,
     pub blockable: BTreeSet<EventKind>,
+    /// How keel injects its MCP endpoint into this client at launch, so the
+    /// model discovers its governed skills/agents THROUGH keel (section 12).
+    /// `None` when keel has no supported wiring for the client (generic): the
+    /// operator can still wire it manually.
+    pub mcp: Option<McpInjection>,
+}
+
+/// How to wire keel's `keel mcp` server into a specific client CLI, and how to
+/// tell the model it is governed. Data, not code — a new client is a new entry,
+/// not new logic.
+#[derive(Debug, Clone)]
+pub struct McpInjection {
+    /// How the MCP server config reaches the client.
+    pub method: McpMethod,
+    /// How the "you are governed by keel; consult keel.skills.list" notice
+    /// reaches the model.
+    pub announce: Announce,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum McpMethod {
+    /// A flag pointing at a written JSON config file, e.g. Claude Code's
+    /// `--mcp-config <file>`.
+    ConfigFileFlag { flag: String },
+    /// An inline `-c key=value` config override, e.g. Codex's
+    /// `-c mcp_servers.keel.command=...`.
+    ConfigOverrideFlag { flag: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Announce {
+    /// A flag carrying extra system-prompt text, e.g.
+    /// `--append-system-prompt`.
+    SystemPromptFlag { flag: String },
+    /// No client flag: keel writes a one-line notice to the PTY at start.
+    PtyLine,
 }
 
 impl AdapterManifest {
@@ -46,7 +82,7 @@ impl AdapterManifest {
     /// delivery and completion requests have no interposition point in a
     /// foreign CLI's lifecycle (v1), so they are NOT blockable: the runtime
     /// degrades them to feedback (section 5.3).
-    fn containment(id: &str, command: Vec<String>) -> Self {
+    fn containment(id: &str, command: Vec<String>, mcp: Option<McpInjection>) -> Self {
         AdapterManifest {
             id: id.into(),
             command,
@@ -55,6 +91,7 @@ impl AdapterManifest {
                 .map(ToString::to_string)
                 .collect(),
             blockable: [EventKind::CommandRequested].into_iter().collect(),
+            mcp,
         }
     }
 
@@ -62,9 +99,29 @@ impl AdapterManifest {
     /// `generic` + an explicit command instead).
     pub fn for_client(id: &str) -> Option<Self> {
         match id {
-            "claude" => Some(Self::containment("claude", vec!["claude".into()])),
-            "codex" => Some(Self::containment("codex", vec!["codex".into()])),
-            "generic" => Some(Self::containment("generic", vec![])),
+            "claude" => Some(Self::containment(
+                "claude",
+                vec!["claude".into()],
+                Some(McpInjection {
+                    method: McpMethod::ConfigFileFlag {
+                        flag: "--mcp-config".into(),
+                    },
+                    announce: Announce::SystemPromptFlag {
+                        flag: "--append-system-prompt".into(),
+                    },
+                }),
+            )),
+            "codex" => Some(Self::containment(
+                "codex",
+                vec!["codex".into()],
+                Some(McpInjection {
+                    method: McpMethod::ConfigOverrideFlag { flag: "-c".into() },
+                    announce: Announce::PtyLine,
+                }),
+            )),
+            // generic: no assumptions about the CLI's flags — convergence is
+            // opt-in (the operator wires MCP), the hard rings still apply.
+            "generic" => Some(Self::containment("generic", vec![], None)),
             _ => None,
         }
     }

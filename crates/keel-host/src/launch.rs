@@ -119,6 +119,12 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
     env.insert("KEEL_SESSION".into(), session_id.clone());
     env.insert("KEEL_WORKSPACE".into(), root.display().to_string());
 
+    // Convergence plane (P2): wire keel's MCP endpoint into the child so the
+    // model discovers/loads its governed skills through keel, and announce it.
+    // Ephemeral, per-session config; if the child ignores or deletes it, the
+    // hard rings are unaffected (P1 never depends on P2).
+    let argv = wire_convergence(argv, &manifest, &host_dir, &root, &session_id)?;
+
     // The hard ring: wrap argv in the OS sandbox when the snapshot declares a
     // containment AND a provider can honor it. Any downgrade is announced.
     let (argv, level) = apply_sandbox(argv, &snapshot_containment, &root, opts.containment);
@@ -145,6 +151,75 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
     } else {
         ExitCode::from(code.clamp(0, 255) as u8)
     })
+}
+
+/// Wires keel's MCP endpoint into the child per the adapter manifest and
+/// returns the augmented argv. Writes an ephemeral per-session MCP config
+/// under `host_dir`; appends the client's config flag and the "you are
+/// governed by keel" announcement. A client with no known wiring (generic)
+/// is returned unchanged — convergence is opt-in there; the hard rings hold
+/// regardless.
+fn wire_convergence(
+    mut argv: Vec<String>,
+    manifest: &AdapterManifest,
+    host_dir: &std::path::Path,
+    root: &std::path::Path,
+    session_id: &str,
+) -> Result<Vec<String>> {
+    use keel_engine::adapter::{Announce, McpMethod};
+
+    let Some(mcp) = &manifest.mcp else {
+        return Ok(argv);
+    };
+    let keel_bin = std::env::current_exe()
+        .context("convergence: cannot resolve the keel binary for the MCP endpoint")?;
+    let keel_bin = keel_bin.display().to_string();
+    let root_str = root.display().to_string();
+
+    match &mcp.method {
+        McpMethod::ConfigFileFlag { flag } => {
+            // Claude-style: a JSON file of MCP servers.
+            let config = serde_json::json!({
+                "mcpServers": {
+                    "keel": {
+                        "command": keel_bin,
+                        "args": ["mcp", "--workspace", root_str, "--session", session_id],
+                    }
+                }
+            });
+            let path = host_dir.join("mcp.json");
+            std::fs::write(&path, serde_json::to_string_pretty(&config)?)?;
+            argv.push(flag.clone());
+            argv.push(path.display().to_string());
+        }
+        McpMethod::ConfigOverrideFlag { flag } => {
+            // Codex-style: dotted TOML overrides.
+            let args_toml =
+                format!("[\"mcp\",\"--workspace\",\"{root_str}\",\"--session\",\"{session_id}\"]");
+            argv.push(flag.clone());
+            argv.push(format!("mcp_servers.keel.command=\"{keel_bin}\""));
+            argv.push(flag.clone());
+            argv.push(format!("mcp_servers.keel.args={args_toml}"));
+        }
+    }
+
+    let notice = "You are running under keel, a local governance runtime. Your skills \
+                  and agents are provided BY keel through MCP tools (keel.skills.list, \
+                  keel.skills.load, keel.rules.query) — consult them instead of assuming. \
+                  Some actions are contained by keel and will be refused.";
+    match &mcp.announce {
+        Announce::SystemPromptFlag { flag } => {
+            argv.push(flag.clone());
+            argv.push(notice.to_string());
+        }
+        Announce::PtyLine => {
+            // No client flag: the notice is printed to the session so both the
+            // operator and the model see it at start.
+            eprintln!("[keel] {notice}");
+        }
+    }
+
+    Ok(argv)
 }
 
 /// Wraps `argv` in the OS sandbox when the snapshot declares a containment
