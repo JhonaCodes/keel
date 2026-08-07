@@ -80,6 +80,11 @@ enum Command {
         /// Resume a keel session identity.
         #[arg(long)]
         session: Option<String>,
+        /// Containment level: `full` (shims + OS sandbox, default) or `shims`
+        /// (opt out of the hard ring — an absolute-path command can bypass
+        /// interposition).
+        #[arg(long, default_value = "full")]
+        containment: String,
         /// Command (for `generic`) or extra args appended to the client CLI.
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         cmd: Vec<String>,
@@ -269,6 +274,18 @@ enum CiCommand {
     },
 }
 
+/// Parses the `--containment` flag into the host mode. An unknown value is a
+/// hard error — never a silent fall-through to a weaker level.
+fn parse_containment(value: &str) -> anyhow::Result<keel_host::ContainmentMode> {
+    match value {
+        "full" => Ok(keel_host::ContainmentMode::Full),
+        "shims" => Ok(keel_host::ContainmentMode::Shims),
+        other => Err(anyhow::anyhow!(
+            "unknown --containment `{other}` — expected `full` or `shims`"
+        )),
+    }
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
@@ -283,14 +300,19 @@ fn main() -> ExitCode {
             workspace,
             task,
             session,
+            containment,
             cmd,
-        } => keel_host::launch(keel_host::LaunchOptions {
-            client,
-            workspace,
-            cmd,
-            task,
-            session,
-        }),
+        } => match parse_containment(&containment) {
+            Ok(mode) => keel_host::launch(keel_host::LaunchOptions {
+                client,
+                workspace,
+                cmd,
+                task,
+                session,
+                containment: mode,
+            }),
+            Err(e) => Err(e),
+        },
         Command::Client(argv) => {
             // `keel <known-cli> [args...]`. Unknown first tokens are a hard
             // error with the generic escape hatch — never a silent guess.
@@ -308,6 +330,7 @@ fn main() -> ExitCode {
                     cmd: argv.into_iter().skip(1).collect(),
                     task: None,
                     session: None,
+                    containment: keel_host::ContainmentMode::Full,
                 })
             }
         }

@@ -67,6 +67,11 @@ pub fn init(path: &Path) -> Result<ExitCode> {
             "global/exceptions/exception.yaml.example",
             init::EXCEPTION_TMPL,
         ),
+        ("global/containment/README.md", init::CONTAINMENT_README),
+        (
+            "global/containment/containment.yaml.example",
+            init::CONTAINMENT_TMPL,
+        ),
         ("organizations/README.md", init::ORGS_README),
         (
             "organizations/my-company/README.md",

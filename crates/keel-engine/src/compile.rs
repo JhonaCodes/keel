@@ -28,9 +28,9 @@
 
 use crate::composition::{AppliedException, ComposeLayer, ExceptionInput, Inheritance, compose};
 use crate::snapshot::{
-    CompiledAgent, CompiledBranch, CompiledComponent, CompiledEnforcement, CompiledPrecondition,
-    CompiledRequirement, CompiledRule, CompiledScope, CompiledSkill, CompiledToolCall,
-    CompiledToolRef, CompiledWhen, ExternalToolDef, OutputKind, Snapshot,
+    CompiledAgent, CompiledBranch, CompiledComponent, CompiledContainment, CompiledEnforcement,
+    CompiledPrecondition, CompiledRequirement, CompiledRule, CompiledScope, CompiledSkill,
+    CompiledToolCall, CompiledToolRef, CompiledWhen, ExternalToolDef, OutputKind, Snapshot,
 };
 use crate::tools::{BUILTIN_DETECTORS, BUILTIN_PRECONDITIONS};
 use crate::workspace::WorkspaceFiles;
@@ -361,6 +361,10 @@ pub fn compile_layered(
     }
     let applied_exceptions = composed.applied_exceptions;
 
+    // ── Containment: UNION across layers (restrictions only add, section 7.4
+    //    monotonicity philosophy). None when no layer declares one. ──
+    let containment = compile_containment(chain);
+
     // ── Index generation + Snapshot creation (canonical hash, invariant 9) ──
     let snapshot = Snapshot::build_with_components(
         composed.rules,
@@ -369,11 +373,38 @@ pub fn compile_layered(
         agents,
         components,
         created_at,
-    )?;
+    )?
+    .with_containment(containment)?;
     Ok(CompileOutcome {
         snapshot,
         warnings,
         applied_exceptions,
+    })
+}
+
+/// Composes every layer's `Containment` into one by UNION: deny-unlink globs
+/// are unioned (sorted, deduped for a deterministic hash), booleans OR-ed.
+/// Returns `None` when no layer declares containment.
+fn compile_containment(chain: &[CompileLayer]) -> Option<CompiledContainment> {
+    let mut deny_unlink = BTreeSet::new();
+    let mut deny_write_outside = false;
+    let mut deny_network = false;
+    let mut any = false;
+    for layer in chain {
+        for doc in &layer.files.containments {
+            any = true;
+            deny_unlink.extend(doc.spec.deny_unlink.iter().cloned());
+            deny_write_outside |= doc.spec.deny_write_outside;
+            deny_network |= doc.spec.deny_network;
+        }
+    }
+    if !any {
+        return None;
+    }
+    Some(CompiledContainment {
+        deny_unlink: deny_unlink.into_iter().collect(),
+        deny_write_outside,
+        deny_network,
     })
 }
 

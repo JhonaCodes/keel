@@ -120,6 +120,24 @@ spec:
     .unwrap();
 }
 
+/// The OS-sandbox backstop: a global Containment forbidding deletion of any
+/// `.md` file, regardless of how `rm` is invoked.
+fn author_containment_no_md(root: &Path) {
+    let dir = root.join("global/containment");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("no-md.yaml"),
+        r#"apiVersion: keel/v1alpha1
+kind: Containment
+metadata:
+  id: global.hard.no-md
+spec:
+  denyUnlink: ["**/*.md"]
+"#,
+    )
+    .unwrap();
+}
+
 fn blocked_evidence_count(root: &Path) -> i64 {
     let ledger = Connection::open(root.join(".keel-state/ledger.sqlite")).unwrap();
     ledger
@@ -220,17 +238,63 @@ fn a_governed_rm_is_decided_before_it_exists_as_a_process() {
     assert_eq!(blocked_evidence_count(workspace.path()), 1);
 }
 
+/// F2: the OS-sandbox backstop closes the absolute-path bypass that shims
+/// alone cannot. macOS-only for now — the Linux provider is a later phase
+/// (F2b); until it lands, Linux degrades to shims and this guarantee does not
+/// hold there (documented, not silent).
+#[cfg(target_os = "macos")]
 #[test]
-fn an_absolute_path_bypasses_shims_and_the_preflight_says_so_honestly() {
-    // F1 scope honesty (invariant 8): PATH interposition governs the PATH
-    // surface only. `/bin/rm` bypasses it — that is the OS-sandbox plane's
-    // job (F2). This test PINS the limitation so F2 flips it consciously.
+fn the_os_sandbox_blocks_an_absolute_path_bypass() {
     let workspace = Workspace::new();
     let root = workspace.path().to_str().unwrap().to_string();
 
     let init = workspace.run(&["init", &root, "--executor", "mock", "--json"]);
     assert!(init.status.success());
-    author_no_delete_md(workspace.path());
+    author_containment_no_md(workspace.path());
+    let compile = workspace.run(&["compile", "--workspace", &root]);
+    assert!(
+        compile.status.success(),
+        "compile failed: {}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+
+    fs::write(workspace.path().join("notes.md"), "keep me\n").unwrap();
+    // /bin/rm sidesteps PATH interposition entirely — only the kernel can stop
+    // it. With containment + Seatbelt, it must fail and the file must survive.
+    let bypass = workspace.run(&[
+        "launch",
+        "--client",
+        "generic",
+        "--workspace",
+        &root,
+        "--",
+        "/bin/sh",
+        "-c",
+        "/bin/rm notes.md",
+    ]);
+    assert!(
+        !bypass.status.success(),
+        "the OS sandbox must refuse /bin/rm of a .md: {}{}",
+        String::from_utf8_lossy(&bypass.stdout),
+        String::from_utf8_lossy(&bypass.stderr)
+    );
+    assert!(
+        workspace.path().join("notes.md").exists(),
+        "the kernel refused the unlink — the .md survives even via absolute path"
+    );
+}
+
+/// The honest downgrade: `--containment shims` opts out of the hard ring, so
+/// the absolute-path bypass works again — and the banner said so. This pins
+/// that shims-only is a real, announced level, not an accident.
+#[test]
+fn shims_only_mode_leaves_the_absolute_path_bypass_open_and_says_so() {
+    let workspace = Workspace::new();
+    let root = workspace.path().to_str().unwrap().to_string();
+
+    let init = workspace.run(&["init", &root, "--executor", "mock", "--json"]);
+    assert!(init.status.success());
+    author_containment_no_md(workspace.path());
     assert!(
         workspace
             .run(&["compile", "--workspace", &root])
@@ -245,18 +309,20 @@ fn an_absolute_path_bypasses_shims_and_the_preflight_says_so_honestly() {
         "generic",
         "--workspace",
         &root,
+        "--containment",
+        "shims",
         "--",
         "/bin/sh",
         "-c",
         "/bin/rm notes.md",
     ]);
+    let transcript = String::from_utf8_lossy(&bypass.stderr).to_string();
     assert!(
-        bypass.status.success(),
-        "F1 documents this gap; F2 closes it: {}",
-        String::from_utf8_lossy(&bypass.stderr)
+        transcript.contains("shims-only") || transcript.contains("containment: shims"),
+        "the downgrade must be announced: {transcript}"
     );
     assert!(
         !workspace.path().join("notes.md").exists(),
-        "if this starts failing, F2 landed — move the assertion there"
+        "shims-only lets the absolute-path bypass through (by explicit request)"
     );
 }

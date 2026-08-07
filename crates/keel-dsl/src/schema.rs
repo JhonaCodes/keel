@@ -27,6 +27,7 @@ const PROFILE_SCHEMA: &str = include_str!("../../../schemas/profile.schema.json"
 const EXCEPTION_SCHEMA: &str = include_str!("../../../schemas/exception.schema.json");
 const GOVERNED_COMPONENT_SCHEMA: &str =
     include_str!("../../../schemas/governed-component.schema.json");
+const CONTAINMENT_SCHEMA: &str = include_str!("../../../schemas/containment.schema.json");
 
 fn validator_for(kind: &str) -> Option<&'static Validator> {
     static RULE: OnceLock<Validator> = OnceLock::new();
@@ -39,6 +40,7 @@ fn validator_for(kind: &str) -> Option<&'static Validator> {
     static PROFILE: OnceLock<Validator> = OnceLock::new();
     static EXCEPTION: OnceLock<Validator> = OnceLock::new();
     static GOVERNED_COMPONENT: OnceLock<Validator> = OnceLock::new();
+    static CONTAINMENT: OnceLock<Validator> = OnceLock::new();
 
     fn build(raw: &str) -> Validator {
         let schema: serde_json::Value =
@@ -58,6 +60,7 @@ fn validator_for(kind: &str) -> Option<&'static Validator> {
         }
         "Profile" => Some(PROFILE.get_or_init(|| build(PROFILE_SCHEMA))),
         "Exception" => Some(EXCEPTION.get_or_init(|| build(EXCEPTION_SCHEMA))),
+        "Containment" => Some(CONTAINMENT.get_or_init(|| build(CONTAINMENT_SCHEMA))),
         "Blueprint" | "Knowledge" | "Workflow" | "Contract" | "Hook" | "MCPProvider"
         | "ModelExecutor" | "AgentRoutingPolicy" | "Policy" => {
             Some(GOVERNED_COMPONENT.get_or_init(|| build(GOVERNED_COMPONENT_SCHEMA)))

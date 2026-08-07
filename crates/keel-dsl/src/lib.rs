@@ -68,6 +68,7 @@ pub enum Document {
     Tool(Box<ToolDoc>),
     Skill(Box<SkillDoc>),
     Agent(Box<AgentDoc>),
+    Containment(Box<ContainmentDoc>),
     RuleTest(Box<RuleTestDoc>),
     RepositoryRegistry(Box<RepositoryRegistryDoc>),
     Profile(Box<ProfileDoc>),
@@ -91,6 +92,7 @@ impl Document {
             Document::Tool(d) => &d.metadata,
             Document::Skill(d) => &d.metadata,
             Document::Agent(d) => &d.metadata,
+            Document::Containment(d) => &d.metadata,
             Document::RuleTest(d) => &d.metadata,
             Document::RepositoryRegistry(d) => &d.metadata,
             Document::Profile(d) => &d.metadata,
@@ -114,6 +116,7 @@ impl Document {
             Document::Tool(_) => "Tool",
             Document::Skill(_) => "Skill",
             Document::Agent(_) => "Agent",
+            Document::Containment(_) => "Containment",
             Document::RuleTest(_) => "RuleTest",
             Document::RepositoryRegistry(_) => "RepositoryRegistry",
             Document::Profile(_) => "Profile",
@@ -179,6 +182,40 @@ pub struct WorkspaceDoc {
     pub metadata: Metadata,
     #[serde(default)]
     pub spec: WorkspaceSpec,
+}
+
+/// The OS-sandbox backstop (spec section 5.2 runner). Compiles into the
+/// snapshot (drift-detectable via the lock) and generates the platform
+/// sandbox profile. The hard ring only: file deletions by glob, writes
+/// outside the workspace, network — everything the kernel can enforce
+/// regardless of PATH. `tool:`-validated rules stay in the shim broker.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContainmentDoc {
+    #[serde(rename = "apiVersion")]
+    pub api_version: String,
+    pub metadata: Metadata,
+    #[serde(default)]
+    pub spec: ContainmentSpec,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContainmentSpec {
+    #[serde(rename = "denyUnlink", default, skip_serializing_if = "Vec::is_empty")]
+    pub deny_unlink: Vec<String>,
+    #[serde(
+        rename = "denyWriteOutside",
+        default,
+        skip_serializing_if = "crate::is_false"
+    )]
+    pub deny_write_outside: bool,
+    #[serde(
+        rename = "denyNetwork",
+        default,
+        skip_serializing_if = "crate::is_false"
+    )]
+    pub deny_network: bool,
 }
 
 /// Phase 0 minimal workspace: convention over configuration — rules live in

@@ -21,6 +21,7 @@
 pub mod broker;
 pub mod launch;
 pub mod pty;
+pub mod sandbox;
 pub mod shims;
 
-pub use launch::{LaunchOptions, launch};
+pub use launch::{ContainmentMode, LaunchOptions, launch};

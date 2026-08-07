@@ -14,6 +14,7 @@ fn files_from_yaml(yaml: &str) -> WorkspaceFiles {
             Document::Skill(k) => files.skills.push(*k),
             Document::Agent(a) => files.agents.push(*a),
             Document::RuleTest(t) => files.tests.push(*t),
+            Document::Containment(c) => files.containments.push(*c),
             Document::Workspace(_)
             | Document::RepositoryRegistry(_)
             | Document::Profile(_)

@@ -122,6 +122,33 @@ pub const EXCEPTION_TMPL: &str = r#"# Exception template — rename to <name>.ya
 #   expiry: "2027-01-01"               # ISO date; an expired exception is dead
 "#;
 
+pub const CONTAINMENT_README: &str = r#"# global/containment/  [ACTIVE — macOS; Linux degrades to shims]
+
+The HARD RING: the OS-sandbox backstop (section 5.2 runner). A `kind: Containment`
+declares ONLY what the kernel can enforce regardless of PATH — `denyUnlink`
+(globs of files that may not be deleted), `denyWriteOutside`, `denyNetwork`.
+Command interposition (shims) governs the PATH surface; an absolute-path call
+like `/bin/rm` steps around it. Containment is what the child cannot step
+around: the kernel refuses the action.
+
+It composes by UNION across layers (restrictions only add) and enters the
+snapshot hash, so `keel lock --verify` detects any drift. On a platform with
+no sandbox provider (Linux today) or with `keel <cli> --containment shims`,
+the level degrades to shims WITH A BANNER — never silently. See
+`containment.yaml.example`.
+"#;
+
+pub const CONTAINMENT_TMPL: &str = r#"# Containment template — rename to <name>.yaml to activate it.
+#
+# apiVersion: keel/v1alpha1
+# kind: Containment
+# metadata: { id: global.hard.protect-docs }
+# spec:
+#   denyUnlink: ["**/*.md"]     # these files cannot be deleted, even via /bin/rm
+#   denyWriteOutside: true      # writes confined to the workspace subtree
+#   denyNetwork: false          # deny outbound network for the child
+"#;
+
 pub const ORGS_README: &str = r#"# organizations/  [repositories.yaml ACTIVE; components org-scale/deferred]
 
 Per-organization configuration. Each subdirectory is one organization

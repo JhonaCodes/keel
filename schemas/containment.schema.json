@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:keel:schemas:v1alpha1:containment",
+  "title": "Keel Containment (keel/v1alpha1)",
+  "description": "kind: Containment — the OS-sandbox backstop (spec section 5.2 runner). Declares, in terms the kernel can enforce, what the governed child CLI must NOT do regardless of PATH: file deletions matching a glob, writes outside the workspace, network. It compiles into the snapshot (so it is drift-detectable via the lock) and generates the platform sandbox profile. Rules with `tool:` validators keep living in the shim broker; this is the hard ring only.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "keel/v1alpha1" },
+    "kind": { "const": "Containment" },
+    "metadata": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" },
+        "author": { "type": "string" },
+        "adrRef": { "type": "string" },
+        "reviewAfter": { "type": "string" }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "denyUnlink": {
+          "type": "array",
+          "description": "Globs whose matching files may not be deleted by the child (kernel file-write-unlink deny).",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "denyWriteOutside": {
+          "type": "boolean",
+          "description": "Deny any write outside the workspace root (confinement)."
+        },
+        "denyNetwork": {
+          "type": "boolean",
+          "description": "Deny outbound network for the child and its descendants."
+        }
+      }
+    }
+  }
+}
