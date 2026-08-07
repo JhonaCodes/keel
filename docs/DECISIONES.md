@@ -152,5 +152,25 @@ Evidencia: `crates/keel-host/src/mcp.rs`, `crates/keel-host/src/launch.rs`
 (`wire_convergence`), `crates/keel-engine/src/{session,adapter}.rs`,
 `test/tests/mcp_stdio.rs`.
 
+### D-012.c Sin API de proveedor: executors y agentes son CLIs locales
+
+Keel NUNCA habla una API de proveedor. El camino HTTP (drivers Anthropic/OpenAI,
+`keel run`, `keel configure executor`, keychain, `reqwest`) fue ELIMINADO. El
+unico executor no-mock es `CliModelExecutor`: keel corre un COMANDO LOCAL,
+escribe el prompt por stdin y toma stdout como respuesta, confinado al workspace
+(`cwd=root`, `env_clear` + solo `PATH` → un agente no hereda secretos del
+entorno). Un `kind: ModelExecutor` declara `config.command` (p.ej.
+`[codex, exec, --json]`); `keel init` ya no toma `--executor`.
+
+`keel.agent.invoke` (MCP) resuelve el Agent → su executor CLI → lo corre via
+`AgentScheduler` (lease) → valida la salida contra el `outputSchema` declarado
+(invariante 12) ANTES de confiar en ella → devuelve. Esto habilita agentes
+TRANSVERSALES entre modelos: una sesion en claude pide una auditoria que corre
+en codex (u otro CLI), determinista y sin API. La evidencia es de keel.
+
+Evidencia: `crates/keel-runtime/src/executor.rs` (`CliModelExecutor`,
+`executor_command`), `crates/keel-host/src/mcp.rs` (`agent_invoke`),
+`test/tests/mcp_stdio.rs` (`agent_invoke_routes_to_a_local_cli_executor…`).
+
 Evidencia: `crates/keel-host/**` (pty/broker/shims/launch), `crates/keel-shim`,
 `crates/keel-engine/src/{packet,adapter}.rs`, `test/tests/host_launch.rs`.

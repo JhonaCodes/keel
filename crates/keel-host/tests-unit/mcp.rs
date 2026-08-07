@@ -106,15 +106,21 @@ fn list_then_load_delivers_content_and_records_a_receipt() {
     assert!(relisting.contains("loaded:Compact"), "state: {relisting}");
 }
 
+/// With no agent declared, invoke reports it honestly rather than pretending.
+/// The full local-CLI routing + outputSchema validation is exercised
+/// end-to-end over stdio in `test/tests/mcp_stdio.rs`.
 #[test]
-fn agent_invoke_is_an_honest_stub_until_f4() {
+fn agent_invoke_reports_an_undeclared_agent() {
     let (mut server, _dir) = server_with_skill();
     let out = call(
         &mut server,
         "keel.agent.invoke",
         json!({ "agent": "auditor" }),
     );
-    assert!(out.contains("not available yet"), "must not pretend: {out}");
+    assert!(
+        out.contains("not declared"),
+        "an undeclared agent is reported, not faked: {out}"
+    );
 }
 
 #[test]

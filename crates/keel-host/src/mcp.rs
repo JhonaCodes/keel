@@ -22,13 +22,17 @@ use anyhow::{Context, Result};
 use keel_engine::session::{SessionStore, deliver_skills};
 use keel_engine::snapshot::Snapshot;
 use keel_engine::workspace::WorkspaceFiles;
-use keel_runtime::{RuntimeStore, SkillReadReceipt};
+use keel_runtime::{
+    AgentBroker, AgentScheduler, CliModelExecutor, RuntimeStore, SkillReadReceipt, executor_command,
+};
 use serde_json::{Value, json};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 
 const PROTOCOL_VERSION: &str = "2024-11-05";
 const RUNTIME_DB: &str = "runtime.sqlite";
+const SCHEDULER_DB: &str = "scheduler.sqlite";
+const MAX_CONCURRENT_AGENTS: u32 = 4;
 
 /// Runs the stdio MCP server for `session_id` against the workspace at `root`
 /// until stdin closes. Reads line-delimited JSON-RPC from stdin, writes
@@ -180,11 +184,12 @@ impl Server {
                 Ok(text_result(&self.rules_query(command, path)))
             }
             "keel.agent.invoke" => {
-                // Cross-model agent routing lands in F4 (CLI executors +
-                // scheduler). Honest stub: say so, do not pretend.
-                Ok(text_result(
-                    "keel.agent.invoke is not available yet (arrives with governed CLI agent executors).",
-                ))
+                let agent = args
+                    .get("agent")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| rpc_error(-32602, "missing agent id"))?;
+                let input = args.get("input").and_then(Value::as_str).unwrap_or("");
+                Ok(text_result(&self.agent_invoke(agent, input)))
             }
             other => Err(rpc_error(-32602, &format!("unknown tool: {other}"))),
         }
@@ -259,6 +264,53 @@ impl Server {
                 .to_string()
         } else {
             format!("Governed rules that may apply:\n{}", hits.join("\n"))
+        }
+    }
+
+    /// Runs a governed agent and returns its feedback — cross-model by design:
+    /// the agent's executor is a LOCAL CLI (e.g. `codex exec`), so a session on
+    /// one model can get an audit from another, deterministically and without
+    /// any provider API (D-012). The scheduler leases the task; the output is
+    /// validated against the agent's `outputSchema` (invariant 12) before it is
+    /// trusted; evidence is keel's.
+    fn agent_invoke(&self, agent_id: &str, input: &str) -> String {
+        let broker = AgentBroker::from_snapshot(&self.snapshot, &self.root);
+        let Some(executor_id) = broker.executor_for(agent_id).map(ToOwned::to_owned) else {
+            return format!("agent `{agent_id}` is not declared in this workspace.");
+        };
+        let command = match executor_command(&self.snapshot.components, &executor_id) {
+            Ok(c) => c,
+            Err(e) => return format!("cannot run agent `{agent_id}`: {e}"),
+        };
+        let mut scheduler = match AgentScheduler::open(
+            &WorkspaceFiles::empty(self.root.clone())
+                .state_dir()
+                .join(SCHEDULER_DB),
+            MAX_CONCURRENT_AGENTS,
+        ) {
+            Ok(s) => s,
+            Err(e) => return format!("scheduler unavailable: {e}"),
+        };
+        let mut executor = CliModelExecutor::new(command, self.root.clone(), executor_id);
+        match broker.invoke(
+            &self.session_id,
+            agent_id,
+            input,
+            &mut scheduler,
+            &mut executor,
+        ) {
+            Ok(result) => match result.output {
+                Some(value) => format!(
+                    "agent `{agent_id}` (executor `{}`) — validated output:\n{}",
+                    result.executor_id,
+                    serde_json::to_string_pretty(&value).unwrap_or(result.content)
+                ),
+                None => format!(
+                    "agent `{agent_id}` (executor `{}`):\n{}",
+                    result.executor_id, result.content
+                ),
+            },
+            Err(e) => format!("agent `{agent_id}` failed: {e}"),
         }
     }
 }

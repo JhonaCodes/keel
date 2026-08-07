@@ -13,8 +13,8 @@ mod scheduler;
 mod store;
 
 pub use executor::{
-    ExecutorError, MockModelExecutor, ModelExecutor, ModelMessage, ModelRequest, ModelResponse,
-    ToolCall, ToolDefinition,
+    CliModelExecutor, ExecutorError, MockModelExecutor, ModelExecutor, ModelMessage, ModelRequest,
+    ModelResponse, ToolCall, ToolDefinition, executor_command,
 };
 pub use phase::{ArtifactKind, ArtifactReceipt, Phase, PhaseError, PhaseTransitionReceipt};
 pub use registry::{ComponentDescriptor, ComponentRegistry};
