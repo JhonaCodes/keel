@@ -42,6 +42,29 @@ pub struct AdapterManifest {
     /// `None` when keel has no supported wiring for the client (generic): the
     /// operator can still wire it manually.
     pub mcp: Option<McpInjection>,
+    /// How keel wires its `keel gate` hook into this client, giving keel
+    /// visibility of the client's INTERNAL tool calls (Write/Edit) that the
+    /// wrapper cannot otherwise see. A COMPLEMENT: the hard rings never depend
+    /// on it, and the OS sandbox protects its config from the child. `None`
+    /// when keel has no hook wiring for the client.
+    pub hook: Option<HookInjection>,
+}
+
+/// How to install keel's PreToolUse-style hook into a client, per session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HookInjection {
+    /// The `keel gate --client <dialect>` value this client's payloads speak.
+    pub dialect: String,
+    /// How the hook settings file reaches the client, e.g. Claude Code's
+    /// `--settings <file>`.
+    pub method: HookMethod,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HookMethod {
+    /// A flag pointing at a written settings JSON that declares the hook,
+    /// e.g. `--settings <file>`.
+    SettingsFileFlag { flag: String },
 }
 
 /// How to wire keel's `keel mcp` server into a specific client CLI, and how to
@@ -82,7 +105,20 @@ impl AdapterManifest {
     /// delivery and completion requests have no interposition point in a
     /// foreign CLI's lifecycle (v1), so they are NOT blockable: the runtime
     /// degrades them to feedback (section 5.3).
-    fn containment(id: &str, command: Vec<String>, mcp: Option<McpInjection>) -> Self {
+    fn containment(
+        id: &str,
+        command: Vec<String>,
+        mcp: Option<McpInjection>,
+        hook: Option<HookInjection>,
+    ) -> Self {
+        // With a hook wired, keel ALSO sees the client's internal file edits, so
+        // `file.edited` becomes truly blockable (PreToolUse is pre-action).
+        let mut blockable: BTreeSet<EventKind> =
+            [EventKind::CommandRequested].into_iter().collect();
+        if hook.is_some() {
+            blockable.insert(EventKind::FileEdited);
+            blockable.insert(EventKind::CompletionRequested);
+        }
         AdapterManifest {
             id: id.into(),
             command,
@@ -90,8 +126,9 @@ impl AdapterManifest {
                 .iter()
                 .map(ToString::to_string)
                 .collect(),
-            blockable: [EventKind::CommandRequested].into_iter().collect(),
+            blockable,
             mcp,
+            hook,
         }
     }
 
@@ -110,6 +147,12 @@ impl AdapterManifest {
                         flag: "--append-system-prompt".into(),
                     },
                 }),
+                Some(HookInjection {
+                    dialect: "claude-code".into(),
+                    method: HookMethod::SettingsFileFlag {
+                        flag: "--settings".into(),
+                    },
+                }),
             )),
             "codex" => Some(Self::containment(
                 "codex",
@@ -118,10 +161,14 @@ impl AdapterManifest {
                     method: McpMethod::ConfigOverrideFlag { flag: "-c".into() },
                     announce: Announce::PtyLine,
                 }),
+                // Codex hook wiring is not modeled yet: commands are still
+                // governed by the shims; internal-edit visibility is claude-only
+                // for now.
+                None,
             )),
             // generic: no assumptions about the CLI's flags — convergence is
             // opt-in (the operator wires MCP), the hard rings still apply.
-            "generic" => Some(Self::containment("generic", vec![], None)),
+            "generic" => Some(Self::containment("generic", vec![], None, None)),
             _ => None,
         }
     }

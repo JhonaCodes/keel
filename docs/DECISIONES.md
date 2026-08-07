@@ -208,3 +208,32 @@ Evidencia: `crates/keel-host/src/supervisor.rs`, `crates/keel-host/src/launch.rs
 
 Evidencia: `crates/keel-host/**` (pty/broker/shims/launch), `crates/keel-shim`,
 `crates/keel-engine/src/{packet,adapter}.rs`, `test/tests/host_launch.rs`.
+
+### D-012.e Puente de hook: visibilidad de las tools internas del cliente
+
+El wrapper ve comandos (shims) y OS (sandbox), pero NO las tools internas del
+cliente (el `Write`/`Edit` de Claude Code). El puente lo cierra: keel instala,
+por sesion y desde afuera, un hook PreToolUse que reenvia la tool call a
+`keel gate`; keel la evalua con el MISMO motor y responde por exit code (2 =
+bloquear ANTES de que corra, PreToolUse es pre-accion; PostToolUse = feedback,
+exit 0, sin falsa promesa). El hook es TRANSPORTE puro; la logica de regla no
+vive en el.
+
+Por que esto NO reintroduce el error viejo (hook editable = unica defensa):
+- Es un COMPLEMENTO: los anillos duros (shims, sandbox) no dependen de el; si
+  el cliente no soporta hooks, keel sigue gobernando comandos.
+- El **sandbox lo BLINDA**: el perfil deniega SIEMPRE que el hijo escriba
+  `<workspace>/.keel-state` (donde vive el settings efimero del hook, los shims,
+  el snapshot y el ledger). El modelo no puede desactivar el hook porque no
+  puede escribir su config. Con hook y sin `Containment` declarado, keel
+  sintetiza uno vacio solo para aplicar ese blindaje.
+- Con el puente, `skill.loaded` puede gatear `file.edited` → keel FUERZA un
+  skill incluso ante una escritura interna del modelo.
+
+Especifico por cliente via `AdapterManifest.hook` (claude: `--settings` con un
+PreToolUse que llama a `keel gate --client claude-code`). Codex: pendiente.
+
+Evidencia: `crates/keel-cli/src/gate.rs`, `crates/keel-host/src/launch.rs`
+(wire del hook), `crates/keel-engine/src/adapter.rs` (`HookInjection`),
+`crates/keel-host/src/sandbox.rs` (blindaje `.keel-state`),
+`test/tests/gate_hook.rs`.

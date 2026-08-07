@@ -132,7 +132,20 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
 
     // The hard ring: wrap argv in the OS sandbox when the snapshot declares a
     // containment AND a provider can honor it. Any downgrade is announced.
-    let (argv, level) = apply_sandbox(argv, &snapshot_containment, &root, opts.containment);
+    // Even with NO declared Containment, a wired hook needs the sandbox so it
+    // can protect keel's control surface (.keel-state) — synthesize an empty
+    // containment in that case (the profile always adds the .keel-state deny).
+    let effective_containment = snapshot_containment.clone().or_else(|| {
+        manifest
+            .hook
+            .is_some()
+            .then(|| keel_engine::snapshot::CompiledContainment {
+                deny_unlink: Vec::new(),
+                deny_write_outside: false,
+                deny_network: false,
+            })
+    });
+    let (argv, level) = apply_sandbox(argv, &effective_containment, &root, opts.containment);
 
     eprintln!(
         "[keel] session {session_id} — containment: {} ({}) — workspace {}",
@@ -189,68 +202,101 @@ fn wire_convergence(
     session_id: &str,
     skill_ids: &[String],
 ) -> Result<Vec<String>> {
-    use keel_engine::adapter::{Announce, McpMethod};
+    use keel_engine::adapter::{Announce, HookMethod, McpMethod};
 
-    let Some(mcp) = &manifest.mcp else {
+    if manifest.mcp.is_none() && manifest.hook.is_none() {
         return Ok(argv);
-    };
-    let keel_bin = std::env::current_exe()
-        .context("convergence: cannot resolve the keel binary for the MCP endpoint")?;
+    }
+    let keel_bin =
+        std::env::current_exe().context("convergence: cannot resolve the keel binary")?;
     let keel_bin = keel_bin.display().to_string();
     let root_str = root.display().to_string();
 
-    match &mcp.method {
-        McpMethod::ConfigFileFlag { flag } => {
-            // Claude-style: a JSON file of MCP servers.
-            let config = serde_json::json!({
-                "mcpServers": {
-                    "keel": {
-                        "command": keel_bin,
-                        "args": ["mcp", "--workspace", root_str, "--session", session_id],
+    if let Some(mcp) = &manifest.mcp {
+        match &mcp.method {
+            McpMethod::ConfigFileFlag { flag } => {
+                // Claude-style: a JSON file of MCP servers.
+                let config = serde_json::json!({
+                    "mcpServers": {
+                        "keel": {
+                            "command": keel_bin,
+                            "args": ["mcp", "--workspace", root_str, "--session", session_id],
+                        }
                     }
-                }
-            });
-            let path = host_dir.join("mcp.json");
-            std::fs::write(&path, serde_json::to_string_pretty(&config)?)?;
-            argv.push(flag.clone());
-            argv.push(path.display().to_string());
+                });
+                let path = host_dir.join("mcp.json");
+                std::fs::write(&path, serde_json::to_string_pretty(&config)?)?;
+                argv.push(flag.clone());
+                argv.push(path.display().to_string());
+            }
+            McpMethod::ConfigOverrideFlag { flag } => {
+                // Codex-style: dotted TOML overrides.
+                let args_toml = format!(
+                    "[\"mcp\",\"--workspace\",\"{root_str}\",\"--session\",\"{session_id}\"]"
+                );
+                argv.push(flag.clone());
+                argv.push(format!("mcp_servers.keel.command=\"{keel_bin}\""));
+                argv.push(flag.clone());
+                argv.push(format!("mcp_servers.keel.args={args_toml}"));
+            }
         }
-        McpMethod::ConfigOverrideFlag { flag } => {
-            // Codex-style: dotted TOML overrides.
-            let args_toml =
-                format!("[\"mcp\",\"--workspace\",\"{root_str}\",\"--session\",\"{session_id}\"]");
-            argv.push(flag.clone());
-            argv.push(format!("mcp_servers.keel.command=\"{keel_bin}\""));
-            argv.push(flag.clone());
-            argv.push(format!("mcp_servers.keel.args={args_toml}"));
-        }
-    }
 
-    let catalog = if skill_ids.is_empty() {
-        String::new()
-    } else {
-        format!(
-            " Governed skills you can load right now: {}.",
-            skill_ids.join(", ")
-        )
-    };
-    let notice = format!(
-        "You are running under keel, a local governance runtime. Your skills and agents \
+        let catalog = if skill_ids.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " Governed skills you can load right now: {}.",
+                skill_ids.join(", ")
+            )
+        };
+        let notice = format!(
+            "You are running under keel, a local governance runtime. Your skills and agents \
          are provided BY keel through MCP tools (keel.skills.list, keel.skills.load, \
          keel.rules.query, keel.agent.invoke).{catalog} BEFORE starting a task that one \
          of them covers, load it with keel.skills.load and FOLLOW it — do not use your \
          own defaults when keel offers a skill. Some actions are contained by keel and \
          will be refused; read the block message and adjust."
-    );
-    match &mcp.announce {
-        Announce::SystemPromptFlag { flag } => {
-            argv.push(flag.clone());
-            argv.push(notice.to_string());
+        );
+        match &mcp.announce {
+            Announce::SystemPromptFlag { flag } => {
+                argv.push(flag.clone());
+                argv.push(notice.to_string());
+            }
+            Announce::PtyLine => {
+                // No client flag: the notice is printed to the session so both the
+                // operator and the model see it at start.
+                eprintln!("[keel] {notice}");
+            }
         }
-        Announce::PtyLine => {
-            // No client flag: the notice is printed to the session so both the
-            // operator and the model see it at start.
-            eprintln!("[keel] {notice}");
+    } // end MCP wiring
+
+    // Hook bridge: install keel's `keel gate` as a PreToolUse hook, so keel sees
+    // the client's INTERNAL tool calls (Write/Edit) too. Ephemeral per-session
+    // settings file; the OS sandbox denies the child writing keel's state
+    // (incl. this file), so the model cannot remove the hook.
+    if let Some(hook) = &manifest.hook {
+        match &hook.method {
+            HookMethod::SettingsFileFlag { flag } => {
+                let command = format!(
+                    "{keel_bin} gate --client {} --workspace {root_str} --session {session_id}",
+                    hook.dialect
+                );
+                let settings = serde_json::json!({
+                    "hooks": {
+                        "PreToolUse": [{
+                            "matcher": "Bash|Edit|Write|MultiEdit",
+                            "hooks": [{ "type": "command", "command": command }]
+                        }],
+                        "Stop": [{
+                            "hooks": [{ "type": "command", "command": command }]
+                        }]
+                    }
+                });
+                let path = host_dir.join("settings.json");
+                std::fs::write(&path, serde_json::to_string_pretty(&settings)?)?;
+                argv.push(flag.clone());
+                argv.push(path.display().to_string());
+            }
         }
     }
 

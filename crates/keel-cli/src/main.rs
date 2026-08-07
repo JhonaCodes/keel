@@ -14,6 +14,7 @@
 //! blocks, everything is recorded in the ledger.
 
 mod commands;
+mod gate;
 mod governed;
 mod init;
 
@@ -100,6 +101,20 @@ enum Command {
         workspace: PathBuf,
         #[arg(long, default_value = "anonymous")]
         session: String,
+    },
+    /// Client-hook bridge (spec section 12.1): one hook payload via stdin,
+    /// evaluated in Enforce mode. Exit 2 = the client must block the tool call
+    /// (packet on stderr). keel wires this hook into the child at launch; it is
+    /// not run by hand.
+    #[command(hide = true)]
+    Gate {
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        /// Payload dialect on stdin: `claude-code` (hook) or `native` (Event).
+        #[arg(long, default_value = "native")]
+        client: String,
+        #[arg(long)]
+        session: Option<String>,
     },
     /// Register the default workspace for `keel <cli>`, so it resolves from
     /// anywhere without `--workspace` (`keel init` already does this for the
@@ -283,6 +298,17 @@ fn main() -> ExitCode {
         Command::Mcp { workspace, session } => match keel_host::mcp::serve(&workspace, &session) {
             Ok(()) => Ok(ExitCode::SUCCESS),
             Err(e) => Err(e),
+        },
+        Command::Gate {
+            workspace,
+            client,
+            session,
+        } => match client.as_str() {
+            "claude-code" => gate::gate(&workspace, gate::Client::ClaudeCode, session),
+            "native" => gate::gate(&workspace, gate::Client::Native, session),
+            other => Err(anyhow::anyhow!(
+                "unknown --client `{other}` (expected claude-code|native)"
+            )),
         },
         Command::Observe {
             workspace,

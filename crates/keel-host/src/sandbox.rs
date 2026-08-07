@@ -110,6 +110,16 @@ pub mod seatbelt {
     pub fn profile(containment: &CompiledContainment, workspace: &Path) -> String {
         let mut p = String::from("(version 1)\n(allow default)\n");
 
+        // ALWAYS protect keel's own control surface: the child must never write
+        // `<workspace>/.keel-state` (the shims, the ephemeral hook settings, the
+        // snapshot, the ledger). This is what makes the hook un-removable by the
+        // model — the sandbox guards the config the hook lives in.
+        let state = workspace.join(".keel-state").display().to_string();
+        p.push_str(&format!(
+            "(deny file-write* (subpath \"{}\"))\n",
+            sbpl_escape(&state)
+        ));
+
         // Deny deletion of matching files anywhere (file-write-unlink is the
         // op behind rm/unlink). We match on the basename glob translated to a
         // regex, so `**/*.md` and `*.md` both mean "any .md file".
