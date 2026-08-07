@@ -326,3 +326,58 @@ fn shims_only_mode_leaves_the_absolute_path_bypass_open_and_says_so() {
         "shims-only lets the absolute-path bypass through (by explicit request)"
     );
 }
+
+/// The supervisor (P3) surfaces a suggestion to the OPERATOR when the model
+/// oscillates — the same rule blocking three times in a session. It never
+/// writes into the model's stream. `--no-suggest` silences it.
+#[test]
+fn the_supervisor_surfaces_an_oscillation_and_no_suggest_silences_it() {
+    let workspace = Workspace::new();
+    let root = workspace.path().to_str().unwrap().to_string();
+    assert!(workspace.run(&["init", &root, "--json"]).status.success());
+    author_no_delete_md(workspace.path());
+    assert!(
+        workspace
+            .run(&["compile", "--workspace", &root])
+            .status
+            .success()
+    );
+
+    // Three governed `.md` deletions in one session = an oscillation. The
+    // trailing sleep gives the ~750ms supervisor poll a chance to fire before
+    // teardown (deterministic: 1.5s > one poll interval).
+    let script = "rm a.md; rm b.md; rm c.md; sleep 1.5";
+    let with = workspace.run(&[
+        "launch",
+        "--client",
+        "generic",
+        "--workspace",
+        &root,
+        "--",
+        "/bin/sh",
+        "-c",
+        script,
+    ]);
+    let transcript = String::from_utf8_lossy(&with.stderr);
+    assert!(
+        transcript.contains("[keel] suggestion") && transcript.contains("global.no-delete-md"),
+        "the supervisor must surface the oscillation: {transcript}"
+    );
+
+    let silenced = workspace.run(&[
+        "launch",
+        "--client",
+        "generic",
+        "--workspace",
+        &root,
+        "--no-suggest",
+        "--",
+        "/bin/sh",
+        "-c",
+        script,
+    ]);
+    assert!(
+        !String::from_utf8_lossy(&silenced.stderr).contains("[keel] suggestion"),
+        "--no-suggest must silence the supervisor"
+    );
+}

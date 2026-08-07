@@ -172,5 +172,24 @@ Evidencia: `crates/keel-runtime/src/executor.rs` (`CliModelExecutor`,
 `executor_command`), `crates/keel-host/src/mcp.rs` (`agent_invoke`),
 `test/tests/mcp_stdio.rs` (`agent_invoke_routes_to_a_local_cli_executor…`).
 
+### D-012.d Direccion cognitiva sin interferir: sugerir al OPERADOR
+
+Keel es el padre que AYUDA sin interferir en el razonamiento del modelo. El
+supervisor (P3) observa el ledger en vivo y, ante una senal DETERMINISTA de que
+el modelo esta atascado, SUPERFICIE una sugerencia al OPERADOR en el transcript
+compartido. **NO escribe en el stream de entrada del modelo**: dirigir sus
+tokens directamente seria interferir su razonamiento — justo lo que el dueno
+pidio no hacer. El humano ve la senal y decide; los anillos de enforcement
+(shims, sandbox) no dependen de este plano.
+
+La senal en v1 es OSCILACION (seccion 6.5): la misma regla bloqueando en la
+misma ubicacion 3 veces en una sesion. Cada oscilacion se superficie UNA vez
+(sin fastidiar), rate-limited. Flag `--no-suggest` la silencia; el enforcement
+sigue igual.
+
+Evidencia: `crates/keel-host/src/supervisor.rs`, `crates/keel-host/src/launch.rs`
+(spawn/teardown del hilo), `test/tests/host_launch.rs`
+(`the_supervisor_surfaces_an_oscillation_and_no_suggest_silences_it`).
+
 Evidencia: `crates/keel-host/**` (pty/broker/shims/launch), `crates/keel-shim`,
 `crates/keel-engine/src/{packet,adapter}.rs`, `test/tests/host_launch.rs`.
