@@ -79,9 +79,13 @@ snapshot, lock ni ledger.
 
 ## D-011 Plataformas iniciales
 
-El instalador publicado cubre macOS y Linux. Windows no se documenta como
-soportado hasta contar con almacenamiento seguro, rutas, packaging y pruebas E2E
-equivalentes.
+El instalador publicado cubre macOS y Linux (Unix). El anillo duro (sandbox del
+SO) está implementado en macOS (Seatbelt) y pendiente en Linux (Landlock, F2b);
+sin provider disponible, el nivel baja a shims CON BANNER. **Windows nativo NO
+está soportado** — el wrapper es Unix (sockets Unix, `exec`, termios, shims
+`sh`); el camino para Windows es **WSL2** (allí es Linux). El detalle por
+plataforma, incluida la diferencia real Landlock-no-tiene-globs vs Seatbelt, y
+el plan de F2b, viven en [`CONTENCION_MULTIPLATAFORMA.md`](CONTENCION_MULTIPLATAFORMA.md).
 
 ## D-012 Runtime padre sobre el entorno de ejecucion del CLI
 
