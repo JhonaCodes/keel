@@ -77,9 +77,14 @@ spec:
 ```
 
 El Containment entra al hash del snapshot (drift detectable por `keel lock
---verify`) y genera el perfil del sandbox del SO (macOS Seatbelt; Linux Landlock
-es trabajo posterior). Si no hay provider disponible o usas `--containment
-shims`, el nivel baja a shims CON BANNER — nunca en silencio.
+--verify`) y genera el perfil del sandbox del SO. Si no hay provider disponible
+o usas `--containment shims`, el nivel baja a shims CON BANNER — nunca en
+silencio.
+
+La cobertura del anillo duro difiere por SO (macOS Seatbelt hace el glob de
+`denyUnlink` exacto; Linux Landlock hará `denyWriteOutside`/`denyNetwork` pero
+NO el glob por extensión; Windows = WSL2). Ver
+[`CONTENCION_MULTIPLATAFORMA.md`](CONTENCION_MULTIPLATAFORMA.md).
 
 ## Convergencia: skills y agentes a traves de keel
 
