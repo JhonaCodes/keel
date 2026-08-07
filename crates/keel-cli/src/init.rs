@@ -49,12 +49,13 @@ bounded, audited way to relax a `locked` rule is an `Exception` (see
 
 ```
 keel doctor --workspace . --governed
-keel run --workspace . --task "Describe the project"
+keel claude              # run a governed client CLI (or: keel launch --client generic -- <cmd>)
 ```
 
 The LLM (or you) authors the actual content — each folder's README + template is
-the context for what belongs there. Keel ships NO default rules on purpose: it
-does not know your project's constraints.
+the context for what belongs there. See `docs/AUTORIA.md` for how to author each
+kind. Keel ships NO default rules on purpose: it does not know your project's
+constraints.
 "#;
 
 pub const GLOBAL_README: &str = r#"# global/ — rules for EVERY project  [ACTIVE]

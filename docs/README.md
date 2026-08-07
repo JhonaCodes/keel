@@ -13,6 +13,7 @@ Este directorio separa la documentación estable del proyecto de las órdenes de
 
 - [`DECISIONES.md`](DECISIONES.md): decisiones arquitectónicas — **empezá acá** (D-012 = runtime padre).
 - [`USO_INSTALACION.md`](USO_INSTALACION.md): instalación y flujo real (`keel <cli>`, containment, MCP, agentes).
+- [`AUTORIA.md`](AUTORIA.md): cómo crear cada tipo (Rule, Tool, Containment, Skill, Agent, ModelExecutor, RuleTest, Exception) — ejemplos copiables para humano o IA.
 - [`DOCTRINA.md`](DOCTRINA.md): herramientas en frío antes que IA.
 - [`CONTENCION_MULTIPLATAFORMA.md`](CONTENCION_MULTIPLATAFORMA.md): matriz macOS/Linux/Windows del anillo duro (Seatbelt/Landlock/WSL2) y plan de F2b.
 - [`PROYECTO.md`](PROYECTO.md): descripción del proyecto (banner D-012).

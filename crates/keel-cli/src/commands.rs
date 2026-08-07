@@ -181,13 +181,10 @@ pub fn init(path: &Path) -> Result<ExitCode> {
         "active: rules, skills, knowledge, blueprints, workflows, contracts, agents, hooks, providers, policies and executors"
     );
     println!(
-        "ready: keel doctor --workspace {} --governed",
+        "verify: keel doctor --workspace {} --governed",
         path.display()
     );
-    println!(
-        "run:   keel run --workspace {} --task <task>",
-        path.display()
-    );
+    println!("launch: keel claude   (or: keel launch --client generic -- <cmd>)");
     Ok(ExitCode::SUCCESS)
 }
 
