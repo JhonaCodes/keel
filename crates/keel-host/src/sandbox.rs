@@ -110,15 +110,33 @@ pub mod seatbelt {
     pub fn profile(containment: &CompiledContainment, workspace: &Path) -> String {
         let mut p = String::from("(version 1)\n(allow default)\n");
 
-        // ALWAYS protect keel's own control surface: the child must never write
-        // `<workspace>/.keel-state` (the shims, the ephemeral hook settings, the
-        // snapshot, the ledger). This is what makes the hook un-removable by the
-        // model — the sandbox guards the config the hook lives in.
-        let state = workspace.join(".keel-state").display().to_string();
-        p.push_str(&format!(
-            "(deny file-write* (subpath \"{}\"))\n",
-            sbpl_escape(&state)
-        ));
+        // Protect keel's enforcement-critical CONFIG from the child (so it
+        // cannot remove the hook, swap the shims, or tamper the rules): the
+        // session host dir (ephemeral hook settings + shim scripts), the
+        // published snapshot, and the binding/lock. NOT the whole `.keel-state`
+        // — the ledger and the runtime/scheduler SQLite DBs must stay writable,
+        // because keel's OWN children (`keel gate`, `keel mcp`) run inside this
+        // same sandbox and need to append evidence and skill receipts. Deny
+        // wins over allow in SBPL, so these hold even inside the workspace.
+        // Directories → subpath; single files → literal (SBPL distinguishes).
+        for dir in [
+            workspace.join(".keel-state").join("host"),
+            workspace.join(".keel"),
+        ] {
+            p.push_str(&format!(
+                "(deny file-write* (subpath \"{}\"))\n",
+                sbpl_escape(&dir.display().to_string())
+            ));
+        }
+        for file in [
+            workspace.join(".keel-state").join("snapshot.json"),
+            workspace.join(".keel-state").join("snapshot.prev.json"),
+        ] {
+            p.push_str(&format!(
+                "(deny file-write* (literal \"{}\"))\n",
+                sbpl_escape(&file.display().to_string())
+            ));
+        }
 
         // Deny deletion of matching files anywhere (file-write-unlink is the
         // op behind rm/unlink). We match on the basename glob translated to a

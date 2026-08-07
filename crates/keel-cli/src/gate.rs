@@ -74,14 +74,21 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
         .and_then(|store| store.consumed_skill_ids(&session_id).ok())
         .unwrap_or_default();
 
-    let ledger = Ledger::open(&files.ledger_path())?;
+    // Evidence is best-effort: a ledger that cannot be written (e.g. a
+    // read-only sandbox) must NEVER turn a block into a pass. The decision
+    // comes from the engine, not from a successful ledger write.
+    let ledger = Ledger::open(&files.ledger_path()).ok();
     let evals = evaluate_event(&snapshot, &event, &files.root, Mode::Enforce);
 
     let mut worst = Decision::Allow;
     let mut packets: Vec<String> = Vec::new();
     for eval in &evals {
         let entry = eval.to_ledger_entry(&event, &snapshot.hash.to_string(), new_ev_id(), now_ts());
-        ledger.append(&entry)?;
+        if let Some(ledger) = &ledger
+            && let Err(e) = ledger.append(&entry)
+        {
+            eprintln!("[keel] gate: evidence not recorded: {e}");
+        }
         if eval.effective_decision >= Decision::Review {
             packets.push(packet::render(
                 eval,
