@@ -57,6 +57,48 @@ pub struct Evaluation {
     pub load_skills: Vec<String>,
 }
 
+impl Evaluation {
+    /// Materializes this evaluation as evidence. Lives here (not in `ledger`)
+    /// because the ledger is a sink (⇏ runtime); the runtime side owns the
+    /// conversion, the caller adds id/ts so the testkit can evaluate without
+    /// a ledger.
+    pub fn to_ledger_entry(
+        &self,
+        event: &Event,
+        snapshot_hash: &str,
+        id: String,
+        ts: String,
+    ) -> crate::ledger::LedgerEntry {
+        let mut detail_parts: Vec<String> =
+            self.findings.iter().map(|f| f.message.clone()).collect();
+        if let Some(d) = &self.detail {
+            detail_parts.push(d.clone());
+        }
+        crate::ledger::LedgerEntry {
+            id,
+            ts,
+            session_id: event.session_id.clone(),
+            snapshot_hash: snapshot_hash.to_string(),
+            rule_id: self.rule_id.clone(),
+            rule_version: self.rule_version.clone(),
+            event_kind: event.kind,
+            verdict: self.verdict,
+            origin: self.origin,
+            declared_decision: self.declared_decision,
+            effective_decision: self.effective_decision,
+            latency_ms: self.latency_ms,
+            tokens: self.tokens,
+            file: event.file.clone(),
+            line: event.line,
+            detail: if detail_parts.is_empty() {
+                None
+            } else {
+                Some(detail_parts.join(" | "))
+            },
+        }
+    }
+}
+
 /// Evaluates an event against all candidate rules in the snapshot.
 ///
 /// Per-rule ladder (section 4.6, in cost order):

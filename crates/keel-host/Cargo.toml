@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# keel-host — the parent runtime: launches a client CLI under a PTY inside an
+# environment keel fabricates (PATH interposition today, OS sandbox next), and
+# evaluates every governed command BEFORE it exists as a process.
+[package]
+name = "keel-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+keel-core = { path = "../keel-core" }
+keel-engine = { path = "../keel-engine" }
+keel-runtime = { path = "../keel-runtime" }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ulid = { workspace = true }
+portable-pty = { workspace = true }
+libc = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

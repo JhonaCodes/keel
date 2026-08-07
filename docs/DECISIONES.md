@@ -71,3 +71,38 @@ snapshot, lock ni ledger.
 El instalador publicado cubre macOS y Linux. Windows no se documenta como
 soportado hasta contar con almacenamiento seguro, rutas, packaging y pruebas E2E
 equivalentes.
+
+## D-012 Runtime padre sobre el entorno de ejecucion del CLI
+
+Keel es un runtime PADRE local: `keel <cli>` (por ejemplo `keel claude`,
+`keel codex`) lanza el CLI del modelo como proceso HIJO dentro de un entorno
+que Keel fabrica, y evalua cada comando gobernado ANTES de que exista como
+proceso (anillo interior, seccion 5.3). El punto de gobierno NO son los hooks
+del cliente: esos viven en la configuracion del propio cliente y el modelo
+puede editarlos — desconfigurables = no hay enforcement. El punto de gobierno
+es la contencion que Keel construye alrededor del hijo:
+
+```text
+keel <cli> -> PTY passthrough (el hijo corre interactivo, sin modificar)
+           -> PATH shims -> keel-shim -> broker (socket) -> evaluate_event(Enforce)
+           -> allow: exec del binario real / block: exit 2 + ContextPacket
+```
+
+Consecuencias:
+
+- El camino por API HTTP de los proveedores (drivers Anthropic/OpenAI,
+  `keel run --task`, API keys) se ELIMINA: no se usan APIs de los LLM; Keel
+  gobierna su entorno de ejecucion directa. (Esta decision corrige la
+  direccion de D-001/D-005/D-008, escritas cuando el producto se penso como
+  sesion por API; su reescritura completa acompana la restauracion de la spec.)
+- Keel es el punto unico de convergencia: los modelos consultan sus skills y
+  agentes A TRAVES de Keel (plano de convergencia, MCP local — fase siguiente),
+  nunca desde su propia configuracion.
+- La contencion por interposicion de PATH gobierna la superficie de PATH; una
+  invocacion por ruta absoluta la evade por construccion. Esa es tarea del
+  plano de sandbox del SO (fase siguiente), y el preflight (invariante 8) es
+  honesto al respecto: no promete un `block` que la contencion activa no puede
+  honrar.
+
+Evidencia: `crates/keel-host/**` (pty/broker/shims/launch), `crates/keel-shim`,
+`crates/keel-engine/src/{packet,adapter}.rs`, `test/tests/host_launch.rs`.

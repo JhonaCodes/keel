@@ -24,6 +24,16 @@ use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+/// RFC3339 timestamp for a new evidence entry.
+pub fn now_ts() -> String {
+    jiff::Timestamp::now().to_string()
+}
+
+/// `ev_<ulid>` — time-sortable, citable in the transcript (section 10.4).
+pub fn new_ev_id() -> String {
+    format!("ev_{}", ulid::Ulid::new().to_string().to_lowercase())
+}
+
 /// One evidence entry (spec section 6.4: rule and version, verdict, origin class,
 /// cost, and resulting decision).
 #[derive(Debug, Clone, Serialize, Deserialize)]

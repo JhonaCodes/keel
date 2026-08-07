@@ -16,13 +16,9 @@ use std::io::BufRead;
 use std::path::Path;
 use std::process::ExitCode;
 
-pub(crate) fn now_ts() -> String {
-    jiff::Timestamp::now().to_string()
-}
-
-pub(crate) fn new_ev_id() -> String {
-    format!("ev_{}", ulid::Ulid::new().to_string().to_lowercase())
-}
+// Evidence identity helpers live in keel-engine (the host broker needs them
+// too); the CLI re-exports them for its own modules.
+pub(crate) use keel_engine::ledger::{new_ev_id, now_ts};
 
 // ─────────────────────────── init ───────────────────────────
 
@@ -400,32 +396,9 @@ pub(crate) fn to_ledger_entry(
     id: String,
     ts: String,
 ) -> LedgerEntry {
-    let mut detail_parts: Vec<String> = eval.findings.iter().map(|f| f.message.clone()).collect();
-    if let Some(d) = &eval.detail {
-        detail_parts.push(d.clone());
-    }
-    LedgerEntry {
-        id,
-        ts,
-        session_id: event.session_id.clone(),
-        snapshot_hash: snapshot.hash.to_string(),
-        rule_id: eval.rule_id.clone(),
-        rule_version: eval.rule_version.clone(),
-        event_kind: event.kind,
-        verdict: eval.verdict,
-        origin: eval.origin,
-        declared_decision: eval.declared_decision,
-        effective_decision: eval.effective_decision,
-        latency_ms: eval.latency_ms,
-        tokens: eval.tokens,
-        file: event.file.clone(),
-        line: event.line,
-        detail: if detail_parts.is_empty() {
-            None
-        } else {
-            Some(detail_parts.join(" | "))
-        },
-    }
+    // The conversion itself lives on `Evaluation` (keel-engine) so the host
+    // broker shares it; this wrapper keeps the CLI call sites unchanged.
+    eval.to_ledger_entry(event, &snapshot.hash.to_string(), id, ts)
 }
 
 /// Serde form without quotes for presentation ("invalid", not "\"invalid\"").

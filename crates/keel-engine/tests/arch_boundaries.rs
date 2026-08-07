@@ -40,6 +40,8 @@ fn runtime_side_modules_never_import_the_dsl() {
         "tools.rs",
         "ledger.rs",
         "sarif.rs",
+        "packet.rs",
+        "adapter.rs",
     ] {
         let source = src(module);
         assert!(

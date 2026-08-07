@@ -13,6 +13,7 @@ keel-core = { path = "../keel-core" }
 keel-dsl = { path = "../keel-dsl" }
 keel-engine = { path = "../keel-engine" }
 keel-runtime = { path = "../keel-runtime" }
+keel-host = { path = "../keel-host" }
 anyhow = { workspace = true }
 clap = { workspace = true }
 serde_json = { workspace = true }

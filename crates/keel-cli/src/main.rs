@@ -63,6 +63,31 @@ enum Command {
         #[arg(long, default_value = ".")]
         workspace: PathBuf,
     },
+    /// Launches a client CLI as a governed CHILD of keel (parent runtime,
+    /// spec section 5.3): PTY passthrough + command interposition — a blocked
+    /// command never exists as a process. `keel claude`/`keel codex` are
+    /// shorthands for known clients.
+    Launch {
+        /// Launch adapter: `claude`, `codex`, or `generic` (explicit command
+        /// after `--`).
+        #[arg(long)]
+        client: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Initial task, passed to the client as a positional argument.
+        #[arg(long)]
+        task: Option<String>,
+        /// Resume a keel session identity.
+        #[arg(long)]
+        session: Option<String>,
+        /// Command (for `generic`) or extra args appended to the client CLI.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        cmd: Vec<String>,
+    },
+    /// `keel claude [args...]` / `keel codex [args...]` — shorthand for
+    /// `keel launch --client <name> -- [args...]`.
+    #[command(external_subcommand)]
+    Client(Vec<String>),
     /// Evaluates events (JSONL via stdin or --events) in PASSIVE MODE and
     /// records them in the ledger. Nothing blocks (Phase 0b).
     Observe {
@@ -253,6 +278,39 @@ fn main() -> ExitCode {
             json,
         } => governed::init(&path, &executor, json),
         Command::Compile { workspace } => commands::compile(&workspace),
+        Command::Launch {
+            client,
+            workspace,
+            task,
+            session,
+            cmd,
+        } => keel_host::launch(keel_host::LaunchOptions {
+            client,
+            workspace,
+            cmd,
+            task,
+            session,
+        }),
+        Command::Client(argv) => {
+            // `keel <known-cli> [args...]`. Unknown first tokens are a hard
+            // error with the generic escape hatch — never a silent guess.
+            let client = argv.first().cloned().unwrap_or_default();
+            if keel_engine::adapter::AdapterManifest::for_client(&client).is_none()
+                || client == "generic"
+            {
+                Err(anyhow::anyhow!(
+                    "unknown client `{client}` — use `keel launch --client generic -- <cmd>`"
+                ))
+            } else {
+                keel_host::launch(keel_host::LaunchOptions {
+                    client,
+                    workspace: None,
+                    cmd: argv.into_iter().skip(1).collect(),
+                    task: None,
+                    session: None,
+                })
+            }
+        }
         Command::Observe {
             workspace,
             events,
