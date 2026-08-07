@@ -101,6 +101,14 @@ enum Command {
         #[arg(long, default_value = "anonymous")]
         session: String,
     },
+    /// Register the default workspace for `keel <cli>`, so it resolves from
+    /// anywhere without `--workspace` (`keel init` already does this for the
+    /// workspace it creates).
+    Use {
+        workspace: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
     /// `keel claude [args...]` / `keel codex [args...]` — shorthand for
     /// `keel launch --client <name> -- [args...]`.
     #[command(external_subcommand)]
@@ -229,6 +237,7 @@ fn main() -> ExitCode {
     let result = match cli.command {
         Command::Init { path, json } => governed::init(&path, json),
         Command::Compile { workspace } => commands::compile(&workspace),
+        Command::Use { workspace, json } => governed::use_workspace(&workspace, json),
         Command::Launch {
             client,
             workspace,

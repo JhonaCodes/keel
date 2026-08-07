@@ -30,11 +30,36 @@ pub fn init(root: &Path, json_output: bool) -> Result<ExitCode> {
     commands::lock(root, false)?;
     RuntimeStore::open(&state_dir(root).join(RUNTIME_DB))?;
 
+    // Register it as the operator's default so `keel <cli>` finds it from
+    // anywhere without --workspace. Best-effort: a config write failure must
+    // not fail the init (the workspace is already good).
+    if let Err(e) = keel_host::config::set_default_workspace(root) {
+        eprintln!("[keel] note: could not register default workspace: {e}");
+    }
+
     emit(
         json!({
             "status": "ready",
             "workspace": root,
         }),
+        json_output,
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `keel use <workspace>` — register the default workspace for `keel <cli>`.
+pub fn use_workspace(root: &Path, json_output: bool) -> Result<ExitCode> {
+    // Only accept an actual workspace, so a typo does not silently become the
+    // default.
+    if !root.join("workspace.yaml").exists() {
+        bail!(
+            "`{}` is not a keel workspace (no workspace.yaml)",
+            root.display()
+        );
+    }
+    keel_host::config::set_default_workspace(root)?;
+    emit(
+        json!({ "status": "ok", "default_workspace": root }),
         json_output,
     );
     Ok(ExitCode::SUCCESS)

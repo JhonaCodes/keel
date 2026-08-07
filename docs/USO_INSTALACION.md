@@ -24,16 +24,25 @@ rota, fail-closed). Puede cambiarse el prefijo:
 ## Crear un workspace operativo
 
 ```bash
-keel init ~/keel-workspace --json
-keel doctor --workspace ~/keel-workspace --governed --json
+keel init ~/keel-workspace
+keel doctor --workspace ~/keel-workspace --governed
 ```
 
 `init` scaffoldea las capas de composicion (`global/`, `projects/<name>/`, ...),
-compila el snapshot, fija el lock y abre el store. `doctor --governed` verifica
-que el snapshot cargue, que el lock coincida con el snapshot publicado y que el
-store abra. No hay pasos de edicion manual entre `init` y lanzar el CLI. El
-workspace contiene los recursos de Keel y `.keel-state/` contiene snapshot, lock
-y SQLite.
+compila el snapshot, fija el lock, abre el store y **registra el workspace como
+tu default** (`~/.keel/config.json`), asi `keel claude` funciona desde cualquier
+lado sin `--workspace`. `doctor --governed` verifica que el snapshot cargue, que
+el lock coincida con el snapshot publicado y que el store abra. (`--json` en
+cualquier comando da salida de una linea para scripts.)
+
+Para cambiar el default cuando tenes varios workspaces:
+
+```bash
+keel use ~/otro-workspace
+```
+
+Orden de resolucion del workspace: `--workspace` > `KEEL_WORKSPACE` > subir desde
+el cwd hasta un `workspace.yaml` > **el default registrado** > error.
 
 ## Ejecutar un CLI gobernado
 

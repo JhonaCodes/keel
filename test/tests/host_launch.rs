@@ -327,6 +327,71 @@ fn shims_only_mode_leaves_the_absolute_path_bypass_open_and_says_so() {
     );
 }
 
+/// After `init`, keel remembers the workspace as the operator's default
+/// (~/.keel/config.json), so `keel launch` resolves it from ANY cwd without
+/// `--workspace`. This is what makes `keel claude` "just work" post-init.
+#[test]
+fn launch_resolves_the_registered_default_workspace_from_any_cwd() {
+    let workspace = Workspace::new();
+    let root = workspace.path().to_str().unwrap().to_string();
+    // Isolated HOME so init writes to a temp ~/.keel, not the dev's, and no
+    // KEEL_WORKSPACE leaks in.
+    let home = std::env::temp_dir().join(format!("keel-home-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&home);
+    fs::create_dir_all(&home).unwrap();
+    let outside = std::env::temp_dir(); // definitely not inside the workspace
+
+    let run_from_outside = |args: &[&str]| -> Output {
+        let mut c = Command::new(keel_bin());
+        c.env_clear();
+        if let Ok(p) = std::env::var("PATH") {
+            c.env("PATH", p);
+        }
+        c.env("HOME", &home);
+        c.current_dir(&outside);
+        c.args(args).output().expect("spawn keel")
+    };
+
+    // init (with HOME set) registers the default workspace.
+    assert!(
+        run_from_outside(&["init", &root, "--json"])
+            .status
+            .success(),
+        "init failed"
+    );
+    author_no_delete_md(workspace.path());
+    assert!(
+        run_from_outside(&["compile", "--workspace", &root])
+            .status
+            .success()
+    );
+
+    fs::write(workspace.path().join("notes.md"), "keep me\n").unwrap();
+    // No --workspace, cwd is OUTSIDE the workspace: resolution must fall back to
+    // the registered default and still govern the command.
+    let blocked = run_from_outside(&[
+        "launch",
+        "--client",
+        "generic",
+        "--",
+        "/bin/sh",
+        "-c",
+        "rm notes.md",
+    ]);
+    let transcript = format!(
+        "{}{}",
+        String::from_utf8_lossy(&blocked.stdout),
+        String::from_utf8_lossy(&blocked.stderr)
+    );
+    assert!(
+        transcript.contains("BLOCKED (global.no-delete-md)"),
+        "the default workspace must resolve from any cwd: {transcript}"
+    );
+    assert!(workspace.path().join("notes.md").exists());
+
+    let _ = fs::remove_dir_all(&home);
+}
+
 /// The supervisor (P3) surfaces a suggestion to the OPERATOR when the model
 /// oscillates — the same rule blocking three times in a session. It never
 /// writes into the model's stream. `--no-suggest` silences it.

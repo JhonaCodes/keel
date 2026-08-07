@@ -19,6 +19,7 @@
 //! compiled snapshot only (ADR-004).
 
 pub mod broker;
+pub mod config;
 pub mod launch;
 pub mod mcp;
 pub mod pty;

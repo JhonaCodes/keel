@@ -300,8 +300,10 @@ fn short_id(session_id: &str) -> String {
     tail.chars().rev().collect()
 }
 
-/// Workspace resolution: `--workspace` > `KEEL_WORKSPACE` > walk-up from cwd
-/// looking for `workspace.yaml`.
+/// Workspace resolution: `--workspace` > `KEEL_WORKSPACE` > walk-up from cwd >
+/// the operator's registered default (`~/.keel/config.json`, set by `keel
+/// init`/`keel use`). Only then an error — so `keel <cli>` works from anywhere
+/// after an init.
 fn resolve_workspace(explicit: Option<PathBuf>) -> Result<PathBuf> {
     if let Some(path) = explicit {
         return Ok(path);
@@ -315,10 +317,14 @@ fn resolve_workspace(explicit: Option<PathBuf>) -> Result<PathBuf> {
             return Ok(dir);
         }
         if !dir.pop() {
-            bail!(
-                "no keel workspace found — pass --workspace, set KEEL_WORKSPACE, \
-                 or run inside a workspace (keel init)"
-            );
+            break;
         }
     }
+    if let Some(default) = crate::config::default_workspace() {
+        return Ok(default);
+    }
+    bail!(
+        "no keel workspace found — pass --workspace, set KEEL_WORKSPACE, run inside \
+         a workspace, or register one with `keel init` / `keel use <path>`"
+    )
 }
