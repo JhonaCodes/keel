@@ -27,6 +27,11 @@
 //!                                          compile does NOT call testkit —
 //!                                          the CLI orchestrates: compile →
 //!                                          test → publish, section 10.2)
+//! packet    → runtime + keel-core        (⇏ dsl: rendered from compiled
+//!                                          artifacts only, ADR-004)
+//! adapter   → snapshot + keel-core       (⇏ dsl: launch containment
+//!                                          preflight over the snapshot,
+//!                                          invariant 8)
 //! ```
 //!
 //! WHY: if the runtime could import the DSL, there would be a path by which
@@ -34,10 +39,12 @@
 //! runtime, it would stop being a pure config→snapshot function and local/CI
 //! could diverge (invariant 9).
 
+pub mod adapter;
 pub mod compile;
 pub mod composition;
 pub mod ledger;
 pub mod lock;
+pub mod packet;
 pub mod resolution;
 pub mod runtime;
 pub mod sarif;

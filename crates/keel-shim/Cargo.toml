@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# keel-shim — the tiny interposition binary the session shims exec. It asks
+# the broker over the session socket and only then execs the real command.
+# Deliberately minimal (std + serde_json): it sits on the hot path of every
+# governed command.
+[package]
+name = "keel-shim"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "keel-shim"
+path = "src/main.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
