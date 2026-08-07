@@ -1,170 +1,35 @@
-# Keel — conformance status against the specification
+# Keel - estado operativo
 
-Point-by-point map of the implementation (product **Keel**; theory/spec name
-**RCCA**) against `RCCA_reference_architecture_v0_9_1_EN.md` and `RCCA_future_EN.md`.
+## Baseline gobernado disponible
 
-Legend: ✅ done · 🟡 partial · ❌ missing · ⏭ deferred by the spec itself.
+- `keel init --executor mock` crea un workspace ejecutable y transaccional a
+  nivel de producto: snapshot, binding, lock, configuracion y store.
+- `keel doctor --governed` verifica snapshot, lock, executor y store.
+- `keel run --task` inicia y `--resume` continua una sesion propiedad de Keel;
+  tarea y executor quedan fijados en el store.
+- Los requisitos de componentes se compilan y se consumen con receipts.
+- Las fases producen artefactos validados y persistidos antes de avanzar.
+- Tool calls se despachan dentro del loop de Keel; las capabilities no
+  concedidas o denegadas por rules no producen side effects.
+- Claude y Codex se conectan por drivers HTTP Anthropic/OpenAI.
+- `agent.invoke` resuelve agentes logicos a executors configurados y usa
+  scheduler SQLite.
+- El camino de intercepcion dependiente del cliente fue eliminado junto con sus
+  pruebas, datasets y ejemplos.
 
-**One-line honesty note (ADR-020/021):** the ledger was built first and records
-every evaluation in both modes (`declared` vs `effective`). Enforcement now
-exists (the three intervention layers below). The **Phase 0c experiment** —
-measuring violations-reaching-review with vs. without enforcement — now has a
-**built, reproducible harness** (`keel-measure` + a synthetic v0 dataset), but
-the run over **real agent sessions in a real repo** has **not been done**; that
-measurement, not the code, is what the spec makes the gate for growing further.
+## Limites pendientes antes de una version estable
 
-Snapshot of the tree: 4 crates (`keel-core`, `keel-dsl`, `keel-engine`,
-`keel-cli`). Kinds: Workspace, Rule, Tool, Skill, Agent, AgentExecutor,
-RuleTest, RepositoryRegistry, Profile, Exception. Commands: `init`, `compile`,
-`observe`, `gate`, `audit`, `adapter` (+`--check` preflight), `bind`, `lock`,
-`ci resolve`/`ci run`, `explain`, `prune`, `test`, `doctor`.
+- Los drivers reales tienen tests de serializacion/parsing, pero los smoke tests
+  requieren credenciales del operador.
+- El scheduler implementa concurrencia, persistencia, claim y renovacion de
+  lease; faltan budgets economicos, profundidad, fan-out y cancelacion cascada.
+- `MCPProvider` y hooks internos se compilan como componentes, pero aun no tienen
+  transport/dispatcher de produccion.
+- El workflow ejecutable inicial conserva la secuencia canonica de ocho fases;
+  la definicion compilada todavia no reemplaza esa maquina interna.
+- El instalador actual construye un checkout fuente; releases firmados y rollback
+  remoto requieren el pipeline de distribucion.
 
----
-
-## The three intervention layers (the user's core requirement)
-
-| Layer | When | Mechanism | Status | Evidence |
-|---|---|---|---|---|
-| **L1 pre-execution gate** | before an irreversible action runs | `keel gate` → Enforce mode → exit 2 + ContextPacket; the action never becomes a process (section 5.3 inner ring) | ✅ | `keel-cli/src/gate.rs`, `keel-engine/src/runtime.rs` (Mode::Enforce), `packet.rs` |
-| **L2 cognitive activation** | while working, a concept surfaces | rule `load.skills` → Session Manager delivers compact once, references thereafter, escalates to full on oscillation (section 6.5, section 14.12); the `context.compacted` session-layer event resets delivered-skill state so a skill lost to a compaction is re-delivered (a deliberate extension beyond the 17 governance events of section 11.2 — governs no action, writes no evidence) | ✅ | `keel-engine/src/session.rs`, `kind: Skill`, `event.rs::ContextCompacted` |
-| **L3 post-action verification** | after write / at completion | post-edit feedback (outer ring), completion gate (section 12.3), specialized auditor agent with `origin=semantic` (section 14) | ✅ (seed) | `gate.rs` (completion), `keel-engine/src/audit.rs`, `kind: Agent`/`AgentExecutor` |
-
----
-
-## section 4 Principles & the 18 structural invariants (section 4.9)
-
-| Item | Status | Evidence / note |
-|---|---|---|
-| 4.1 freedom in analysis, discipline in execution | 🟡 | modes exist; full phase lifecycle is section 6.2 (partial) |
-| 4.2 LLM does not read config (ADR-004) | ✅ | runtime/snapshot/tools ⇏ dsl, enforced by `tests/arch_boundaries.rs` |
-| 4.3 one logical integration per client | ✅ | adapter is a thin bridge (`gate --client`), rules in runtime |
-| 4.4 rule declares, tool implements, tool is code | ✅ | `tools.rs`, external tool manifests, 0 tokens |
-| 4.5 detector never decides | ✅ | `run_detector` returns hit/no-hit only; fail-open |
-| 4.6 three-state verdicts | ✅ | `Verdict::{Valid,Invalid,Unknown}` in keel-core |
-| 4.7 reversibility decides fate of `unknown` | ✅ | compiler floor to deny-pending-approval; auditor invalid→review |
-| 4.8 observable vs attested | 🟡 | origin classes recorded; explicit `attested` guard type not yet modeled |
-| **inv 1** unique id + owner | ✅ | component ids; duplicate-id compile error |
-| **inv 2** never copied between scopes | ✅ | references only |
-| **inv 3** reusable in versioned packages | ⏭ | single workspace, no packages yet |
-| **inv 4** repo holds binding/lock/CI only | ✅ | `keel bind` → `.keel/project.yaml`; `keel lock` → `.keel/keel.lock`; `lock.rs` |
-| **inv 5** local paths/secrets never versioned | ✅ | `.keel-state/` gitignored; commands stay relative |
-| **inv 6** snapshot published only if compile+tests pass | ✅ | atomic compile (`commands.rs::compile`) |
-| **inv 7** last valid snapshot retained | ✅ | `snapshot.prev.json` |
-| **inv 8** blocking policy needs adapter control (preflight) | ✅ | `adapter.rs` capability manifest + `keel adapter --check` preflight rejects unhonorable blocks |
-| **inv 9** local & CI same lock/hash | ✅ | `keel.lock` pins the snapshot hash; `keel lock --verify` / `keel ci resolve` fail on drift |
-| **inv 10** secrets by reference | ⏭ | no secrets in scope yet |
-| **inv 11** Agent declares what, Executor how/where | ✅ | `kind: Agent` / `kind: AgentExecutor` |
-| **inv 12** child result schema-validated | ✅ | `audit.rs::schema_check` validates the AgentResult against the agent's declared `outputSchema` (jsonschema); non-conformance → unknown |
-| **inv 13** delegation limits (depth/time/cost/permissions) | 🟡 | timeout + maxTokens enforced (over budget → unknown + finding, real tokens in ledger); maxDepth/cross-cost deferred (need delegation graph, Phase 2); permissions: executor env isolation done (env_clear + allowlist, section 13.1 "no secret inheritance by default"); OS sandbox (network/fs) + secret-ref still open (PROGRAMA T3) |
-| **inv 14** executor/model change in provenance | ✅ | agents/executors are in the snapshot hash + `keel.lock`; a model/command change is drift `keel lock --verify`/`keel ci resolve` catch |
-| **inv 15** composition monotonicity | ✅ | `composition::compose` verifies D1–D4 across layers; a `locked` rule cannot be weakened (only an `Exception` may relax it — see 7.4) |
-| **inv 16** session append-only, non-authoritative | ✅ | `session.rs` only records deliveries; ledger has no UPDATE/DELETE |
-| **inv 17** phases owned by runtime, artifact-gated | 🟡 | completion gate exists; full phase machine section 6.2 pending |
-| **inv 18** adversarial input delimited as data | ✅ | `audit.rs` DATA markers (section 13.2) |
-
-## section 5 Trust boundary & rings
-
-| Item | Status | Evidence |
-|---|---|---|
-| 5.1 honest local threat model (cooperative) | ✅ | README + packets never claim inviolable local enforcement |
-| 5.2 guarantee matrix by plane | ✅ | local plane + compliance CI plane (`keel ci`) reusing the same engine over the lock |
-| 5.3 interception rings (inner pre-action / outer post-hoc) | ✅ | `gate.rs` `preventable` = inner ring + completion; file.edited = feedback |
-
-## section 6 Model & lifecycle
-
-| Item | Status | Evidence |
-|---|---|---|
-| 6.1 components | ✅ | Rule/Detector/Tool/Skill/Agent/Executor/Snapshot |
-| 6.2 phases owned by runtime | 🟡 | completion gate + audit phase; full Investigation→Delivery machine pending |
-| 6.3 observable/attested guards | 🟡 | origin classes; typed guard conditions pending |
-| 6.4 ledger: facts vs attestations | ✅ | `OriginClass`, deterministic never mixed with semantic |
-| 6.5 blocking + oscillation | ✅ | `ledger.oscillations`, gate escalates to full skill |
-
-## section 7 Composition & `locked`
-
-| Item | Status | Evidence |
-|---|---|---|
-| 7.1 resolution by repo identity | ✅ | `keel bind` derives `project:org/repo` from the git remote → `.keel/project.yaml`; `resolution::resolve` selects the chain (global + org + project) and verifies identity vs `repositories.yaml` (local advisory) |
-| 7.2 composition order | ✅ | `workspace::load_layered` loads the section 8.5 dirs in the fixed 7.2 order; `resolution::resolve` selects the chain and `composition::compose` composes it (see 7.4). CLI: `keel compile` composes the resolved chain |
-| 7.3 inheritance types | ✅ | `locked`/`overridable`/`merge` on `RuleSpec` are parsed and ENFORCED by `composition::compose` (see 7.4): `locked` cannot be weakened, `merge: append` joins, `overridable` permits replacement (non-increasing) |
-| 7.4 monotonicity D1–D4 | ✅ | `composition::compose` folds layers by rule id and verifies D1 coverage / D2 sensitivity / D3 decision / D4 load against every `locked` ancestor (the anchor advances to the strictest lower lock); a weakening is a `MonotonicityViolation` compile error with the dimension + offending layer. `merge: append` join + `overridable` exemption (monotonically non-increasing) implemented. Governed `Exception` (section 7.4) relaxes a locked rule when valid (matching rule+owner, unexpired vs the snapshot's created_at, with a bounded `paths.include`): the lock is LIFTED within that scope (carved out) and stands at full strength elsewhere — the lower layer's weaker rewrite is not adopted, so nothing outside the waiver is weakened. Applied exceptions surface in `CompileOutcome` for the ledger (recorded as `human` on CLI wiring). Conservative, SOUND approximations: D1 is set-based (not glob-subsumption); D2 needs identical detect/validate (multi-validator AND-composition deferred until `validate` is list-valued); preconditions/env-constraints are outside the D1–D4 guarantee |
-| 7.5 session append-only | ✅ | see inv 16 |
-| 7.6 conflicts not silently resolved | ✅ | duplicate-id compile error |
-| 7.7 rule lifecycle / prune | ✅ | `keel prune` with ledger evidence + human decisions |
-
-## section 8–section 13
-
-| Item | Status | Evidence |
-|---|---|---|
-| 8 architecture / workspace layout | ✅ | crates + `workspace.rs`; flat (rules/tools/skills/agents/tests) and layered (`load_layered`: global/organizations/platforms/projects/teams/profiles, section 8.5). Org-native `components/` layout deferred (rejected loudly, not dropped) |
-| 9 installation & operation | 🟡 | `keel init` scaffolds the full section 8.5 layered layout (each folder a README + base template) + binding, so `keel compile` composes out of the box; CLI end to end. Signed installer + `project attach`/`bindings.yaml` (org-scale distribution) still deferred |
-| 10.1 compile pipeline | ✅ | `compile.rs` (parse→schema→refs→[composition stub]→conflicts→index→snapshot) |
-| 10.2 atomic compilation | ✅ | staging → RuleTests gate → publish |
-| 10.3 hot reload | ⏭ | ephemeral process (ADR-010) |
-| 10.4 ContextPacket | ✅ | `packet.rs` — verdict + constraint + exemplar + evidence, no YAML/paths |
-| 11 DSL | ✅ | envelope + all Phase kinds + JSON Schemas in `schemas/` |
-| 11.4 preconditions (ADR-022) | ✅ | `env.present`/`flag.present` + external, live env at gate |
-| 11.6 SARIF findings (ADR-016) | ✅ | `sarif.rs`; `finding.v1` absent |
-| 12.1 adapter contract / manifest | ✅ | `AdapterManifest` (claude-code) + `keel adapter --check` compile-time preflight |
-| 12.2 one logical integration | ✅ | hook transports, runtime decides |
-| 12.3 completion authorization | ✅ | completion gate |
-| 12.4 compatible vs governed mode | 🟡 | compatible only (no proxy) |
-| 13.1 security baseline | 🟡 | env hygiene relied on; secret-ref/allowlists/sandbox pending |
-| 13.2 adversarial content delimited | ✅ | `audit.rs` |
-| 13.3 repository identity | 🟡 | `resolution` checks the repo vs `repositories.yaml` and degrades to advisory on mismatch (local); recording the advisory to the ledger + hard CI enforcement land with the install-story wiring |
-
-## section 14 Specialized agents & cross-model
-
-| Item | Status | Evidence |
-|---|---|---|
-| 14.1 agent vs executor | ✅ | two kinds |
-| 14.3 agent manifest | 🟡 | minimal (role/executor/output/budget); full manifest pending |
-| 14.4 routing policy | ❌ | no AgentRoutingPolicy |
-| 14.5 invoke from rule | 🟡 | recorded in eval; executed only via `keel audit` |
-| 14.6–14.7 request/result flow | 🟡 | `audit.rs` request+validate; full AgentRequest/Result artifacts pending |
-| 14.8 executor driver | ✅ | structured argv, `{prompt}` + stdin, no shell concat |
-| 14.10 isolation/interaction modes | 🟡 | auditor read-only + timeout; worktrees/depth graph pending |
-| 14.12 tools/MCP/skills | 🟡 | tools + skills done; MCP gateway pending |
-
-## section 15 Validation & phases
-
-| Item | Status | Evidence |
-|---|---|---|
-| 15.1 Phase 0a — DSL expressiveness | ✅ | corpus section 11.3–11.5 parses + round-trips (`keel-dsl/tests/corpus.rs`) |
-| 15.1 Phase 0b — passive telemetry | ✅ built / 🟡 unproven | `keel observe` + ledger; needs real-session data |
-| 15.1 Phase 0c — enforcement experiment | 🟡 | harness BUILT (`keel-measure` + synthetic v0 dataset, `test/src/measure.rs`, `datasets/phase0c/`); the real-session run gating further growth is **not run yet** |
-| Phase 1 — local core | 🟡 | engine + enforcement + lock/binding + CI plane + preflight + layered composition & monotonicity (section 7.4) done; CLI wiring of the layered compile (project attach) pending |
-| Phase 2 — full cycle & cross-model | 🟡 | audit seed + completion; broker/routing/full phases pending |
-| section 16 limitations | ✅ | acknowledged in README + here (cooperative local plane, etc.) |
-
-## ADRs 1–23
-
-001 ✅ · 002 ✅ · 003 ✅ · 004 ✅ · 005 ⏭(no MCP yet) · 006 ⏭ · 007 ✅(lock file + verify) ·
-008 ✅(adapter preflight) · 009 ✅ · 010 ✅(ephemeral) · 011 ✅ · 012 ✅(outputSchema validated) · 013 🟡 · 014 ✅(agents in lock) · 015 ✅ ·
-016 ✅ · 017 ✅ · 018 🟡 · 019 ✅ · 020 ✅(this doc honors it) · 021 ✅ · 022 ✅ · 023 ✅
-
-## `RCCA_future.md`
-
-All ⏭ by design (ADR-020): Control Plane, signed catalog, per-person identity,
-workflow certification, web panel. None started.
-
----
-
-## What to do next, in the spec's own order
-
-Done since the first pass: **lock + binding (inv 4/9)** (`keel bind`/`keel lock`),
-the **compliance CI plane (section 5.2)** (`keel ci resolve`/`run` + `examples/ci/`),
-and the **adapter capability preflight (inv 8, section 12.1)** (`keel adapter --check`).
-See `docs/ROADMAP.md` and `docs/PLAN_IMPLEMENTACION.md` for the full record.
-
-Still open, in the spec's own order:
-
-1. **Run Phase 0c over real sessions** — the harness exists (`keel-measure`);
-   what remains is capturing real agent sessions and running the passive-vs-enforce
-   comparison over them. This is the decision point, not more features.
-2. **Wire the layered compile into the CLI** — `composition::compose` +
-   `resolution::resolve` + `workspace::load_layered` exist; `project attach`
-   and the layered `keel compile` that drive them are the remaining install-story
-   step (section 9).
-3. **Phase 2 (section 14.4+)** — agent broker/routing + full phase machine, gated by
-   the Phase 0c result.
+Por estas limitaciones, el baseline es operativo y testeable, pero la iniciativa
+completa M0-M6 sigue abierta. La fuente de verdad del trabajo restante es
+[`docs/planificacion/ordenes_trabajo/PLAN_MAESTRO.md`](docs/planificacion/ordenes_trabajo/PLAN_MAESTRO.md).

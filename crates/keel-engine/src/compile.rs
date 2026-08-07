@@ -28,9 +28,9 @@
 
 use crate::composition::{AppliedException, ComposeLayer, ExceptionInput, Inheritance, compose};
 use crate::snapshot::{
-    CompiledAgent, CompiledBranch, CompiledEnforcement, CompiledExecutor, CompiledPrecondition,
-    CompiledRule, CompiledScope, CompiledSkill, CompiledToolCall, CompiledToolRef, CompiledWhen,
-    ExternalToolDef, OutputKind, Snapshot,
+    CompiledAgent, CompiledBranch, CompiledComponent, CompiledEnforcement, CompiledPrecondition,
+    CompiledRequirement, CompiledRule, CompiledScope, CompiledSkill, CompiledToolCall,
+    CompiledToolRef, CompiledWhen, ExternalToolDef, OutputKind, Snapshot,
 };
 use crate::tools::{BUILTIN_DETECTORS, BUILTIN_PRECONDITIONS};
 use crate::workspace::WorkspaceFiles;
@@ -69,6 +69,16 @@ pub enum CompileError {
         "agent `{agent}` routes to executor `{executor}`, which is not declared in agents/ — a governed agent must resolve to a known executor (invariant 11)"
     )]
     UnresolvedExecutor { agent: String, executor: String },
+    #[error("component `{component}` requires unknown reference `{reference}`")]
+    UnresolvedComponent {
+        component: String,
+        reference: String,
+    },
+    #[error("component `{component}` has malformed reference `{reference}`; expected kind:id")]
+    MalformedComponentReference {
+        component: String,
+        reference: String,
+    },
     #[error("rule `{rule}`: invalid regex in detect/validate: {source}")]
     InvalidRegex {
         rule: String,
@@ -123,7 +133,7 @@ pub fn compile_layered(
 ) -> Result<CompileOutcome, CompileError> {
     let mut warnings = Vec::new();
     // Non-rule component ids are unique across the whole chain (section 7.6:
-    // there is no defined composition for tools/skills/agents/executors, so a
+    // there is no defined composition for tools/skills/agents/components, so a
     // clash is a conflict, never a silent override). Rule ids may recur across
     // layers — that is composition, handled by `compose`.
     let mut seen = BTreeSet::new();
@@ -156,6 +166,11 @@ pub fn compile_layered(
                 skill.metadata.id.clone(),
                 CompiledSkill {
                     id: skill.metadata.id.clone(),
+                    version: skill
+                        .metadata
+                        .version
+                        .clone()
+                        .unwrap_or_else(|| "unversioned".to_string()),
                     compact: skill.spec.compact.clone(),
                     full: skill.spec.full.clone(),
                     examples: skill
@@ -169,28 +184,14 @@ pub fn compile_layered(
         }
     }
 
-    // ── Agent executors (section 14.1/14.8): how/where an agent runs ──
-    let mut executors: BTreeMap<String, CompiledExecutor> = BTreeMap::new();
-    for layer in chain {
-        for x in &layer.files.executors {
-            if !seen.insert(x.metadata.id.clone()) {
-                return Err(CompileError::DuplicateId(x.metadata.id.clone()));
-            }
-            executors.insert(
-                x.metadata.id.clone(),
-                CompiledExecutor {
-                    id: x.metadata.id.clone(),
-                    command: x.spec.command.clone(),
-                    model: x.spec.model.clone(),
-                    timeout_ms: x.spec.timeout_ms,
-                    env: x.spec.env.clone(),
-                },
-            );
-        }
-    }
+    let declared_model_executors = chain
+        .iter()
+        .flat_map(|layer| layer.files.components.iter())
+        .filter(|(kind, _)| kind == "model-executor")
+        .map(|(_, component)| component.metadata.id.clone())
+        .collect::<BTreeSet<_>>();
 
-    // ── Agents (section 14): resolve the executor reference (invariant 11).
-    //    Resolved after ALL executors so an agent may use one from any layer. ──
+    // ── Agents: resolve only to governed ModelExecutor components. ──
     let mut agents: BTreeMap<String, CompiledAgent> = BTreeMap::new();
     for layer in chain {
         for a in &layer.files.agents {
@@ -203,7 +204,7 @@ pub fn compile_layered(
                 .strip_prefix("executor:")
                 .unwrap_or(&a.spec.executor)
                 .to_string();
-            if !executors.contains_key(&executor_id) {
+            if !declared_model_executors.contains(&executor_id) {
                 return Err(CompileError::UnresolvedExecutor {
                     agent: a.metadata.id.clone(),
                     executor: executor_id,
@@ -221,6 +222,78 @@ pub fn compile_layered(
                     max_tokens: a.spec.budget.as_ref().and_then(|b| b.max_tokens),
                 },
             );
+        }
+    }
+
+    let mut components: BTreeMap<String, CompiledComponent> = BTreeMap::new();
+    for layer in chain {
+        for (kind, component) in &layer.files.components {
+            let unique_id = format!("{kind}:{}", component.metadata.id);
+            if !seen.insert(unique_id.clone()) {
+                return Err(CompileError::DuplicateId(unique_id));
+            }
+            if let Some(path) = &component.spec.content
+                && !layer.files.root.join(path).exists()
+            {
+                warnings.push(format!(
+                    "component `{unique_id}`: content file `{path}` not found"
+                ));
+            }
+            let requirements = component
+                .spec
+                .requirements
+                .iter()
+                .map(|requirement| {
+                    let (required_kind, required_id) = requirement
+                        .component
+                        .split_once(':')
+                        .ok_or_else(|| CompileError::MalformedComponentReference {
+                            component: unique_id.clone(),
+                            reference: requirement.component.clone(),
+                        })?;
+                    Ok(CompiledRequirement {
+                        kind: required_kind.to_string(),
+                        id: required_id.to_string(),
+                        phases: requirement.phases.clone(),
+                        required: requirement.required,
+                        reason: requirement.reason.clone(),
+                    })
+                })
+                .collect::<Result<Vec<_>, CompileError>>()?;
+            components.insert(
+                unique_id,
+                CompiledComponent {
+                    kind: kind.clone(),
+                    id: component.metadata.id.clone(),
+                    version: component
+                        .metadata
+                        .version
+                        .clone()
+                        .unwrap_or_else(|| "unversioned".to_string()),
+                    content: component.spec.content.clone(),
+                    inline: component.spec.inline.clone(),
+                    requirements,
+                    capabilities: component.spec.capabilities.clone(),
+                    config: component.spec.config.clone(),
+                },
+            );
+        }
+    }
+
+    for component in components.values() {
+        for requirement in &component.requirements {
+            let exists = match requirement.kind.as_str() {
+                "skill" => skills.contains_key(&requirement.id),
+                "agent" => agents.contains_key(&requirement.id),
+                "tool" => tools.contains_key(&requirement.id),
+                other => components.contains_key(&format!("{other}:{}", requirement.id)),
+            };
+            if !exists {
+                return Err(CompileError::UnresolvedComponent {
+                    component: format!("{}:{}", component.kind, component.id),
+                    reference: format!("{}:{}", requirement.kind, requirement.id),
+                });
+            }
         }
     }
 
@@ -289,8 +362,14 @@ pub fn compile_layered(
     let applied_exceptions = composed.applied_exceptions;
 
     // ── Index generation + Snapshot creation (canonical hash, invariant 9) ──
-    let snapshot =
-        Snapshot::build_full(composed.rules, tools, skills, agents, executors, created_at)?;
+    let snapshot = Snapshot::build_with_components(
+        composed.rules,
+        tools,
+        skills,
+        agents,
+        components,
+        created_at,
+    )?;
     Ok(CompileOutcome {
         snapshot,
         warnings,

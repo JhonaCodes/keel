@@ -144,7 +144,7 @@ pub fn run_precondition(
                         return false;
                     };
                     // State of the world CAPTURED IN THE EVENT (honest replay,
-                    // see keel-core::event): a live adapter would probe the
+                    // see keel-core::event): a governed capability can probe the
                     // real environment in Phase 1.
                     event.env.contains_key(name)
                 }

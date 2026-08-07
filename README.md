@@ -1,187 +1,75 @@
-<p align="center"><img src="assets/logo.png" alt="Keel" width="480"></p>
+# Keel
 
-# Keel — Runtime of the Agentic Cognitive Cycle
+Keel es un runtime agnostico que posee la sesion, el contexto, las fases, las
+capabilities, la delegacion y la evidencia de agentes de IA. Claude, Codex y
+otros modelos se conectan mediante `ModelExecutor`; no gobiernan el runtime.
 
-> **Having a rule available does not guarantee it gets applied.**
-
-Keel is a runtime that compiles declarative engineering constraints (YAML,
-Kubernetes-style `apiVersion/kind/metadata/spec`) into an **immutable
-snapshot**, and evaluates the events of an LLM agent session against it —
-outside the model. The model never reads configuration: it only ever receives
-verdicts, at the exact turn where they apply.
-
-Full specification: [`docs/RCCA_reference_architecture_v0_9_1_EN.md`](docs/RCCA_reference_architecture_v0_9_1_EN.md)
-(Spanish version available in `docs/`). Deferred organizational-scale material:
-[`docs/RCCA_future_EN.md`](docs/RCCA_future_EN.md).
-
-**Docs index:**
-- [`STATUS.md`](STATUS.md) — point-by-point conformance map (invariants, sections, ADRs).
-- [`docs/INSTALL.md`](docs/INSTALL.md) — install / data-preserving uninstall.
-- [`docs/FUNCIONAMIENTO_INTERNO.md`](docs/FUNCIONAMIENTO_INTERNO.md) — how it works (the three layers, agents vs skills).
-- [`docs/PARCIALES.md`](docs/PARCIALES.md) — every partial by state; nothing hidden.
-- [`docs/INVENTARIO.md`](docs/INVENTARIO.md) — what's left, grouped by precondition.
-- [`docs/PHASE2_INITIATIVE.md`](docs/PHASE2_INITIATIVE.md) — the deferred Phase-2 units (planned, not started).
-- [`docs/DOCTRINA.md`](docs/DOCTRINA.md) — cold tools before AI (0 tokens).
-- [`docs/PLAN_PRUEBAS.md`](docs/PLAN_PRUEBAS.md) — living test checklist.
-- [`docs/ROADMAP.md`](docs/ROADMAP.md) · [`docs/PROGRAMA_DE_TRABAJO.md`](docs/PROGRAMA_DE_TRABAJO.md) — roadmap + task-by-task backlog.
-
-## Why
-
-LLM-assisted environments scatter their rules across instruction files,
-skills, hooks, linters and CI — and compliance is probabilistic: it depends on
-the model deciding to look. Constraints are the only class of engineering
-knowledge still delivered as prose whose failure mode is **silent rot**:
-nothing tells you whether a rule is still valid or whether anyone follows it.
-
-Keel gives constraints the same jump that tests gave documentation: from prose
-that lies silently to a check that fires or breaks loudly.
-
-## What Keel does — the three layers that hold the project up
-
-Keel intervenes at the three moments the spec defines (section 5.3, section 11.4, section 6.2):
-
-- **L1 — pre-execution gate (`keel gate`).** Before an irreversible action runs
-  (a `DROP DATABASE`, a destructive command), Keel validates it and — if it
-  breaks a rule — **blocks it before it becomes a process** (exit 2 +
-  contextualized reason). This is the inner ring (section 5.3): a blocked command
-  never executes. It is wired as a client hook (Claude Code PreToolUse); the
-  hook only transports, the rules live in the runtime.
-- **L2 — cognitive activation.** When a governed concept surfaces, the rule can
-  load a **skill**: Keel delivers the compact guidance (with a rejected/accepted
-  exemplar) once per session, references it thereafter, and escalates to the
-  full guide only if the agent keeps tripping on it (oscillation, section 6.5).
-- **L3 — post-action verification.** After an edit, feedback for correction;
-  at completion, a gate that refuses to close a session with live blockers
-  (section 12.3); and an independent **auditor agent** (section 14) that can run on a
-  different model, whose opinion is filed as `semantic` — advisory, never a
-  block of an irreversible action (section 4.7).
-
-Underneath all three, the **Evidence Ledger** (the first product, ADR-021)
-records every evaluation with *how* it was known (`deterministic | semantic |
-attestation | human`, never mixed) and both the **declared** and **effective**
-decision — so telemetry answers which constraints are alive, dead, or
-mis-specified, and the Phase 0c enforcement experiment can be measured.
-
-**Two modes, one engine:** `keel observe` is passive (records, never blocks —
-telemetry); `keel gate` enforces (the keel holds). See `STATUS.md` for the
-point-by-point conformance map and what is still deferred (the org-scale install
-story — signed installer, `project attach`/`bindings.yaml`, control plane —
-which per section 8.3 adds distribution, not new composition semantics).
-
-## Layout
-
-```
-crates/
-├── keel-core      # stable vocabulary: Verdict, Decision lattice (section 7.4-D3),
-│                  # ContentHash (the ONLY canonical hashing authority, inv. 9)
-├── keel-dsl       # authoring vocabulary: envelope + kinds + JSON Schema
-├── keel-engine    # compiler, snapshot, tool runner, ledger, passive runtime
-│                  # (forbidden edges enforced by tests/arch_boundaries.rs)
-└── keel-cli       # the `keel` binary — orchestration only, no logic
-schemas/           # versioned JSON Schemas (the Phase 0a deliverable)
-examples/workspace # runnable demo: the spec section 11.4 gates with stub tools
-```
-
-Forbidden dependency edges (the trust model, compiled):
-`compiler ⇏ runtime` · `runtime ⇏ dsl` · `snapshot ⇏ dsl` · `ledger ⇏ runtime`.
-
-## Quickstart
+## Instalacion local
 
 ```bash
-cargo build --workspace
-
-# create your workspace — the full section 8.5 layered layout, each folder with
-# a README + a base template, YOUR rules (no defaults). Defaults to ./keel-workspace
-keel init ~/keel-workspace
-cd ~/keel-workspace
-#   activate a global rule: rename global/rules/rule.yaml.example → global/rules/<name>.yaml, edit it
-#   project rules go in projects/app/rules/ ; governed waivers in global/exceptions/
-
-keel compile                       # atomic: compose layers → RuleTests → publish
-keel observe --events events.jsonl # passive evaluation → ledger (nothing blocks)
-keel explain <ev_id>               # full traceability for one evidence entry
-keel prune                         # lifecycle proposals backed by data (section 7.7)
-keel test                          # run RuleTests against a staged snapshot
-keel doctor                        # end-to-end read-only health checks
-
-# wire the client — keel edits the settings.json itself (merge-safe, portable):
-keel adapter claude-code --install --global   # governs sessions from anywhere
-#   keel adapter claude-code --install         # …or just this project's .claude/
-#   keel adapter claude-code --uninstall       # remove keel's hook (leaves the rest)
+./install.sh
+export PATH="$HOME/.local/bin:$PATH"
+keel --version
 ```
 
-**Layered composition (spec section 7).** The same workspace can hold layers:
-`global/` rules apply to every project; `projects/<name>/` rules apply only to
-that project (the section 8.5 layout — also `organizations/`, `platforms/`,
-`teams/`, `profiles/`). A rule marked `locked` in a higher layer **cannot be
-weakened** by a lower one — `keel compile` composes the layers and verifies
-monotonicity (section 7.4, dimensions coverage/sensitivity/decision/load),
-failing with the exact dimension and offending layer. A lower layer may only
-*strengthen* (or *replace* where the higher layer says `overridable`); the one
-governed way to relax a `locked` rule in a bounded area is an `Exception`
-(owned at the locking scope, with reason, bounded scope and expiry). Bind a repo
-to its project (`keel bind`) and compile resolves the chain by repository
-identity. A flat workspace (just `rules/`) is the single-layer case — unchanged.
-See [`docs/INSTALL.md`](docs/INSTALL.md) for a from-scratch walkthrough.
-
-Install & uninstall in depth (data-preserving): [`docs/INSTALL.md`](docs/INSTALL.md).
-
-Or try the runnable demo of the spec's own gates:
+## Inicio rapido
 
 ```bash
-cd examples/workspace
-keel compile && keel observe --events fixtures/events.jsonl
+keel init ~/keel-workspace --executor mock --json
+keel doctor --workspace ~/keel-workspace --governed --json
+keel run --workspace ~/keel-workspace --task "Revisar la arquitectura" --json
 ```
 
-## Writing a rule
+`init` crea el workspace, binding, snapshot, lock, configuracion mock y store
+SQLite. No crea ni modifica configuracion de proveedores.
 
-The rule **declares**; the tool **implements** — and the tool is code
-(a script, binary or wrapped analyzer returning `valid|invalid|unknown`;
-0 tokens, deterministic). No rule compiles without `author`, `adrRef` and
-`reviewAfter` (ADR-023): every constraint has an owner, an originating
-decision, and a review window so `keel prune` can later propose deleting it
-**with data, not courage**.
+## Proveedores reales
 
-```yaml
-apiVersion: keel/v1alpha1
-kind: Rule
-metadata:
-  id: my-project.no-raw-queries
-  author: you
-  adrRef: adr:ADR-031
-  reviewAfter: P6M
-spec:
-  reversibility: reversible
-  on: [file.edited]
-  detect:   { using: "builtin:text.regex", with: { pattern: "->query\\(" } }
-  validate: { using: "tool:my-analyzer" }
-  enforcement:
-    invalid: { decision: block, report: { message: "use the query builder" } }
-    valid:   { decision: allow }
+```bash
+keel configure executor add claude \
+  --workspace ~/keel-workspace \
+  --provider anthropic --model <modelo> \
+  --credential-env ANTHROPIC_API_KEY
+
+keel configure executor add codex \
+  --workspace ~/keel-workspace \
+  --provider openai --model <modelo> \
+  --credential-env OPENAI_API_KEY
+
+keel configure executor test claude --workspace ~/keel-workspace
+keel configure executor default claude --workspace ~/keel-workspace
+keel run --workspace ~/keel-workspace --task "Implementar el cambio"
 ```
 
-## Honesty notes
+Para almacenamiento local, use `--api-key-stdin`; Keel guarda la credencial en
+Keychain de macOS o Secret Service de Linux. El valor no entra al workspace,
+snapshot, lock ni logs.
 
-- The local plane is **cooperative**: it does not resist a determined
-  developer. `locked` becomes a guarantee only on the compliance plane (CI) —
-  see spec section 5. No output of this tool claims otherwise.
-- Irreversible actions: `unknown` escalates to a **human**, never to a model
-  (section 4.7, ADR-017). The compiler normalizes this floor.
-- Findings are SARIF (ADR-016); evidence entries carry their origin class
-  (`deterministic | semantic | attestation | human`) and the classes are
-  never mixed (section 6.4).
+## Ciclo gobernado
 
-## License
+```text
+Keel Runtime
+  -> carga snapshot y requisitos de la fase
+  -> entrega skills, knowledge y blueprints mediante receipts
+  -> llama al ModelExecutor seleccionado
+  -> despacha tool calls solo por CapabilityManager
+  -> aplica rules antes del side effect
+  -> valida y registra el artefacto de fase
+  -> avanza o falla cerrado
+```
 
-The whole repository — code (`crates/`, `schemas/`, `examples/`) and the
-specification (`docs/`) — is licensed under the [Apache License 2.0](LICENSE):
-one license, corporate-friendly, with an explicit patent grant. Redistributions
-must keep the [`NOTICE`](NOTICE).
+El workspace soporta `rules`, `tools`, `skills`, `agents`, `blueprints`,
+`knowledge`, `workflows`, `contracts`, `hooks`, `providers`, `policies` y
+`executors`. Los componentes se validan, hashean y compilan en el snapshot.
+Un modelo puede solicitar `agent.invoke`; Keel resuelve el agente logico, el
+executor hijo configurado y el lease del scheduler antes de ejecutarlo.
 
-- **Name** — "Keel" is a trademark of JhonaCodes; the code license does not
-  grant rights to the name (see [`TRADEMARK.md`](TRADEMARK.md)).
+## Desarrollo
 
-Copyright 2026 JhonaCodes. This is the open core: the local runtime, CLI,
-adapters, ledger and specification. Organizational-scale components (Control
-Plane, signed catalog, web panel — `docs/RCCA_future.md`) are intentionally
-out of this repository.
+```bash
+cargo test --workspace --locked
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+Documentacion: [`docs/README.md`](docs/README.md). Orden de trabajo y limites:
+[`docs/planificacion/ordenes_trabajo/PLAN_MAESTRO.md`](docs/planificacion/ordenes_trabajo/PLAN_MAESTRO.md).

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! keel — Phase 0 CLI (passive).
+//! keel — governed cognitive runtime CLI.
 //!
 //! This binary contains NO business logic: it parses arguments, orchestrates
 //! the keel-engine modules, and presents results. It is the only crate that
@@ -14,7 +14,7 @@
 //! blocks, everything is recorded in the ledger.
 
 mod commands;
-mod gate;
+mod governed;
 mod init;
 
 use clap::{Parser, Subcommand};
@@ -35,9 +35,8 @@ const LONG_VERSION: &str = concat!(
     version,
     long_version = LONG_VERSION,
     about = "Keel — agentic cognitive cycle runtime that holds the line on AI-agent actions",
-    long_about = "Keel compiles declarative constraints to an immutable snapshot and evaluates \
-                  agent events outside the model. `keel gate` blocks a violating action before it \
-                  runs (section 5.3); `keel observe` records passively (telemetry, ADR-021)."
+    long_about = "Keel owns model sessions, resolves declarative context and capabilities from an \
+                  immutable snapshot, validates phase artifacts and records durable evidence."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -53,6 +52,10 @@ enum Command {
     Init {
         #[arg(default_value = "keel-workspace")]
         path: PathBuf,
+        #[arg(long, default_value = "mock")]
+        executor: String,
+        #[arg(long)]
+        json: bool,
     },
     /// Compiles the workspace into an immutable snapshot (atomic: staging →
     /// RuleTests → publish only if they pass; retains last-known-good).
@@ -111,70 +114,28 @@ enum Command {
     Doctor {
         #[arg(long, default_value = ".")]
         workspace: PathBuf,
+        #[arg(long)]
+        governed: bool,
+        #[arg(long)]
+        json: bool,
     },
-    /// Pre-action gate (inner ring, spec section 5.3): ONE event via stdin, evaluated
-    /// in Enforce mode. Exit 2 = blocked (packet on stderr) — the client must
-    /// not run the action. Exit 0 = allowed.
-    Gate {
+    /// Runs or resumes a Keel-owned governed model session.
+    Run {
         #[arg(long, default_value = ".")]
         workspace: PathBuf,
-        /// Input protocol: omit for a native Keel event; `claude-code` parses
-        /// the Claude Code hook payload (PreToolUse/PostToolUse/Stop).
+        #[arg(long, conflicts_with = "resume", required_unless_present = "resume")]
+        task: Option<String>,
+        #[arg(long, conflicts_with = "task")]
+        resume: Option<String>,
         #[arg(long)]
-        client: Option<String>,
-        /// Session id for ledger entries (hooks usually provide their own).
+        executor: Option<String>,
         #[arg(long)]
-        session: Option<String>,
-        /// Shadow mode: evaluate and record, never block (try new rules risk-free).
-        #[arg(long)]
-        passive: bool,
-        /// Do NOT fold the live process environment into the event: evaluate
-        /// preconditions against ONLY the env the event carries (like replay).
-        /// For deterministic CI/tests where an inherited host var must not flip
-        /// a precondition. Production default (unset) captures live env per ADR-022.
-        #[arg(long)]
-        no_inherit_env: bool,
+        json: bool,
     },
-    /// Invoke a specialized agent (spec section 14) on some material. Records an
-    /// advisory semantic verdict (section 6.4/section 4.7) — findings, never a block.
-    Audit {
-        /// Agent id declared in agents/.
-        #[arg(long)]
-        agent: String,
-        /// File with the material to analyze (diff, source, etc.).
-        #[arg(long)]
-        input: PathBuf,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
-        #[arg(long)]
-        session: Option<String>,
-    },
-    /// Client adapter helpers (thin bridges — the rules live in the runtime, section 12.2).
-    Adapter {
-        /// Client name (supported: claude-code).
-        client: String,
-        /// Print the settings wiring for the client.
-        #[arg(long)]
-        print: bool,
-        /// Preflight the published snapshot against the adapter's capability
-        /// manifest (section 12.1, invariant 8): fail if a `block` targets an event the
-        /// client cannot prevent. Exit 1 on any unhonorable policy.
-        #[arg(long)]
-        check: bool,
-        /// Wire the hook INTO the client's settings.json (merge-safe: backs up
-        /// and preserves existing config). Idempotent. Portable — the install
-        /// logic lives in keel, so it works the same on any machine.
-        #[arg(long)]
-        install: bool,
-        /// Remove keel's hook from the client's settings.json (leaves the rest).
-        #[arg(long)]
-        uninstall: bool,
-        /// Target the USER-global settings (~/.claude/settings.json) instead of
-        /// the project's .claude/settings.json — governs sessions from anywhere.
-        #[arg(long)]
-        global: bool,
-        #[arg(long, default_value = ".")]
-        workspace: PathBuf,
+    /// Manages runtime-owned executor configuration and credentials.
+    Configure {
+        #[command(subcommand)]
+        command: ConfigureCommand,
     },
     /// Bind this repository to a project/workspace, writing `.keel/project.yaml`
     /// (section 8.6, invariant 4: the repo holds only binding + lock, never the
@@ -211,6 +172,62 @@ enum Command {
 }
 
 #[derive(Subcommand)]
+enum ConfigureCommand {
+    Executor {
+        #[command(subcommand)]
+        command: ExecutorCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum ExecutorCommand {
+    Add {
+        id: String,
+        #[arg(long)]
+        provider: String,
+        #[arg(long)]
+        model: String,
+        #[arg(long)]
+        endpoint: Option<String>,
+        #[arg(long)]
+        credential_env: Option<String>,
+        #[arg(long)]
+        api_key_stdin: bool,
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    List {
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    Test {
+        id: String,
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    Remove {
+        id: String,
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    Default {
+        id: String,
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum CiCommand {
     /// Fail BEFORE doing work unless the binding + lock resolve: binding
     /// present, workspace compiles + RuleTests pass, and the lock matches a
@@ -230,7 +247,11 @@ enum CiCommand {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
-        Command::Init { path } => commands::init(&path),
+        Command::Init {
+            path,
+            executor,
+            json,
+        } => governed::init(&path, &executor, json),
         Command::Compile { workspace } => commands::compile(&workspace),
         Command::Observe {
             workspace,
@@ -250,51 +271,73 @@ fn main() -> ExitCode {
             reason,
         } => commands::prune(&workspace, record, decision, by, reason),
         Command::Test { workspace } => commands::test(&workspace),
-        Command::Doctor { workspace } => commands::doctor(&workspace),
-        Command::Gate {
+        Command::Doctor {
             workspace,
-            client,
-            session,
-            passive,
-            no_inherit_env,
+            governed,
+            json,
         } => {
-            let client = match client.as_deref() {
-                None => gate::Client::Native,
-                Some("claude-code") => gate::Client::ClaudeCode,
-                Some(other) => {
-                    eprintln!("error: unsupported gate client `{other}` (supported: claude-code)");
-                    return ExitCode::FAILURE;
-                }
-            };
-            gate::gate(&workspace, client, session, passive, no_inherit_env)
-        }
-        Command::Audit {
-            agent,
-            input,
-            workspace,
-            session,
-        } => gate::audit(&workspace, &agent, &input, session),
-        Command::Adapter {
-            client,
-            print: _,
-            check,
-            install,
-            uninstall,
-            global,
-            workspace,
-        } => {
-            if client != "claude-code" && client != "claude" {
-                eprintln!("error: unsupported adapter `{client}` (supported: claude-code)");
-                return ExitCode::FAILURE;
-            }
-            if check {
-                commands::adapter_check(&workspace, &client)
-            } else if install || uninstall {
-                gate::adapter_install_claude_code(&workspace, global, uninstall)
+            if governed {
+                governed::doctor(&workspace, json)
             } else {
-                gate::adapter_print_claude_code(&workspace)
+                commands::doctor(&workspace)
             }
         }
+        Command::Run {
+            workspace,
+            task,
+            resume,
+            executor,
+            json,
+        } => governed::run(
+            &workspace,
+            task.as_deref(),
+            resume.as_deref(),
+            executor.as_deref(),
+            json,
+        ),
+        Command::Configure { command } => match command {
+            ConfigureCommand::Executor { command } => match command {
+                ExecutorCommand::Add {
+                    id,
+                    provider,
+                    model,
+                    endpoint,
+                    credential_env,
+                    api_key_stdin,
+                    workspace,
+                    json,
+                } => governed::configure_executor_add(
+                    &workspace,
+                    governed::ExecutorConfiguration {
+                        id,
+                        provider,
+                        model,
+                        endpoint,
+                        credential_env,
+                        api_key_stdin,
+                        json_output: json,
+                    },
+                ),
+                ExecutorCommand::List { workspace, json } => {
+                    governed::configure_executor_list(&workspace, json)
+                }
+                ExecutorCommand::Test {
+                    id,
+                    workspace,
+                    json,
+                } => governed::configure_executor_test(&workspace, &id, json),
+                ExecutorCommand::Remove {
+                    id,
+                    workspace,
+                    json,
+                } => governed::configure_executor_remove(&workspace, &id, json),
+                ExecutorCommand::Default {
+                    id,
+                    workspace,
+                    json,
+                } => governed::configure_executor_default(&workspace, &id, json),
+            },
+        },
         Command::Bind {
             workspace,
             project,

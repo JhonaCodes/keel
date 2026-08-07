@@ -1,1 +1,0 @@
-{"kind":"command.requested","command":"psql -c stmt","content":"DROP DATABASE prod","session_id":"t2-inner"}

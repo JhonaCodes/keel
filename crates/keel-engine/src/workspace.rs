@@ -18,8 +18,8 @@
 //! next to the rules that produced them. XDG paths arrive with the installer.
 
 use keel_dsl::{
-    AgentDoc, AgentExecutorDoc, Document, DslError, ExceptionDoc, RuleDoc, RuleTestDoc, SkillDoc,
-    ToolDoc, WorkspaceDoc, parse_documents,
+    AgentDoc, Document, DslError, ExceptionDoc, GovernedComponentDoc, RuleDoc, RuleTestDoc,
+    SkillDoc, ToolDoc, WorkspaceDoc, parse_documents,
 };
 use std::path::{Path, PathBuf};
 
@@ -36,7 +36,7 @@ pub struct WorkspaceFiles {
     pub tools: Vec<ToolDoc>,
     pub skills: Vec<SkillDoc>,
     pub agents: Vec<AgentDoc>,
-    pub executors: Vec<AgentExecutorDoc>,
+    pub components: Vec<(String, GovernedComponentDoc)>,
     pub tests: Vec<RuleTestDoc>,
     /// Governed exceptions (section 7.4): the only route to relax a `locked`
     /// rule, owned at the locking scope with reason, bounded scope and expiry.
@@ -52,7 +52,7 @@ impl WorkspaceFiles {
             tools: Vec::new(),
             skills: Vec::new(),
             agents: Vec::new(),
-            executors: Vec::new(),
+            components: Vec::new(),
             tests: Vec::new(),
             exceptions: Vec::new(),
         }
@@ -106,7 +106,20 @@ pub enum WorkspaceError {
 /// flat (single-layer) workspace. `tests/` is deliberately EXCLUDED: the
 /// section 8.5 layered layout carries a workspace-level `tests/` at the root
 /// alongside the layer directories, so it must not be read as a flat marker.
-const FLAT_MARKER_SUBDIRS: [&str; 4] = ["rules", "tools", "skills", "agents"];
+const FLAT_MARKER_SUBDIRS: [&str; 12] = [
+    "rules",
+    "tools",
+    "skills",
+    "agents",
+    "blueprints",
+    "knowledge",
+    "workflows",
+    "contracts",
+    "hooks",
+    "providers",
+    "policies",
+    "executors",
+];
 
 /// Whether `dir` carries an authoring component subdirectory directly — the
 /// marker of a flat/degenerate workspace root.
@@ -152,6 +165,14 @@ pub fn load_components(dir: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
         ("tools", "Tool"),
         ("skills", "Skill"),
         ("agents", "Agent"),
+        ("blueprints", "Blueprint"),
+        ("knowledge", "Knowledge"),
+        ("workflows", "Workflow"),
+        ("contracts", "Contract"),
+        ("hooks", "Hook"),
+        ("providers", "MCPProvider"),
+        ("policies", "Policy"),
+        ("executors", "ModelExecutor"),
         ("tests", "RuleTest"),
         ("exceptions", "Exception"),
     ] {
@@ -166,8 +187,31 @@ pub fn load_components(dir: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
                     (Document::Tool(t), "Tool") => files.tools.push(*t),
                     (Document::Skill(k), "Skill") => files.skills.push(*k),
                     (Document::Agent(a), "Agent") => files.agents.push(*a),
-                    // Executors live alongside agents in agents/.
-                    (Document::AgentExecutor(x), "Agent") => files.executors.push(*x),
+                    (Document::AgentRoutingPolicy(x), "Agent") => files
+                        .components
+                        .push(("agent-routing-policy".to_string(), *x)),
+                    (Document::Blueprint(x), "Blueprint") => {
+                        files.components.push(("blueprint".to_string(), *x))
+                    }
+                    (Document::Knowledge(x), "Knowledge") => {
+                        files.components.push(("knowledge".to_string(), *x))
+                    }
+                    (Document::Workflow(x), "Workflow") => {
+                        files.components.push(("workflow".to_string(), *x))
+                    }
+                    (Document::Contract(x), "Contract") => {
+                        files.components.push(("contract".to_string(), *x))
+                    }
+                    (Document::Hook(x), "Hook") => files.components.push(("hook".to_string(), *x)),
+                    (Document::MCPProvider(x), "MCPProvider") => {
+                        files.components.push(("mcp-provider".to_string(), *x))
+                    }
+                    (Document::Policy(x), "Policy") => {
+                        files.components.push(("policy".to_string(), *x))
+                    }
+                    (Document::ModelExecutor(x), "ModelExecutor") => {
+                        files.components.push(("model-executor".to_string(), *x))
+                    }
                     (Document::RuleTest(t), "RuleTest") => files.tests.push(*t),
                     (Document::Exception(e), "Exception") => files.exceptions.push(*e),
                     (other, _) => {
@@ -196,14 +240,14 @@ pub fn load_components(dir: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
         .agents
         .sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
     files
-        .executors
-        .sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
-    files
         .tests
         .sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
     files
         .exceptions
         .sort_by(|a, b| a.metadata.id.cmp(&b.metadata.id));
+    files
+        .components
+        .sort_by(|a, b| (&a.0, &a.1.metadata.id).cmp(&(&b.0, &b.1.metadata.id)));
 
     Ok(files)
 }

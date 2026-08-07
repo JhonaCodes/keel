@@ -1,1 +1,0 @@
-{"kind":"command.requested","command":"psql -c stmt","content":"SELECT 1 FROM ledger","session_id":"t1-clean"}

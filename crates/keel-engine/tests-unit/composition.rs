@@ -25,7 +25,6 @@ fn ws(yaml: &str) -> WorkspaceFiles {
             Document::Tool(t) => f.tools.push(*t),
             Document::Skill(s) => f.skills.push(*s),
             Document::Agent(a) => f.agents.push(*a),
-            Document::AgentExecutor(x) => f.executors.push(*x),
             Document::Exception(e) => f.exceptions.push(*e),
             _ => {}
         }

@@ -33,7 +33,7 @@ teams/           authorized team variants                      [scaffold — no 
 profiles/        personal preferences (cannot weaken locked)   [PARSED — not composed yet]
 ```
 
-Plus support directories: `packages/` `clients/` `executors/` `schemas/`
+Plus support directories: `packages/` `schemas/`
 `registry/` `locks/` `migrations/` `tests/` (see each README).
 
 ## The rule of composition (section 7.4)
@@ -48,10 +48,8 @@ bounded, audited way to relax a `locked` rule is an `Exception` (see
 ## Get going
 
 ```
-# activate a template (drop the .example):
-mv global/rules/rule.yaml.example global/rules/no-raw.yaml   # then edit it
-keel compile --workspace .        # composes global + your bound project
-keel adapter claude-code --check --workspace .
+keel doctor --workspace . --governed
+keel run --workspace . --task "Describe the project"
 ```
 
 The LLM (or you) authors the actual content — each folder's README + template is
@@ -310,31 +308,28 @@ Versioned, reusable components shared across workspaces (section 8.5). Packaging
 is not implemented yet; components live inline in their layers for now.
 "#;
 
-pub const CLIENTS_README: &str = r#"# clients/  [scaffold]
+pub const GOVERNED_RESOURCE_README: &str = r#"# Keel-owned resources
 
-Adapter configuration (section 8.5). The Claude Code adapter is wired directly by
-`keel adapter claude-code --install` today; per-client config files here are a
-future refinement.
+Resources in this directory are parsed, validated, compiled into the immutable
+snapshot and delivered only through runtime operations. They are never copied
+to provider configuration.
 "#;
 
-pub const EXECUTORS_README: &str = r#"# executors/  [ACTIVE]
-
-`kind: AgentExecutor` manifests — how/where a specialized agent runs (section
-14.1/14.8): the command, model and the environment allowlist it may inherit
-(section 13.1, no secret inheritance by default). Referenced by a `kind: Agent`.
-See `executor.yaml.example`.
+pub const DEFAULT_WORKFLOW: &str = r#"apiVersion: keel/v1alpha1
+kind: Workflow
+metadata: { id: default, version: 1.0.0 }
+spec:
+  config:
+    phases: [investigation, planning, implementation, verification, audit, resolution, acceptance, delivery]
 "#;
 
-pub const EXECUTOR_TMPL: &str = r#"# AgentExecutor template — rename to <name>.yaml to activate it.
-#
-# apiVersion: keel/v1alpha1
-# kind: AgentExecutor
-# metadata: { id: claude-code.local }
-# spec:
-#   command: [claude, -p, "{prompt}"]
-#   model: claude-haiku
-#   timeoutMs: 120000
-#   env: []          # allowlist of host env vars to pass through (empty = none)
+pub const MOCK_EXECUTOR: &str = r#"apiVersion: keel/v1alpha1
+kind: ModelExecutor
+metadata: { id: mock, version: 1.0.0 }
+spec:
+  config:
+    provider: mock
+    model: mock
 "#;
 
 pub const SCHEMAS_README: &str = r#"# schemas/  [scaffold]

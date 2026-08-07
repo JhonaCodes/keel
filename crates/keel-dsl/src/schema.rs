@@ -20,12 +20,13 @@ const TOOL_SCHEMA: &str = include_str!("../../../schemas/tool.schema.json");
 const RULETEST_SCHEMA: &str = include_str!("../../../schemas/ruletest.schema.json");
 const SKILL_SCHEMA: &str = include_str!("../../../schemas/skill.schema.json");
 const AGENT_SCHEMA: &str = include_str!("../../../schemas/agent.schema.json");
-const AGENTEXECUTOR_SCHEMA: &str = include_str!("../../../schemas/agentexecutor.schema.json");
 const WORKSPACE_SCHEMA: &str = include_str!("../../../schemas/workspace.schema.json");
 const REPOSITORYREGISTRY_SCHEMA: &str =
     include_str!("../../../schemas/repositoryregistry.schema.json");
 const PROFILE_SCHEMA: &str = include_str!("../../../schemas/profile.schema.json");
 const EXCEPTION_SCHEMA: &str = include_str!("../../../schemas/exception.schema.json");
+const GOVERNED_COMPONENT_SCHEMA: &str =
+    include_str!("../../../schemas/governed-component.schema.json");
 
 fn validator_for(kind: &str) -> Option<&'static Validator> {
     static RULE: OnceLock<Validator> = OnceLock::new();
@@ -34,10 +35,10 @@ fn validator_for(kind: &str) -> Option<&'static Validator> {
     static WORKSPACE: OnceLock<Validator> = OnceLock::new();
     static SKILL: OnceLock<Validator> = OnceLock::new();
     static AGENT: OnceLock<Validator> = OnceLock::new();
-    static AGENTEXEC: OnceLock<Validator> = OnceLock::new();
     static REPOSITORYREGISTRY: OnceLock<Validator> = OnceLock::new();
     static PROFILE: OnceLock<Validator> = OnceLock::new();
     static EXCEPTION: OnceLock<Validator> = OnceLock::new();
+    static GOVERNED_COMPONENT: OnceLock<Validator> = OnceLock::new();
 
     fn build(raw: &str) -> Validator {
         let schema: serde_json::Value =
@@ -52,12 +53,15 @@ fn validator_for(kind: &str) -> Option<&'static Validator> {
         "Workspace" => Some(WORKSPACE.get_or_init(|| build(WORKSPACE_SCHEMA))),
         "Skill" => Some(SKILL.get_or_init(|| build(SKILL_SCHEMA))),
         "Agent" => Some(AGENT.get_or_init(|| build(AGENT_SCHEMA))),
-        "AgentExecutor" => Some(AGENTEXEC.get_or_init(|| build(AGENTEXECUTOR_SCHEMA))),
         "RepositoryRegistry" => {
             Some(REPOSITORYREGISTRY.get_or_init(|| build(REPOSITORYREGISTRY_SCHEMA)))
         }
         "Profile" => Some(PROFILE.get_or_init(|| build(PROFILE_SCHEMA))),
         "Exception" => Some(EXCEPTION.get_or_init(|| build(EXCEPTION_SCHEMA))),
+        "Blueprint" | "Knowledge" | "Workflow" | "Contract" | "Hook" | "MCPProvider"
+        | "ModelExecutor" | "AgentRoutingPolicy" | "Policy" => {
+            Some(GOVERNED_COMPONENT.get_or_init(|| build(GOVERNED_COMPONENT_SCHEMA)))
+        }
         _ => None,
     }
 }

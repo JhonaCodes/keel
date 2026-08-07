@@ -7,7 +7,6 @@
 //! test `tests/arch_boundaries.rs`:
 //!
 //! ```text
-//! audit     → ledger (keel-core)        (section 14: runs an executor, files origin=semantic)
 //! compile   → keel-dsl + snapshot        (config → artifact; PURE)
 //! composition → snapshot + keel-dsl       (folds layers + verifies locked
 //!                                          monotonicity, section 7.4; PURE,
@@ -24,7 +23,6 @@
 //! runtime   → snapshot + tools           (⇏ dsl: the runtime NEVER sees
 //!                                          configuration, only the snapshot —
 //!                                          structural guarantee of ADR-004)
-//! session   → snapshot (keel-core)      (⇏ dsl: delivers compiled skills)
 //! testkit   → runtime + keel-dsl         (orchestration of the test gate;
 //!                                          compile does NOT call testkit —
 //!                                          the CLI orchestrates: compile →
@@ -36,17 +34,13 @@
 //! runtime, it would stop being a pure config→snapshot function and local/CI
 //! could diverge (invariant 9).
 
-pub mod adapter;
-pub mod audit;
 pub mod compile;
 pub mod composition;
 pub mod ledger;
 pub mod lock;
-pub mod packet;
 pub mod resolution;
 pub mod runtime;
 pub mod sarif;
-pub mod session;
 pub mod snapshot;
 pub mod testkit;
 pub mod tools;

@@ -95,7 +95,7 @@ pub struct LockComponents {
     #[serde(default)]
     pub agents: Vec<String>,
     #[serde(default)]
-    pub executors: Vec<String>,
+    pub components: Vec<String>,
 }
 
 /// `.keel/keel.lock` — the pinned resolution (section 8.6).
@@ -132,7 +132,7 @@ impl Lock {
         let tools: Vec<String> = snapshot.tools.keys().cloned().collect();
         let skills: Vec<String> = snapshot.skills.keys().cloned().collect();
         let agents: Vec<String> = snapshot.agents.keys().cloned().collect();
-        let executors: Vec<String> = snapshot.executors.keys().cloned().collect();
+        let components: Vec<String> = snapshot.components.keys().cloned().collect();
         let mut composition: Vec<String> = snapshot
             .rules
             .iter()
@@ -150,7 +150,7 @@ impl Lock {
                 tools,
                 skills,
                 agents,
-                executors,
+                components,
             },
             composition,
         }

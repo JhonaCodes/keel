@@ -68,11 +68,19 @@ pub enum Document {
     Tool(Box<ToolDoc>),
     Skill(Box<SkillDoc>),
     Agent(Box<AgentDoc>),
-    AgentExecutor(Box<AgentExecutorDoc>),
     RuleTest(Box<RuleTestDoc>),
     RepositoryRegistry(Box<RepositoryRegistryDoc>),
     Profile(Box<ProfileDoc>),
     Exception(Box<ExceptionDoc>),
+    Blueprint(Box<GovernedComponentDoc>),
+    Knowledge(Box<GovernedComponentDoc>),
+    Workflow(Box<GovernedComponentDoc>),
+    Contract(Box<GovernedComponentDoc>),
+    Hook(Box<GovernedComponentDoc>),
+    MCPProvider(Box<GovernedComponentDoc>),
+    ModelExecutor(Box<GovernedComponentDoc>),
+    AgentRoutingPolicy(Box<GovernedComponentDoc>),
+    Policy(Box<GovernedComponentDoc>),
 }
 
 impl Document {
@@ -83,11 +91,19 @@ impl Document {
             Document::Tool(d) => &d.metadata,
             Document::Skill(d) => &d.metadata,
             Document::Agent(d) => &d.metadata,
-            Document::AgentExecutor(d) => &d.metadata,
             Document::RuleTest(d) => &d.metadata,
             Document::RepositoryRegistry(d) => &d.metadata,
             Document::Profile(d) => &d.metadata,
             Document::Exception(d) => &d.metadata,
+            Document::Blueprint(d)
+            | Document::Knowledge(d)
+            | Document::Workflow(d)
+            | Document::Contract(d)
+            | Document::Hook(d)
+            | Document::MCPProvider(d)
+            | Document::ModelExecutor(d)
+            | Document::AgentRoutingPolicy(d)
+            | Document::Policy(d) => &d.metadata,
         }
     }
 
@@ -98,13 +114,61 @@ impl Document {
             Document::Tool(_) => "Tool",
             Document::Skill(_) => "Skill",
             Document::Agent(_) => "Agent",
-            Document::AgentExecutor(_) => "AgentExecutor",
             Document::RuleTest(_) => "RuleTest",
             Document::RepositoryRegistry(_) => "RepositoryRegistry",
             Document::Profile(_) => "Profile",
             Document::Exception(_) => "Exception",
+            Document::Blueprint(_) => "Blueprint",
+            Document::Knowledge(_) => "Knowledge",
+            Document::Workflow(_) => "Workflow",
+            Document::Contract(_) => "Contract",
+            Document::Hook(_) => "Hook",
+            Document::MCPProvider(_) => "MCPProvider",
+            Document::ModelExecutor(_) => "ModelExecutor",
+            Document::AgentRoutingPolicy(_) => "AgentRoutingPolicy",
+            Document::Policy(_) => "Policy",
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GovernedComponentDoc {
+    #[serde(rename = "apiVersion")]
+    pub api_version: String,
+    pub metadata: Metadata,
+    pub spec: GovernedComponentSpec,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GovernedComponentSpec {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inline: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requirements: Vec<ComponentRequirement>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capabilities: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentRequirement {
+    pub component: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub phases: Vec<String>,
+    #[serde(default = "required_by_default")]
+    pub required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+fn required_by_default() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -206,8 +270,7 @@ pub struct ExemplarPair {
     pub accepted: String,
 }
 
-/// kind: Agent (spec section 14) — a logical responsibility executed by an
-/// AgentExecutor. Minimal Phase-2-seed shape.
+/// kind: Agent — a logical responsibility routed to a governed ModelExecutor.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentDoc {
@@ -241,33 +304,6 @@ pub struct AgentBudget {
     pub timeout_ms: Option<u64>,
     #[serde(default, rename = "maxTokens", skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u64>,
-}
-
-/// kind: AgentExecutor (spec section 14.1/section 14.8) — how/where an Agent runs.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AgentExecutorDoc {
-    #[serde(rename = "apiVersion")]
-    pub api_version: String,
-    pub metadata: Metadata,
-    pub spec: AgentExecutorSpec,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AgentExecutorSpec {
-    pub command: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
-    #[serde(default, rename = "timeoutMs", skip_serializing_if = "Option::is_none")]
-    pub timeout_ms: Option<u64>,
-    /// Environment allowlist (section 13.1: "no secret inheritance to child sessions
-    /// by default"). The executor subprocess receives ONLY these host env vars
-    /// (plus PATH, needed to resolve the program) — everything else is scrubbed.
-    /// Empty (the default) = no inheritance: an executor that needs a credential
-    /// must name it here.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub env: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

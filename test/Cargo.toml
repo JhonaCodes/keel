@@ -5,13 +5,6 @@
 #
 # These tests run under `cargo test --workspace`, which builds the `keel`
 # binary first, so the CLI black-box tests can invoke it from target/.
-#
-# It also ships `keel-measure`, the Phase 0c enforcement-measurement harness
-# (spec section 15.1). The harness is MEASUREMENT, NOT ENGINE CODE: it lives
-# here — orchestrating the shipped `keel` binary and reading the ledger
-# read-only — precisely so the runtime gains no feature for a one-time
-# decision experiment. Its logic is in `src/measure.rs`; the binary is a thin
-# entry point.
 [package]
 name = "keel-tests"
 version.workspace = true
@@ -22,16 +15,11 @@ publish = false
 [lib]
 path = "src/lib.rs"
 
-[[bin]]
-name = "keel-measure"
-path = "src/bin/keel-measure.rs"
-
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml_ng = { workspace = true }
 rusqlite = { workspace = true }
-anyhow = { workspace = true }
 
 [dev-dependencies]
 keel-core = { path = "../crates/keel-core" }

@@ -99,15 +99,57 @@ pub fn init(path: &Path) -> Result<ExitCode> {
         ("projects/app/rules/rule.yaml.example", init::PROJECT_RULE),
         ("projects/app/tools/README.md", init::TOOLS_README),
         ("projects/app/tools/tool.yaml.example", init::TOOL_TMPL),
+        (
+            "projects/app/skills/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/knowledge/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/blueprints/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/workflows/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/workflows/default.yaml",
+            init::DEFAULT_WORKFLOW,
+        ),
+        (
+            "projects/app/contracts/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/agents/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/hooks/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/providers/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/policies/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        (
+            "projects/app/executors/README.md",
+            init::GOVERNED_RESOURCE_README,
+        ),
+        ("projects/app/executors/mock.yaml", init::MOCK_EXECUTOR),
         ("projects/app/tests/README.md", init::TESTS_README),
         ("projects/app/tests/test.yaml.example", init::TEST_TMPL),
         ("teams/README.md", init::TEAMS_README),
         ("profiles/README.md", init::PROFILES_README),
         ("profiles/profile.yaml.example", init::PROFILE_TMPL),
         ("packages/README.md", init::PACKAGES_README),
-        ("clients/README.md", init::CLIENTS_README),
-        ("executors/README.md", init::EXECUTORS_README),
-        ("executors/executor.yaml.example", init::EXECUTOR_TMPL),
         ("schemas/README.md", init::SCHEMAS_README),
         ("registry/README.md", init::REGISTRY_README),
         ("locks/README.md", init::LOCKS_README),
@@ -134,14 +176,15 @@ pub fn init(path: &Path) -> Result<ExitCode> {
     println!(
         "the full section 8.5 layout, each folder with a README + a base template; bound to project:local/app"
     );
-    println!("active now: global/rules, global/exceptions, projects/app/{{rules,tools,tests}}");
-    println!("next:");
     println!(
-        "  1. activate a template: rename global/rules/rule.yaml.example → global/rules/no-raw.yaml and edit it"
+        "active: rules, skills, knowledge, blueprints, workflows, contracts, agents, hooks, providers, policies and executors"
     );
-    println!("  2. keel compile --workspace {}", path.display());
     println!(
-        "  3. keel adapter claude-code --check --workspace {}",
+        "ready: keel doctor --workspace {} --governed",
+        path.display()
+    );
+    println!(
+        "run:   keel run --workspace {} --task <task>",
         path.display()
     );
     Ok(ExitCode::SUCCESS)
@@ -925,41 +968,4 @@ pub(crate) fn ci_run(root: &Path) -> Result<ExitCode> {
     println!("evidence   {}", files.ledger_path().display());
     println!("ci run OK");
     Ok(ExitCode::SUCCESS)
-}
-
-// ─────────────────────────── adapter preflight ───────────────────────────
-
-/// `keel adapter <client> --check` — preflight the published snapshot against
-/// the adapter's capability manifest (spec section 12.1, invariant 8). Rejects a
-/// `block` the client cannot honor instead of assuming it. Exit 1 on any
-/// unhonorable policy.
-pub(crate) fn adapter_check(root: &Path, client: &str) -> Result<ExitCode> {
-    use keel_engine::adapter::{AdapterManifest, preflight};
-
-    let Some(manifest) = AdapterManifest::for_client(client) else {
-        eprintln!("error: unknown adapter `{client}` (supported: claude-code)");
-        return Ok(ExitCode::FAILURE);
-    };
-    let files = workspace::load(root)?;
-    let snapshot = Snapshot::load(&files.snapshot_path())
-        .context("no published snapshot — run `keel compile` first")?;
-
-    let violations = preflight(&snapshot, &manifest);
-    if violations.is_empty() {
-        println!(
-            "adapter {} — preflight OK ({} rules honor their blocking policy)",
-            manifest.id,
-            snapshot.rules.len()
-        );
-        return Ok(ExitCode::SUCCESS);
-    }
-    eprintln!(
-        "adapter {} — preflight FAILED: {} unhonorable blocking policy(ies)",
-        manifest.id,
-        violations.len()
-    );
-    for v in &violations {
-        eprintln!("  {} → {}", v.rule_id, v.reason);
-    }
-    Ok(ExitCode::FAILURE)
 }
