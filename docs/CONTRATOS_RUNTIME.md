@@ -1,16 +1,16 @@
-> **CORRECCION (D-012, 2026-08-07).** Este documento describe, en partes, el
-> diseno de "sesion propiedad de keel via API de proveedor" (RuntimeHost ->
-> ModelExecutor -> API). Esa direccion fue REVERTIDA: **keel es un runtime
-> PADRE que gobierna el ENTORNO DE EJECUCION del CLI del modelo y NO usa APIs de
-> proveedor.** Donde este texto hable de llamar a la API del modelo, de `keel
-> run` o de `keel configure executor`, esta OBSOLETO — manda `DECISIONES.md`
-> (D-012 a-d) y el flujo real en `USO_INSTALACION.md`. La reescritura integral
-> de este documento a la arquitectura de runtime-padre es trabajo pendiente
-> registrado (no un descuido).
+> **CORRECTION (D-012, 2026-08-07).** This document describes, in parts, the
+> design of "session owned by Keel via provider API" (RuntimeHost ->
+> ModelExecutor -> API). That direction was REVERTED: **Keel is a PARENT
+> runtime that governs the EXECUTION ENVIRONMENT of the model's CLI and does NOT
+> use provider APIs.** Where this text speaks of calling the model's API, of
+> `keel run`, or of `keel configure executor`, it is OBSOLETE — see
+> `DECISIONES.md` (D-012 a-d) and the real flow in `USO_INSTALACION.md`. The
+> full rewrite of this document to parent-runtime architecture is pending work
+> (not an oversight).
 
-# Contratos del runtime
+# Runtime Contracts
 
-## Operaciones
+## Operations
 
 ```text
 session.start
@@ -26,11 +26,13 @@ delivery
 session.close
 ```
 
-La autorizacion de una operacion es una funcion del estado de sesion, snapshot, fase, receipts, grants, policy y artefactos. El texto del modelo no cambia ese estado.
+Authorization of an operation is a function of session state, snapshot, phase,
+receipts, grants, policy, and artifacts. The model's text does not change that
+state.
 
 ## `skill.read`
 
-Solicitud minima:
+Minimum request:
 
 ```json
 {
@@ -43,7 +45,7 @@ Solicitud minima:
 }
 ```
 
-Respuesta minima:
+Minimum response:
 
 ```json
 {
@@ -60,44 +62,64 @@ Respuesta minima:
 }
 ```
 
-El receipt se registra de forma append-only en SQLite. Al reabrir la sesion, Keel restaura los componentes consumidos y rechaza la sesion si el snapshot no coincide. La fase solicitada debe coincidir con la fase real del runtime; el modelo no puede falsificarla. Una promesa textual no cuenta y produce `REQUIRED_COMPONENT_READ` al intentar avanzar.
+The receipt is registered append-only in SQLite. When reopening the session,
+Keel restores consumed components and rejects the session if the snapshot doesn't
+match. The requested phase must match the runtime's real phase; the model cannot
+fake it. A textual promise doesn't count and produces `REQUIRED_COMPONENT_READ`
+when attempting to advance.
 
-## Fases y artefactos
+## Phases and Artifacts
 
 ```text
 investigation -> planning -> implementation -> verification
               -> audit -> resolution -> acceptance -> delivery
 ```
 
-Cada transicion exige un artefacto valido: Investigation Report, Solution Contract, Implementation Record, Evidence Report, Audit Report, Resolution Record y Acceptance Record. Cada tipo solo puede registrarse en su fase propietaria, por lo que una fase futura no puede precargarse. Keel valida el contenido mediante JSON Schema, calcula el hash canonico y registra tanto el artifact receipt como el transition receipt antes de cambiar el estado en memoria.
+Each transition requires a valid artifact: Investigation Report, Solution
+Contract, Implementation Record, Evidence Report, Audit Report, Resolution
+Record, and Acceptance Record. Each type can only be registered in its owning
+phase, so a future phase cannot be preloaded. Keel validates content via JSON
+Schema, calculates canonical hash, and registers both the artifact receipt and
+transition receipt before changing state in memory.
 
-Las transiciones no pueden saltar fases. Al restaurar, Keel verifica el orden y que cada transición apunte al artefacto valido que la habilito; una historia manipulada falla cerrada.
+Transitions cannot skip phases. On restore, Keel verifies the order and that each
+transition points to the valid artifact that enabled it; manipulated history fails
+closed.
 
-Estado actual: los schemas son entregados a la API de validacion del runtime. Sigue pendiente resolverlos exclusivamente desde contratos compilados en el snapshot.
+Current state: schemas are delivered to the runtime validation API. Resolving them
+exclusively from contracts compiled in the snapshot remains pending.
 
 ## ModelExecutor
 
-El executor recibe `ModelRequest` y devuelve `ModelResponse` normalizados. Expone proveedor/modelo, completion y cancelacion. No decide skills, policies, fases, capabilities, shell, filesystem, MCP ni agentes.
+The executor receives normalized `ModelRequest` and returns normalized
+`ModelResponse`. It exposes provider/model, completion, and cancellation. It
+does not decide skills, policies, phases, capabilities, shell, filesystem, MCP,
+or agents.
 
-El `session_id` del request debe coincidir con el `RuntimeHost`; un request cruzado se rechaza antes de alcanzar al executor.
+The request's `session_id` must match the `RuntimeHost`; a cross-request is
+rejected before reaching the executor.
 
-Implementados: `MockModelExecutor`, Anthropic Messages y OpenAI Responses. Los
-drivers HTTP traducen mensajes, tools, texto y tool calls al contrato normalizado.
-Los CLIs interactivos no son runtime canonico ni quedan como modo alternativo.
-Los smoke tests de proveedores reales requieren una credencial del operador.
+Implemented: `MockModelExecutor`, Anthropic Messages, and OpenAI Responses. HTTP
+drivers translate messages, tools, text, and tool calls to the normalized
+contract. Interactive CLIs are not canonical runtime nor remain as an alternative
+mode. Smoke tests with real providers require operator credentials.
 
 ## AgentScheduler
 
-Contrato objetivo: cada tarea tiene id, sesion, proyecto, parent, profundidad, agent id, executor id, presupuesto, estado y lease. Estados: `pending`, `claimed`, `running`, `completed`, `failed`, `cancelled`. El scheduler debe limitar concurrencia y evitar claims duplicados mediante transaccion SQLite y lease recuperable.
+Target contract: each task has id, session, project, parent, depth, agent id,
+executor id, budget, state, and lease. States: `pending`, `claimed`, `running`,
+`completed`, `failed`, `cancelled`. The scheduler must limit concurrency and
+prevent duplicate claims via SQLite transaction and recoverable lease.
 
-Estado actual: la cola SQLite puede ser durable o en memoria, aplica un limite
-global, hace claim transaccional, renueva leases y recupera tareas cuyo lease
-expira. Todavia no modela limites por proyecto/sesion, profundidad, fan-out,
-grafo, budgets, prioridades ni cancelacion cascada.
+Current state: the SQLite queue can be durable or in-memory, applies a global
+limit, makes transactional claim, renews leases, and recovers tasks whose lease
+expires. It doesn't yet model per-project/session limits, depth, fan-out, graph,
+budgets, priorities, or cascading cancellation.
 
-El agente hijo recibe solo contexto, skills, capabilities, credenciales y presupuesto declarados. La herencia implicita esta prohibida.
+The child agent receives only declared context, skills, capabilities, credentials,
+and budget. Implicit inheritance is forbidden.
 
-## CLI gobernado
+## Governed CLI
 
 ```text
 keel init <workspace> --executor mock [--json]
@@ -107,18 +129,18 @@ keel run --workspace <workspace> --task <text> [--executor <id>] [--json]
 keel run --workspace <workspace> --resume <session-id> [--json]
 ```
 
-`init` deja snapshot, lock, configuracion mock y store validos. `run` solo acepta
-executors resueltos por configuracion Keel, exige que lock y snapshot coincidan,
-crea la identidad de sesion y emite estado, fase, snapshot y executor. Tarea y
-executor quedan persistidos. `resume` continua desde la fase durable, rechaza
-snapshot drift y no permite sustituir el executor fijado.
+`init` leaves valid snapshot, lock, mock config, and store. `run` only accepts
+executors resolved by Keel config, requires lock and snapshot to match, creates
+session identity, and emits state, phase, snapshot, and executor. Task and
+executor are persisted. `resume` continues from durable phase, rejects snapshot
+drift, and does not allow replacing the fixed executor.
 
-Codigos de salida actuales: `0` completado y `1` error, denegacion o sesion no
-terminada. Codigos diferenciados para denegacion/aprobacion quedan pendientes.
+Current exit codes: `0` completed and `1` error, denial, or unfinished session.
+Differentiated codes for denial/approval remain pending.
 
-## Secretos
+## Secrets
 
-Un executor contiene `secret-ref`, nunca el valor. Localmente la referencia
-apunta a Keychain/Secret Service; en CI apunta a una variable de entorno
-declarada. Resolver un secreto es una operacion interna no visible al modelo y
-su valor se excluye de serializacion, logs, errors, snapshot, lock y ledger.
+An executor contains `secret-ref`, never the value. Locally the reference points
+to Keychain/Secret Service; in CI it points to a declared environment variable.
+Resolving a secret is an internal operation not visible to the model, and its
+value is excluded from serialization, logs, errors, snapshot, lock, and ledger.

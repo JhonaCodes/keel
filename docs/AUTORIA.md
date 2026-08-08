@@ -1,58 +1,58 @@
-# Guía de autoría — cómo crear cada tipo
+# Authoring Guide — How to Create Each Type
 
-Referencia práctica para autorar los componentes de un workspace de keel — por
-un humano o por cualquier IA. Cada `kind` va en su carpeta por convención;
-`keel init` ya deja un README + un `.example` en cada una (el loader IGNORA los
-`.example`: nada se activa hasta renombrarlo a `<name>.yaml`).
+Practical reference for authoring components in a Keel workspace — by a human or
+any AI. Each `kind` goes in its folder by convention; `keel init` already leaves
+a README + a `.example` in each (the loader IGNORES `.example`: nothing activates
+until renamed to `<name>.yaml`).
 
-Sobre-escribe siempre el modelo mental: **la regla declara; la tool implementa;
-la tool es código.** Un proceso decidible en frío es una tool determinista (0
-tokens), no una llamada al modelo.
+Always overwrite the mental model: **the rule declares; the tool implements;
+the tool is code.** A cold-decidable process is a deterministic tool (0
+tokens), not a model call.
 
-Flujo mínimo tras autorar cualquier cosa:
+Minimum flow after authoring anything:
 
 ```bash
-keel compile --workspace <ws>   # valida schema + corre RuleTests + publica el snapshot
-keel lock --workspace <ws>      # fija el lock al snapshot (drift detectable con --verify)
+keel compile --workspace <ws>   # validates schema + runs RuleTests + publishes snapshot
+keel lock --workspace <ws>      # fixes lock to snapshot (drift detectable with --verify)
 ```
 
-Las capas viven en `global/` (aplica a todo), `projects/<name>/` (solo ese
-proyecto) y demás (sección 8.5). Los ejemplos usan `global/`; podés autorar lo
-mismo bajo `projects/app/`.
+Layers live in `global/` (applies everywhere), `projects/<name>/` (that project
+only), and elsewhere (section 8.5). Examples use `global/`; you can author the
+same under `projects/app/`.
 
 ---
 
-## Rule — la regla que gobierna una acción
+## Rule — the rule that governs an action
 
-Carpeta: `global/rules/<name>.yaml`. Decide sobre un EVENTO (p.ej.
-`command.requested`, `file.edited`). El veredicto viene de un `validate` (una
-tool), y `enforcement` mapea el veredicto a una decisión.
+Folder: `global/rules/<name>.yaml`. Decides on an EVENT (e.g.
+`command.requested`, `file.edited`). The verdict comes from a `validate` (a
+tool), and `enforcement` maps the verdict to a decision.
 
 ```yaml
 apiVersion: keel/v1alpha1
 kind: Rule
 metadata: { id: global.no-delete-md, author: jhonacode, adrRef: adr:ADR-001, reviewAfter: P6M }
 spec:
-  reversibility: irreversible          # borrar no se deshace; un `unknown` escala a humano
-  on: [command.requested]              # eventos que disparan la regla
-  validate: { using: tool:no-delete-md }   # la tool que da el veredicto (valid/invalid/unknown)
+  reversibility: irreversible          # delete is irreversible; an `unknown` escalates to human
+  on: [command.requested]              # events that trigger the rule
+  validate: { using: tool:no-delete-md }   # the tool that gives the verdict (valid/invalid/unknown)
   enforcement:
     invalid: { decision: block, report: { message: "deleting .md files is forbidden" } }
     valid:   { decision: allow }
 ```
 
-- **Obligatorio en metadata:** `id`, `author`, `adrRef`, `reviewAfter` (ADR-023).
-- **`on`:** uno o varios de los 18 event kinds; el anillo interior
-  (`command.requested`) es pre-acción (bloqueo real).
+- **Mandatory in metadata:** `id`, `author`, `adrRef`, `reviewAfter` (ADR-023).
+- **`on`:** one or more of the 18 event kinds; the inner ring
+  (`command.requested`) is pre-action (real blocking).
 - **`decision`:** `allow` < `review` < `block` < `deny-pending-approval`.
-- **Opcionales:** `scope: { paths: { include: ["src/**"] } }` (limita por ruta),
-  `detect` (prefiltro barato), `preconditions` (estado del mundo), `locked: true`
-  (una capa inferior solo puede fortalecerla).
-- **Forzar un skill (o agente) para un trabajo:** una precondición
-  `builtin:skill.loaded` bloquea la acción hasta que la sesión haya cargado ese
-  skill por keel — así keel NO sugiere, OBLIGA. El packet le dice al modelo cuál
-  cargar (`keel.skills.load`); tras cargarlo, reintenta y pasa. Ejemplo: exigir
-  `web-guide` antes de un `git`:
+- **Optional:** `scope: { paths: { include: ["src/**"] } }` (limit by path),
+  `detect` (cheap pre-filter), `preconditions` (state of the world), `locked: true`
+  (a lower layer can only strengthen it).
+- **Force a skill (or agent) for a job:** a `builtin:skill.loaded` precondition
+  blocks the action until the session has loaded that skill through Keel — so
+  Keel does NOT suggest, it REQUIRES. The packet tells the model which to load
+  (`keel.skills.load`); after loading, it retries and passes. Example: require
+  `web-guide` before a `git`:
 
   ```yaml
   spec:
@@ -66,32 +66,32 @@ spec:
       valid: { decision: allow }
   ```
 
-  (Preconditions builtin: `env.present`, `flag.present`, `skill.loaded`.) Nota:
-  esto gobierna COMANDOS que keel ve por los shims; una escritura interna del
-  cliente que no pasa por un comando no dispara la regla.
-- **Trampa:** los detectores builtin (`text.regex`/`text.contains`) miran el
-  CONTENIDO, no el string del comando. Para decidir sobre un comando por su
-  texto, usá una tool externa (abajo).
+  (Builtin preconditions: `env.present`, `flag.present`, `skill.loaded`.) Note:
+  this governs COMMANDS Keel sees via shims; an internal client write that
+  doesn't pass through a command doesn't trigger the rule.
+- **Gotcha:** builtin detectors (`text.regex`/`text.contains`) look at the
+  CONTENT, not the command string. To decide on a command by its text, use an
+  external tool (below).
 
 ---
 
-## Tool — el código que decide (validate/detect/precondition)
+## Tool — the code that decides (validate/detect/precondition)
 
-Carpeta: `global/tools/<name>.yaml` + el script. keel corre el `command`, le
-pasa el EVENTO como JSON por stdin, e interpreta la salida según `output`.
+Folder: `global/tools/<name>.yaml` + the script. Keel runs the `command`, passes
+the EVENT as JSON on stdin, and interprets output per `output`.
 
 ```yaml
 apiVersion: keel/v1alpha1
 kind: Tool
 metadata: { id: no-delete-md, version: 0.1.0 }
 spec:
-  command: [sh, global/tools/no-delete-md.sh]   # relativo a la raíz del workspace
+  command: [sh, global/tools/no-delete-md.sh]   # relative to workspace root
   timeoutMs: 5000
-  output: exit-code        # exit 0 = valid | exit 1 = invalid | otro = unknown
-                           # (también: verdict-json | sarif)
+  output: exit-code        # exit 0 = valid | exit 1 = invalid | other = unknown
+                           # (also: verdict-json | sarif)
 ```
 
-El script (referenciado arriba). Recibe el evento por stdin; decide por exit code:
+The script (referenced above). Receives event on stdin; decides by exit code:
 
 ```sh
 #!/bin/sh
@@ -102,67 +102,67 @@ case "${first##*/}" in
   rm|unlink)
     if printf '%s' "$cmd" | grep -qiE '\.md($|[^a-zA-Z0-9])'; then exit 1; fi ;;  # .md -> block
 esac
-exit 0   # todo lo demás -> allow
+exit 0   # everything else -> allow
 ```
 
-- La ref desde una regla es `tool:<id>`. `chmod +x` no hace falta si invocás con
+- The ref from a rule is `tool:<id>`. `chmod +x` is not needed if you invoke with
   `[sh, ...]`.
-- Contrato exit-code: **0=allow, 1=block, cualquier otro=unknown** (fail-safe).
+- Exit-code contract: **0=allow, 1=block, any other=unknown** (fail-safe).
 
 ---
 
-## Containment — el anillo duro del SO (kernel)
+## Containment — the hard OS ring (kernel)
 
-Carpeta: `global/containment/<name>.yaml`. Declara SOLO lo que el kernel puede
-imponer, sin importar el PATH. Entra al hash del snapshot; genera el perfil del
-sandbox del SO (macOS Seatbelt; Linux Landlock pendiente).
+Folder: `global/containment/<name>.yaml`. Declares ONLY what the kernel can
+enforce, regardless of PATH. Enters the snapshot hash; generates the OS sandbox
+profile (macOS Seatbelt; Linux Landlock pending).
 
 ```yaml
 apiVersion: keel/v1alpha1
 kind: Containment
 metadata: { id: global.hard.protect-docs }
 spec:
-  denyUnlink: ["**/*.md"]   # no se pueden borrar, ni con /bin/rm (glob exacto en macOS)
-  denyWriteOutside: true    # escrituras confinadas al workspace
+  denyUnlink: ["**/*.md"]   # cannot be deleted, even with /bin/rm (exact glob on macOS)
+  denyWriteOutside: true    # writes confined to workspace
   denyNetwork: false
 ```
 
-- Compone por UNIÓN entre capas (restricciones solo suman).
-- **Cobertura por SO:** ver `CONTENCION_MULTIPLATAFORMA.md`. En Linux el glob de
-  `denyUnlink` NO es kernel-hard (Landlock no tiene globs); queda shim-only.
+- Composes by UNION across layers (restrictions only add up).
+- **Coverage by OS:** see `CONTENCION_MULTIPLATAFORMA.md`. On Linux the `denyUnlink`
+  glob is NOT kernel-hard (Landlock has no globs); it stays shim-only.
 
 ---
 
-## Skill — conocimiento que keel entrega al modelo
+## Skill — knowledge Keel delivers to the model
 
-Carpetas: `global/skills/<name>.yaml` + los `.md` de contenido. El modelo la
-carga vía `keel.skills.load` (MCP); keel registra el receipt.
+Folders: `global/skills/<name>.yaml` + content `.md` files. The model loads it
+via `keel.skills.load` (MCP); Keel registers the receipt.
 
 ```yaml
 apiVersion: keel/v1alpha1
 kind: Skill
 metadata: { id: access-patterns, version: 0.1.0 }
 spec:
-  compact: global/skills/access-patterns_keel.md   # variante corta (primera entrega)
-  full: global/skills/access-patterns-full_keel.md # opcional: variante completa (escala en oscilación)
-  examples:                                        # opcional: pares para el exemplar del packet
+  compact: global/skills/access-patterns_keel.md   # short variant (first delivery)
+  full: global/skills/access-patterns-full_keel.md # optional: full variant (scales on oscillation)
+  examples:                                        # optional: pairs for packet exemplar
     - ["raw SQL query", "use the query builder"]
 ```
 
-- **CONDICIÓN (enforced en compile):** los archivos de contenido de una skill
-  DEBEN terminar en `_keel.md`. Un `compact`/`full` que no lo cumpla es un error
-  de compilación (`SkillNaming`). El sufijo hace legible la procedencia —
-  entregado POR keel — dondequiera que se lea el contenido.
-- El `.md` es texto libre; keel lo entrega tal cual al contexto.
-- Una regla puede pedir cargarla: `enforcement.invalid.load.skills: ["skill:access-patterns"]`.
+- **CONDITION (enforced on compile):** a skill's content files MUST end with
+  `_keel.md`. A `compact`/`full` that doesn't comply is a compile error
+  (`SkillNaming`). The suffix makes provenance legible — delivered BY Keel —
+  wherever content is read.
+- The `.md` is free text; Keel delivers it as-is to context.
+- A rule can request it: `enforcement.invalid.load.skills: ["skill:access-patterns"]`.
 
 ---
 
-## ModelExecutor — un CLI local como "modelo" para agentes
+## ModelExecutor — a local CLI as an "model" for agents
 
-Carpeta: `global/executors/<name>.yaml`. keel corre el `command`, le pasa el
-prompt por stdin y toma stdout como respuesta. **NO es una API de proveedor**
-(D-012): es un comando local.
+Folder: `global/executors/<name>.yaml`. Keel runs the `command`, passes the
+prompt on stdin, and takes stdout as the response. **NOT a provider API**
+(D-012): it's a local command.
 
 ```yaml
 apiVersion: keel/v1alpha1
@@ -170,16 +170,16 @@ kind: ModelExecutor
 metadata: { id: auditor-cli, version: 1.0.0 }
 spec:
   config:
-    command: [codex, exec, --json]   # o [claude, -p], o un script propio
+    command: [codex, exec, --json]   # or [claude, -p], or your own script
 ```
 
 ---
 
-## Agent — una responsabilidad enrutada a un executor
+## Agent — a responsibility routed to an executor
 
-Carpeta: `global/agents/<name>.yaml`. El modelo lo invoca vía
-`keel.agent.invoke`; keel lo corre por el scheduler y valida su salida contra el
-`outputSchema` antes de confiar en ella (transversal entre modelos).
+Folder: `global/agents/<name>.yaml`. The model invokes it via
+`keel.agent.invoke`; Keel runs it through the scheduler and validates its output
+against the `outputSchema` before trusting it (cross-model).
 
 ```yaml
 apiVersion: keel/v1alpha1
@@ -187,12 +187,12 @@ kind: Agent
 metadata: { id: auditor }
 spec:
   role: audit                              # audit | review | implement
-  executor: executor:auditor-cli           # el ModelExecutor que lo corre
+  executor: executor:auditor-cli           # the ModelExecutor that runs it
   objective: Audit the diff for issues.
-  outputSchema: global/agents/verdict.schema.json   # opcional: valida la salida (invariante 12)
+  outputSchema: global/agents/verdict.schema.json   # optional: validates output (invariant 12)
 ```
 
-El schema (JSON Schema estándar):
+The schema (standard JSON Schema):
 
 ```json
 { "type": "object", "required": ["verdict"],
@@ -201,10 +201,10 @@ El schema (JSON Schema estándar):
 
 ---
 
-## RuleTest — prueba una regla, gate del compile
+## RuleTest — test a rule, compile gate
 
-Carpeta raíz `tests/<name>.yaml` (o `projects/<name>/tests/`). `keel compile`
-las corre y NO publica si fallan. Compara la decisión DECLARADA.
+Root folder `tests/<name>.yaml` (or `projects/<name>/tests/`). `keel compile`
+runs them and does NOT publish if they fail. Compares the DECLARED decision.
 
 ```yaml
 apiVersion: keel/v1alpha1
@@ -216,34 +216,32 @@ spec:
   expect: { fired: true, verdict: invalid, decision: block, origin: deterministic }
 ```
 
-Autorá siempre al menos un caso block y uno allow por regla.
+Always author at least one block case and one allow case per rule.
 
 ---
 
-## Exception — relajar una regla `locked`, acotada
+## Exception — relax a `locked` rule, scoped
 
-Carpeta: `global/exceptions/<name>.yaml`. La ÚNICA vía gobernada para relajar una
-regla `locked`, dentro de un scope y con vencimiento; se registra como decisión
-humana.
+Folder: `global/exceptions/<name>.yaml`. The ONLY governed way to relax a
+`locked` rule, within a scope and with expiry; registers as a human decision.
 
 ```yaml
 apiVersion: keel/v1alpha1
 kind: Exception
 metadata: { id: reports-waiver }
 spec:
-  rule: rule:global.no-raw-queries       # la regla locked que se relaja
-  owner: global                          # DEBE ser la capa que la lockeó
+  rule: rule:global.no-raw-queries       # the locked rule to relax
+  owner: global                          # MUST be the layer that locked it
   reason: "Legacy reporting migrates next quarter."
-  scope: { paths: { include: ["src/reports/**"] } }   # el lock se levanta SOLO acá
-  expiry: "2027-01-01"                   # una exception vencida no hace nada
+  scope: { paths: { include: ["src/reports/**"] } }   # lock lifts ONLY here
+  expiry: "2027-01-01"                   # an expired exception does nothing
 ```
 
 ---
 
-## Checklist de autoría
+## Authoring Checklist
 
-1. Poné el archivo en la carpeta del `kind` (renombrado, sin `.example`).
-2. `keel compile` — si el schema o un RuleTest falla, corregí (el error apunta al
-   campo exacto).
-3. `keel lock` — fija el snapshot.
-4. Para reglas nuevas: agregá su RuleTest (block + allow) antes de confiar en ella.
+1. Put the file in its `kind` folder (renamed, no `.example`).
+2. `keel compile` — if schema or a RuleTest fails, fix it (error points to exact field).
+3. `keel lock` — fixes the snapshot.
+4. For new rules: add its RuleTest (block + allow) before trusting it.

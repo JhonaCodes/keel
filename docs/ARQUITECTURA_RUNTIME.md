@@ -1,98 +1,120 @@
-> **CORRECCION (D-012, 2026-08-07).** Este documento describe, en partes, el
-> diseno de "sesion propiedad de keel via API de proveedor" (RuntimeHost ->
-> ModelExecutor -> API). Esa direccion fue REVERTIDA: **keel es un runtime
-> PADRE que gobierna el ENTORNO DE EJECUCION del CLI del modelo y NO usa APIs de
-> proveedor.** Donde este texto hable de llamar a la API del modelo, de `keel
-> run` o de `keel configure executor`, esta OBSOLETO — manda `DECISIONES.md`
-> (D-012 a-d) y el flujo real en `USO_INSTALACION.md`. La reescritura integral
-> de este documento a la arquitectura de runtime-padre es trabajo pendiente
-> registrado (no un descuido).
+> **CORRECTION (D-012, 2026-08-07).** This document describes, in parts, the
+> design of "session owned by Keel via provider API" (RuntimeHost ->
+> ModelExecutor -> API). That direction was REVERTED: **Keel is a PARENT
+> runtime that governs the EXECUTION ENVIRONMENT of the model's CLI and does NOT
+> use provider APIs.** Where this text speaks of calling the model's API, of
+> `keel run`, or of `keel configure executor`, it is OBSOLETE — see
+> `DECISIONES.md` (D-012 a-d) and the real flow in `USO_INSTALACION.md`. The
+> full rewrite of this document to parent-runtime architecture is pending work
+> (not an oversight).
 
-# Arquitectura del runtime
+# Runtime Architecture
 
-## Propiedad y limites
+## Ownership and Boundaries
 
-Keel gobierna el ciclo de intencion, contexto, razonamiento, plan, delegacion, accion, verificacion y entrega. El modelo produce propuestas; Keel decide que contexto se habilita, que operacion puede avanzar y que capability se ejecuta.
+Keel governs the cycle of intention, context, reasoning, planning, delegation,
+action, verification, and delivery. The model produces proposals; Keel decides
+what context is enabled, what operation can proceed, and what capability executes.
 
 ```text
-entrada estructurada
-  -> sesion + fase + snapshot inmutable
-  -> resolver de componentes y contexto
+structured input
+  -> session + phase + immutable snapshot
+  -> component and context resolver
   -> ModelExecutor
-  -> respuesta normalizada (texto/tool call/agent request/artefacto)
+  -> normalized response (text/tool call/agent request/artifact)
   -> verification + policy + grants
-  -> capability o AgentBroker
-  -> ledger de evidencia
-  -> transicion observable
+  -> capability or AgentBroker
+  -> evidence ledger
+  -> observable transition
 ```
 
-La propiedad es del proceso de Keel. Un modelo que puede editar el cliente, invocar shell directamente o cambiar el snapshot queda fuera del modo gobernado.
+Ownership is of the Keel process. A model that can edit the client, invoke shell
+directly, or change the snapshot is outside governed mode.
 
-## Vocabulario completo observado
+## Complete Observed Vocabulary
 
-### Recursos y capacidades
+### Resources and Capabilities
 
-- `Skill`: conocimiento operativo compacto/full y ejemplos.
-- `Knowledge`: fuente consultable con provenance.
-- `Blueprint`: plantilla de trabajo, inputs, outputs, fases y requisitos.
-- `Agent`: responsabilidad logica; no es un proceso ni un proveedor.
-- `Workflow`: fases, transiciones y artefactos requeridos.
-- `Tool`: funcion determinista local o externa.
-- `MCPProvider`: capability externa normalizada; nunca autoridad de fases.
-- `Hook`: trigger interno de eventos Keel.
-- `Policy`/`Rule`: decision, deteccion, precondiciones, validacion y enforcement.
+- `Skill`: compact/full operational knowledge and examples.
+- `Knowledge`: queryable source with provenance.
+- `Blueprint`: work template, inputs, outputs, phases, and requirements.
+- `Agent`: logical responsibility; not a process or provider.
+- `Workflow`: phases, transitions, and required artifacts.
+- `Tool`: deterministic local or external function.
+- `MCPProvider`: normalized external capability; never phase authority.
+- `Hook`: internal Keel event trigger.
+- `Policy`/`Rule`: decision, detection, preconditions, validation, and enforcement.
 
-### Control y evidencia
+### Control and Evidence
 
-- `ModelExecutor`: frontera con Claude, Codex u otro modelo.
-- `ComponentRegistry`: indice de recursos declarados en el snapshot.
-- `ContextResolver` y `CapabilityManager`: seleccion y grants de contexto/capabilities.
-- `AgentBroker` y `AgentScheduler`: routing, aislamiento, limites, leases y cancelacion.
-- `PhaseController`/guards: transiciones con condiciones observables.
-- `EvidenceLedger`, `Receipt`, `Provenance` y `Attestation`: trazabilidad y limites de observabilidad.
-- `Snapshot`, `Lock`, `Binding`, `Identity` y `RepositoryRegistry`: identidad y reproducibilidad de la configuracion efectiva.
-- `Composition`, `Profile` y `Exception`: herencia monotona y relajaciones acotadas.
-- `Scope`, `Constraint`, `Detector`, `Precondition` y `Validator`: aplicabilidad y evaluacion.
+- `ModelExecutor`: boundary with Claude, Codex, or other model.
+- `ComponentRegistry`: index of resources declared in the snapshot.
+- `ContextResolver` and `CapabilityManager`: selection and grants of context/capabilities.
+- `AgentBroker` and `AgentScheduler`: routing, isolation, limits, leases, and cancellation.
+- `PhaseController`/guards: transitions with observable conditions.
+- `EvidenceLedger`, `Receipt`, `Provenance`, and `Attestation`: traceability and observability boundaries.
+- `Snapshot`, `Lock`, `Binding`, `Identity`, and `RepositoryRegistry`: identity and reproducibility of effective config.
+- `Composition`, `Profile`, and `Exception`: monotone inheritance and scoped relaxations.
+- `Scope`, `Constraint`, `Detector`, `Precondition`, and `Validator`: applicability and evaluation.
 
-## Modelo de amenazas
+## Threat Model
 
-La capa de prompt no es una frontera de seguridad. La seguridad practica depende de que el modelo no tenga acceso directo a filesystem, shell, Git, MCP o configuracion de proveedor, y de que cada capability pase por Keel. El plano local no protege contra un usuario con privilegios sobre el proceso anfitrion; ese limite se declara como advisory. Sandbox fuerte y CI son planos adicionales.
+The prompt layer is not a security boundary. Practical security depends on the
+model having no direct access to filesystem, shell, Git, MCP, or provider config,
+and every capability passing through Keel. The local plane does not protect
+against a user with privileges over the host process; that limit is declared as
+advisory. Strong sandboxing and CI are additional planes.
 
-## Skills y contexto
+## Skills and Context
 
-Los archivos viven en `skills/` dentro del workspace Keel. El snapshot registra identidad, version y rutas; `RuntimeHost::from_snapshot` hidrata desde esa raiz. `skill.read` calcula el hash del contenido entregado y crea un receipt. `plan.submit`, `action.request`, `agent.invoke`, `phase.advance` y `delivery` se bloquean si falta un skill requerido.
+Files live in `skills/` within the Keel workspace. The snapshot records identity,
+version, and paths; `RuntimeHost::from_snapshot` hydrates from that root.
+`skill.read` calculates the hash of delivered content and creates a receipt.
+`plan.submit`, `action.request`, `agent.invoke`, `phase.advance`, and `delivery`
+block if a required skill is missing.
 
-El runtime puede garantizar disponibilidad, lectura protocolizada y version/hash. No puede demostrar comprension interna del modelo.
+The runtime can guarantee availability, protocolized reading, and version/hash.
+It cannot prove the model's internal comprehension.
 
-## Estado durable y fases
+## Durable State and Phases
 
-`RuntimeStore` conserva sesiones, component receipts, artifact receipts y phase transition receipts en SQLite. La evidencia es append-only; la fase efectiva se reconstruye desde la historia. Reabrir una sesion con otro snapshot, una secuencia de fases invalida o un guard que apunte a un artefacto no valido falla cerrado.
+`RuntimeStore` preserves sessions, component receipts, artifact receipts, and
+phase-transition receipts in SQLite. Evidence is append-only; the effective phase
+is reconstructed from history. Reopening a session with a different snapshot, an
+invalid phase sequence, or a guard pointing to an invalid artifact fails closed.
 
-La secuencia base es Investigation, Planning, Implementation, Verification, Audit, Resolution, Acceptance y Delivery. El runtime valida el contenido del artefacto con JSON Schema y calcula su hash canonico antes de permitir la transicion. El siguiente paso arquitectonico es compilar workflows, contracts y schemas dentro del snapshot para que la API no reciba el schema desde el llamador.
+The base sequence is Investigation, Planning, Implementation, Verification,
+Audit, Resolution, Acceptance, and Delivery. The runtime validates artifact
+content with JSON Schema and calculates its canonical hash before allowing the
+transition. The next architectural step is to compile workflows, contracts, and
+schemas into the snapshot so the API doesn't receive the schema from the caller.
 
-## Integraciones
+## Integrations
 
-La integracion normativa es `Keel Runtime -> ModelExecutor -> proveedor`. Los CLIs interactivos, hooks y settings de proveedores no forman parte de la entrega final. MCP solo conecta una capability declarada, con permisos, policy, provenance y evidencia; no transporta el control de Keel.
+The normative integration is `Keel Runtime -> ModelExecutor -> provider`.
+Interactive CLIs, hooks, and provider settings are not part of the final
+delivery. MCP only connects a declared capability, with permissions, policy,
+provenance, and evidence; it does not carry Keel control.
 
-## Proceso y entrada del producto
+## Process and Product Entry
 
-La primera implementacion usa un proceso efimero por sesion:
+The first implementation uses an ephemeral process per session:
 
 ```text
 keel run
-  -> resuelve binding + lock + snapshot
-  -> abre/restaura RuntimeStore
-  -> construye RuntimeHost y ModelExecutor
-  -> ejecuta el loop hasta delivery, cancelacion o error
-  -> cierra executor y persiste evidencia
+  -> resolves binding + lock + snapshot
+  -> opens/restores RuntimeStore
+  -> builds RuntimeHost and ModelExecutor
+  -> executes loop until delivery, cancellation, or error
+  -> closes executor and persists evidence
 ```
 
-El proceso es soberano porque el modelo solo recibe operaciones y capabilities
-mediadas, no porque permanezca como daemon. La persistencia permite reanudar; un
-daemon posterior solo optimizaria latencia y sesiones concurrentes.
+The process is sovereign because the model only receives mediated operations and
+capabilities, not because it persists as a daemon. Persistence allows resumption;
+a later daemon would only optimize latency and concurrent sessions.
 
-El CLI es la unica entrada de usuario. `init` crea y compila; `configure`
-administra executors y secretos; `doctor --governed` valida snapshot, lock,
-configuracion y store; `run` inicia o continua una sesion. Tarea y executor
-quedan fijados en SQLite para que una reanudacion no cambie su identidad. Ningun
-paso escribe configuracion de proveedores ni archivos de instrucciones.
+The CLI is the only user entry point. `init` creates and compiles; `configure`
+manages executors and secrets; `doctor --governed` validates snapshot, lock,
+config, and store; `run` starts or resumes a session. Task and executor are
+fixed in SQLite so resumption doesn't change identity. No step writes provider
+config or instruction files.
