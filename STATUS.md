@@ -18,9 +18,9 @@
 - `keel claude` / `keel codex` / `keel launch --client generic -- <cmd>`
   lanzan el CLI cliente como hijo gobernado: PTY passthrough + interposición
   de comandos — un comando bloqueado nunca llega a existir como proceso.
-- **P1 (interposición determinista):** reglas YAML compiladas se evalúan vía
-  `keel_engine::runtime::evaluate_event` en dos canales — el shim de PATH
-  (`keel-host/src/broker.rs`) y el puente de hook por cliente
+- **P1 — interposición determinista (dos anillos):** reglas YAML compiladas
+  se evalúan vía `keel_engine::runtime::evaluate_event` en dos canales — el
+  shim de PATH (`keel-host/src/broker.rs`) y el puente de hook por cliente
   (`keel gate`, `keel-cli/src/gate.rs`). Preconditions builtin disponibles:
   `env.present`, `flag.present`, `skill.loaded`, `evidence.recorded` (bloquea
   una acción hasta que exista evidencia de un evento pasado en la sesión,
@@ -28,18 +28,20 @@
   conjunto FIJO de comandos por defecto (`DEFAULT_SHIM_COMMANDS`:
   `rm`, `unlink`, `mv`, `git`, `dd`, `shred`) — una regla `command.classify`
   sobre otra familia compila y pasa su `RuleTest` sin aviso, pero nunca
-  dispara en una sesión real (ver `docs/AUTORIA.md`).
-- **P2 (anillo duro):** `kind: Containment` se aplica de verdad — sandbox de
-  SO real (Seatbelt/Landlock) envolviendo el argv del cliente
+  dispara en una sesión real (ver `docs/AUTORIA.md`). El segundo anillo de
+  P1 es el anillo duro del SO: `kind: Containment` se aplica de verdad —
+  sandbox real (Seatbelt/Landlock) envolviendo el argv del cliente
   (`keel-host/src/sandbox.rs`, `launch.rs`), no solo declarado en schema.
-  `--containment shims` permite optar por un nivel más débil explícitamente.
-- **P3 (convergencia MCP):** `keel-host/src/mcp.rs` implementa un servidor
+  `--containment shims` permite optar por el anillo más débil
+  explícitamente. Ninguno de los dos anillos de P1 depende de P2/P3.
+- **P2 — convergencia MCP:** `keel-host/src/mcp.rs` implementa un servidor
   JSON-RPC 2.0 real por stdio (`keel.skills.list`, `keel.skills.load`,
   `keel.rules.query`, `keel.agent.invoke`) que el cliente lanzado consume
-  para descubrir skills/agentes gobernados — no es un stub.
-- **Supervisor / oscilación:** `keel-host/src/supervisor.rs` detecta
-  oscilación (misma regla+ubicación repetida) y sugiere dirección cognitiva
-  al operador sin interferir con el enforcement (`--no-suggest` la apaga).
+  para descubrir skills/agentes gobernados — no es un stub. La convergencia
+  NO es enforcement: si el hijo ignora la config del MCP, P1 sigue activo.
+- **P3 — dirección cognitiva (supervisor):** `keel-host/src/supervisor.rs`
+  detecta oscilación (misma regla+ubicación repetida) y sugiere al operador
+  sin interferir con el enforcement (`--no-suggest` la apaga).
 - **Memoria versionada (`kind: Knowledge`):** `keel knowledge append|verify`
   hace crecer una cadena de hashes encadenados (Merkle-log) anclada en
   `.keel/keel.lock` como `knowledge_checkpoints` — crecer no dispara drift

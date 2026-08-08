@@ -23,12 +23,19 @@ Installs `keel` and `keel-shim` (they travel together).
 ```bash
 keel init ~/keel-workspace --json
 keel doctor --workspace ~/keel-workspace --governed --json
-keel claude --workspace ~/keel-workspace     # or: keel codex, or keel launch --client generic -- <cmd>
+keel claude          # init already registered ~/keel-workspace as the default — or: keel codex
 ```
 
 `init` creates the workspace, binding, snapshot, lock, and SQLite store. It does not
 create or modify provider configuration: keel governs the CLI's ENVIRONMENT, not
 its API.
+
+`keel claude [args...]` / `keel codex [args...]` is a pure passthrough shorthand
+for `keel launch --client <name> -- [args...]` — it does NOT parse `--workspace`
+(or any other `launch` flag) itself; anything after `claude`/`codex` is forwarded
+as-is to the real client binary. To target a workspace other than the current
+directory or the one `keel init`/`keel use` last registered as default, use the
+full form: `keel launch --client claude --workspace ~/keel-workspace -- <args>`.
 
 `init` ships with zero rules on purpose — nothing is enforced until you author
 some. For a working, non-trivial workspace with real rules and passing tests
@@ -53,10 +60,14 @@ another, with no API.
 
 ## Workspace
 
-Supports `rules`, `tools`, `skills`, `agents`, `containment`, `blueprints`,
-`knowledge`, `workflows`, `contracts`, `hooks`, `policies`, and `executors`
-(local CLI commands). Components are validated, hashed, and compiled into an
-immutable snapshot; the lock fixes them (`keel lock --verify` detects drift).
+Supports `rules`, `tools`, `skills`, `agents`, `containment`, `exceptions`,
+`blueprints`, `knowledge`, `workflows`, `contracts`, `hooks`, `policies`, and
+`executors` (local CLI commands). Components are validated, hashed, and
+compiled into an immutable snapshot; the lock fixes them (`keel lock
+--verify` detects drift). `rules`, `tools`, `skills`, `agents`, `containment`,
+`exceptions`, and `knowledge` are enforced/consumed today; `blueprints`,
+`workflows`, `contracts`, `hooks`, and `policies` are validated and hashed
+but not yet evaluated beyond generic storage (see `STATUS.md`).
 
 ## Development
 
