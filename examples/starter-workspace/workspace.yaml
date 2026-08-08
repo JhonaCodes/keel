@@ -1,0 +1,5 @@
+apiVersion: keel/v1alpha1
+kind: Workspace
+metadata: { id: starter-workspace }
+spec:
+  description: Starter workspace with real, testable rules — a copy-paste starting point, not a tutorial fixture.

@@ -1,0 +1,5 @@
+apiVersion: keel/v1alpha1
+kind: Knowledge
+metadata: { id: session-notes, version: 0.1.0 }
+spec:
+  content: .keel-state/knowledge/session-notes.sqlite

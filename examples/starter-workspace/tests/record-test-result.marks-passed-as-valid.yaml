@@ -1,0 +1,7 @@
+apiVersion: keel/v1alpha1
+kind: RuleTest
+metadata: { id: starter.record-test-result.marks-passed-as-valid }
+spec:
+  target: rule:starter.record-test-result
+  event: { kind: test.completed, content: "3 passed" }
+  expect: { fired: true, verdict: valid, decision: allow, origin: deterministic }

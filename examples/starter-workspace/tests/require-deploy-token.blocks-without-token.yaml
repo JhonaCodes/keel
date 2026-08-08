@@ -1,0 +1,7 @@
+apiVersion: keel/v1alpha1
+kind: RuleTest
+metadata: { id: starter.require-deploy-token.blocks-without-token }
+spec:
+  target: rule:starter.require-deploy-token
+  event: { kind: command.requested, command: "git --version" }
+  expect: { fired: true, verdict: invalid, decision: block, origin: deterministic }
