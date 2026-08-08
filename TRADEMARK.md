@@ -1,5 +1,7 @@
 # Keel Trademark Policy
 
+![Keel Logo](assets/logo.png)
+
 "Keel" is a trademark of JhonaCodes, the author of this project.
 
 The source code of this project is licensed under the Apache License 2.0. As
@@ -11,7 +13,7 @@ stated in Section 6 of that license, the license grants you rights to the
 You may:
 - Use, modify, and redistribute the code under the terms of Apache 2.0.
 - State truthfully that your product "is built on Keel" or "is compatible with
-  the Keel / RCCA specification".
+  the Keel / RACC specification".
 
 You may not, without written permission:
 - Name a fork, derivative, or competing product "Keel" (or a confusingly

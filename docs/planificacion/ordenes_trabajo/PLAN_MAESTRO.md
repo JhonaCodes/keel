@@ -1,100 +1,100 @@
-> **CORRECCION (D-012, 2026-08-07).** Este documento describe, en partes, el
-> diseno de "sesion propiedad de keel via API de proveedor" (RuntimeHost ->
-> ModelExecutor -> API). Esa direccion fue REVERTIDA: **keel es un runtime
-> PADRE que gobierna el ENTORNO DE EJECUCION del CLI del modelo y NO usa APIs de
-> proveedor.** Donde este texto hable de llamar a la API del modelo, de `keel
-> run` o de `keel configure executor`, esta OBSOLETO — manda `DECISIONES.md`
-> (D-012 a-d) y el flujo real en `USO_INSTALACION.md`. La reescritura integral
-> de este documento a la arquitectura de runtime-padre es trabajo pendiente
-> registrado (no un descuido).
+> **CORRECTION (D-012, 2026-08-07).** This document describes, in parts, the
+> design of "session owned by Keel via provider API" (RuntimeHost ->
+> ModelExecutor -> API). That direction was REVERTED: **Keel is a PARENT
+> runtime that governs the EXECUTION ENVIRONMENT of the model's CLI and does NOT
+> use provider APIs.** Where this text speaks of calling the model's API, of
+> `keel run`, or of `keel configure executor`, it is OBSOLETE — see
+> `DECISIONES.md` (D-012 a-d) and the real flow in `USO_INSTALACION.md`. The
+> full rewrite of this document to parent-runtime architecture is pending work
+> (not an oversight).
 
-# Plan maestro - cierre del runtime gobernado
+# Master Plan — Closing the Governed Runtime
 
-## Objetivo
+## Objective
 
-Keel posee la sesion y el ciclo cognitivo. Los proveedores son
-`ModelExecutor`; recursos, operaciones, capabilities, agentes, fases y evidencia
-se resuelven dentro del runtime.
+Keel owns the session and cognitive cycle. Providers are `ModelExecutor`;
+resources, operations, capabilities, agents, phases, and evidence are resolved
+within the runtime.
 
-## Implementado
+## Implemented
 
-### M0 - vertical CLI
+### M0 - CLI Vertical
 
-- Prueba black-box `init -> configure -> doctor -> run -> resume`.
-- `init` publica snapshot y lock, crea configuracion mock y store SQLite.
-- `run` inicia o continua una sesion gobernada sin configuracion manual; tarea,
-  executor y snapshot quedan fijados para reanudacion fail-closed.
+- Black-box test `init -> configure -> doctor -> run -> resume`.
+- `init` publishes snapshot and lock, creates mock config and SQLite store.
+- `run` starts or continues a governed session without manual config; task,
+  executor, and snapshot are fixed for fail-closed resumption.
 
-### M1 - vocabulario y snapshot
+### M1 - Vocabulary and Snapshot
 
-- Kinds compilados: Rule, Tool, Skill, Agent, Blueprint, Knowledge, Workflow,
-  Contract, Hook, MCPProvider, ModelExecutor, AgentRoutingPolicy y Policy.
-- Registry abierto, requirements por fase, contenido, provenance y hash dentro
-  del snapshot/lock.
-- Referencias ausentes fallan durante compilacion.
+- Compiled kinds: Rule, Tool, Skill, Agent, Blueprint, Knowledge, Workflow,
+  Contract, Hook, MCPProvider, ModelExecutor, AgentRoutingPolicy, and Policy.
+- Open registry, requirements per phase, content, provenance, and hash within
+  snapshot/lock.
+- Missing references fail during compilation.
 
-### M2 - contexto y loop
+### M2 - Context and Loop
 
-- Lectura generalizada de skills y componentes con receipts persistentes.
-- Requirements pendientes bloquean plan, action, agent, transition y delivery.
-- Cada fase llama al executor en un loop acotado, despacha operaciones Keel y
-  reinyecta sus resultados antes de aceptar el artefacto.
+- Generalized skill and component reading with persistent receipts.
+- Pending requirements block plan, action, agent, transition, and delivery.
+- Each phase calls the executor in a bounded loop, dispatches Keel operations,
+  and reinjects results before accepting the artifact.
 
-### M3 - capabilities
+### M3 - Capabilities
 
-- `CapabilityManager` concede explicitamente filesystem, shell o Git.
-- Paths quedan confinados al workspace.
-- Las rules se evaluan en modo enforce antes del side effect.
-- Una capability ausente o denegada falla cerrado.
+- `CapabilityManager` explicitly grants filesystem, shell, or Git.
+- Paths remain confined to workspace.
+- Rules evaluate in enforce mode before side effect.
+- An absent or denied capability fails closed.
 
-### M4 - agentes
+### M4 - Agents
 
-- `AgentBroker` resuelve Agent -> ModelExecutor y valida output contract.
-- Scheduler SQLite con estados, limite de concurrencia, claims y leases.
-- `agent.invoke` esta conectado al loop, resuelve la configuracion local del
-  executor hijo y devuelve `AgentResult` al padre.
-- Test cross-provider logico padre Claude -> agente Codex.
+- `AgentBroker` resolves Agent -> ModelExecutor and validates output contract.
+- SQLite scheduler with states, concurrency limit, claims, and leases.
+- `agent.invoke` is connected to the loop, resolves child executor local config,
+  and returns `AgentResult` to parent.
+- Cross-provider logical test parent Claude -> agent Codex.
 
-### M5 - executors y configuracion
+### M5 - Executors and Configuration
 
-- Drivers HTTP para Anthropic Messages y OpenAI Responses.
-- `configure executor add/list/test/remove/default`.
-- Secretos por referencia de entorno o Keychain/Secret Service.
-- Mock determinista obligatorio para CI y demostracion.
+- HTTP drivers for Anthropic Messages and OpenAI Responses.
+- `configure executor add|list|test|remove|default`.
+- Secrets by environment reference or Keychain/Secret Service.
+- Deterministic mock mandatory for CI and demonstration.
 
-### M6 - reemplazo
+### M6 - Replacement
 
-- Eliminada toda la integracion dependiente del cliente, los executors por
-  comando, paquetes de contexto, tests y datasets asociados.
-- Scaffold sin carpetas de proveedor, con recursos gobernados y executor mock.
-- Instalador funcional desde checkout para macOS/Linux.
+- Removed all client-dependent integration, command-based executors, context
+  packages, tests, and associated datasets.
+- Scaffold without provider folders, with governed resources and mock executor.
+- Functional installer from checkout for macOS/Linux.
 
-## Trabajo restante para version estable
+## Remaining Work for Stable Release
 
-1. **Workflow compilado:** reemplazar la maquina fija por fases/transiciones y
-   contracts resueltos completamente desde el snapshot.
-2. **Scheduler completo:** maxDepth, fan-out, ciclos, tokens, coste, prioridades,
-   recuperacion tras crash y cancelacion cascada.
-3. **AgentBroker completo:** aislar componentes/capabilities del hijo, aplicar
-   timeout/cancelacion y registrar budgets/usage reales.
-4. **MCPProvider:** implementar transports, discovery, normalizacion de tools,
-   secret refs, policy pre/post y provenance.
-5. **Hooks internos:** dispatcher de eventos con acciones declaradas, sin poder
-   modificar snapshot o saltar policy.
-6. **Ledger unificado:** registrar requests/responses hasheados, capability
-   decisions, delegaciones, usage, costes y cierre de sesion.
-7. **Distribucion:** releases firmados macOS/Linux, checksum, self-update,
-   rollback y pruebas desde artefacto empaquetado.
-8. **Aislamiento fuerte:** runners sandbox por plataforma para procesos y MCP.
+1. **Compiled Workflow:** replace fixed machine with phases/transitions and
+   contracts resolved entirely from snapshot.
+2. **Complete Scheduler:** maxDepth, fan-out, cycles, tokens, cost, priorities,
+   crash recovery, and cascading cancellation.
+3. **Complete AgentBroker:** isolate child components/capabilities, apply
+   timeout/cancellation, and register real budgets/usage.
+4. **MCPProvider:** implement transports, discovery, tool normalization, secret
+   refs, pre/post policy, and provenance.
+5. **Internal Hooks:** event dispatcher with declared actions, no power to modify
+   snapshot or skip policy.
+6. **Unified Ledger:** record hashed requests/responses, capability decisions,
+   delegations, usage, costs, and session closure.
+7. **Distribution:** signed releases macOS/Linux, checksum, self-update, rollback,
+   and testing from packaged artifact.
+8. **Strong Isolation:** sandbox runners per platform for processes and MCP.
 
-## Orden obligatorio
+## Mandatory Order
 
 1. Workflow/contracts.
-2. Ledger y usage.
-3. Scheduler/broker completo.
-4. MCPProvider y hooks internos.
+2. Ledger and usage.
+3. Complete scheduler/broker.
+4. MCPProvider and internal hooks.
 5. Sandbox.
-6. Packaging firmado.
+6. Signed packaging.
 
-Cada punto se implementa con prueba RED, test de integracion y prueba black-box.
-No se reintroducen mecanismos de cliente ni codigo legacy.
+Each item is implemented with RED test, integration test, and black-box test.
+No client mechanisms or legacy code are reintroduced.

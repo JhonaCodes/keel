@@ -19,7 +19,7 @@ Este directorio separa la documentación estable del proyecto de las órdenes de
 - [`PROYECTO.md`](PROYECTO.md): descripción del proyecto (banner D-012).
 - [`ARQUITECTURA_RUNTIME.md`](ARQUITECTURA_RUNTIME.md): arquitectura técnica (banner D-012).
 - [`CONTRATOS_RUNTIME.md`](CONTRATOS_RUNTIME.md): operaciones, executors y scheduler (banner D-012).
-- [`RCCA_reference_architecture_v0_9_1.md`](RCCA_reference_architecture_v0_9_1.md): especificación normativa RCCA/Keel (banner D-012).
+- [`RACC_reference_architecture_v0_9_1.md`](RACC_reference_architecture_v0_9_1.md): especificación normativa RACC/Keel (banner D-012).
 
 ## Órdenes de trabajo
 
