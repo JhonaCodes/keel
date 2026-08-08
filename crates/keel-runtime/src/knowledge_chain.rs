@@ -220,7 +220,10 @@ impl KnowledgeChain {
     /// entire suffix of the chain — that needs an external witness (a
     /// checkpoint anchored outside this database, e.g. in a versioned
     /// `keel.lock`), which is intentionally out of scope for this module.
-    pub fn verify_chain(&self, component_id: &str) -> Result<ChainVerification, KnowledgeChainError> {
+    pub fn verify_chain(
+        &self,
+        component_id: &str,
+    ) -> Result<ChainVerification, KnowledgeChainError> {
         let entries = self.entries(component_id)?;
         let mut expected_prev_hash: Option<String> = None;
         let mut verified: u64 = 0;

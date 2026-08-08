@@ -850,7 +850,10 @@ pub(crate) fn lock(root: &Path, verify: bool) -> Result<ExitCode> {
 /// elsewhere): a component with no chain file yet (nothing appended so far)
 /// or an unreadable one is simply absent from the map, never a `keel lock`
 /// failure — locking a workspace before any knowledge has grown is normal.
-fn knowledge_checkpoints(root: &Path, snapshot: &Snapshot) -> std::collections::BTreeMap<String, String> {
+fn knowledge_checkpoints(
+    root: &Path,
+    snapshot: &Snapshot,
+) -> std::collections::BTreeMap<String, String> {
     snapshot
         .components
         .values()

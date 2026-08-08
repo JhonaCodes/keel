@@ -442,7 +442,15 @@ fn a_write_is_blocked_until_red_evidence_is_recorded_in_the_session() {
     // evidence is genuinely session-scoped, read back from the ledger, not a
     // fixture threaded through by the test).
     let record = workspace.run_stdin(
-        &["gate", "--client", "native", "--workspace", &root, "--session", "s1"],
+        &[
+            "gate",
+            "--client",
+            "native",
+            "--workspace",
+            &root,
+            "--session",
+            "s1",
+        ],
         r#"{"kind":"test.completed","session_id":"s1","content":"1 failed — assertion FAILED"}"#,
     );
     assert_eq!(

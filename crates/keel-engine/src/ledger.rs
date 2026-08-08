@@ -346,7 +346,10 @@ impl Ledger {
     /// from this before evaluation, so a rule can require evidence of a past
     /// event without the runtime ever querying the ledger itself. `DISTINCT`
     /// bounds the result at `#EventKind * #Verdict` regardless of ledger size.
-    pub fn recorded_evidence(&self, session_id: &str) -> rusqlite::Result<Vec<(EventKind, Verdict)>> {
+    pub fn recorded_evidence(
+        &self,
+        session_id: &str,
+    ) -> rusqlite::Result<Vec<(EventKind, Verdict)>> {
         let mut stmt = self
             .conn
             .prepare("SELECT DISTINCT event_kind, verdict FROM evidence WHERE session_id = ?1")?;
@@ -354,10 +357,18 @@ impl Ledger {
             let ek: String = row.get(0)?;
             let v: String = row.get(1)?;
             let event_kind: EventKind = serde_json::from_str(&ek).map_err(|e| {
-                rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
+                rusqlite::Error::FromSqlConversionFailure(
+                    0,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
             })?;
             let verdict: Verdict = serde_json::from_str(&v).map_err(|e| {
-                rusqlite::Error::FromSqlConversionFailure(1, rusqlite::types::Type::Text, Box::new(e))
+                rusqlite::Error::FromSqlConversionFailure(
+                    1,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
             })?;
             Ok((event_kind, verdict))
         })?;

@@ -55,8 +55,12 @@ pub struct Finding {
 /// IDs of builtins supported in Phase 0. This is the list the compiler uses
 /// to resolve references (spec section 10.1 "Tool validation").
 pub const BUILTIN_DETECTORS: &[&str] = &["text.contains", "text.regex", "command.classify"];
-pub const BUILTIN_PRECONDITIONS: &[&str] =
-    &["env.present", "flag.present", "skill.loaded", "evidence.recorded"];
+pub const BUILTIN_PRECONDITIONS: &[&str] = &[
+    "env.present",
+    "flag.present",
+    "skill.loaded",
+    "evidence.recorded",
+];
 
 /// Runs a builtin DETECTOR. Returns only hit/no-hit: the detector never
 /// decides (section 4.5) — a match opens the door to `validate`, nothing more.

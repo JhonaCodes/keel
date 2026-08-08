@@ -124,7 +124,12 @@ fn recorded_evidence_is_distinct_and_scoped_to_the_session() {
         ledger
             .append(&LedgerEntry {
                 event_kind: EventKind::TestCompleted,
-                ..entry(&format!("ev_s1_{i}"), "r1", Verdict::Invalid, "2026-01-01T00:00:00Z")
+                ..entry(
+                    &format!("ev_s1_{i}"),
+                    "r1",
+                    Verdict::Invalid,
+                    "2026-01-01T00:00:00Z",
+                )
             })
             .unwrap();
     }
