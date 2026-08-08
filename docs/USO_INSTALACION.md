@@ -32,8 +32,14 @@ keel doctor --workspace ~/keel-workspace --governed
 compiles the snapshot, fixes the lock, opens the store, and **registers the
 workspace as your default** (`~/.keel/config.json`), so `keel claude` works from
 anywhere without `--workspace`. `doctor --governed` verifies that the snapshot
-loads, the lock matches the published snapshot, and the store opens. (`--json` on
-any command produces single-line output for scripts.)
+loads, the lock matches the published snapshot, and the store opens.
+
+**`--json` is not uniform across commands (verify before scripting against
+it).** `doctor --json` prints pure single-line JSON on stdout. `init --json`
+prints the normal human-readable trace of each step it orchestrates (scaffold,
+compile, lock) and appends ONE trailing JSON summary line — it does not
+suppress the rest. A script that wants only the JSON from `init` should read
+the LAST line of stdout, not the whole output.
 
 Workspace resolution order: `--workspace` > `KEEL_WORKSPACE` > walk up from cwd
 to `workspace.yaml` > **the registered default** > error.

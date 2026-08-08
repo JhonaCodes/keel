@@ -36,8 +36,11 @@ const LONG_VERSION: &str = concat!(
     version,
     long_version = LONG_VERSION,
     about = "Keel — agentic cognitive cycle runtime that holds the line on AI-agent actions",
-    long_about = "Keel owns model sessions, resolves declarative context and capabilities from an \
-                  immutable snapshot, validates phase artifacts and records durable evidence."
+    long_about = "Keel is a parent runtime that runs locally: it executes ABOVE a model's CLI \
+                  (Claude Code, Codex, or others), governing its actions deterministically \
+                  before they happen — command interposition, an OS sandbox, and a durable \
+                  evidence ledger, resolved from an immutable snapshot. Keel does not call \
+                  model-provider APIs (see docs/DECISIONES.md, D-012)."
 )]
 struct Cli {
     #[command(subcommand)]
