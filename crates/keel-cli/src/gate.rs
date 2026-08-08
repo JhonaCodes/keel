@@ -167,16 +167,29 @@ fn parse_claude_code_hook(input: &str) -> Option<(Event, bool)> {
             let ti = v.get("tool_input")?;
             match tool {
                 "Bash" => {
+                    let command = ti
+                        .get("command")
+                        .and_then(|c| c.as_str())
+                        .map(str::to_string);
+                    // PostToolUse of a TEST-RUNNER command becomes durable
+                    // RED/GREEN evidence: a `test.completed` event whose content
+                    // carries the pass/fail signal (from the real exit code) so
+                    // an authored rule classifies it and the ledger records it —
+                    // the port of jflow's evidence-capture. Nothing is decided
+                    // here; the event just carries the observed truth.
+                    if !pre && command.as_deref().is_some_and(is_test_runner) {
+                        let mut ev = mk(EventKind::TestCompleted);
+                        ev.content = Some(test_outcome_content(&v));
+                        ev.command = command;
+                        return Some((ev, false));
+                    }
                     let kind = if pre {
                         EventKind::CommandRequested
                     } else {
                         EventKind::CommandCompleted
                     };
                     let mut ev = mk(kind);
-                    ev.command = ti
-                        .get("command")
-                        .and_then(|c| c.as_str())
-                        .map(str::to_string);
+                    ev.command = command;
                     Some((ev, pre))
                 }
                 "Edit" | "Write" | "MultiEdit" => {
@@ -210,5 +223,146 @@ fn parse_claude_code_hook(input: &str) -> Option<(Event, bool)> {
         }
         "Stop" => Some((mk(EventKind::CompletionRequested), true)),
         _ => None,
+    }
+}
+
+/// Is this Bash command a known test runner? Used to turn a PostToolUse Bash
+/// completion into durable `test.completed` evidence (evidence-capture port).
+/// Substring match on the lowercased command — no regex dependency, and a false
+/// positive only records an extra (harmless) test.completed; a false negative
+/// just misses one auto-recording.
+fn is_test_runner(command: &str) -> bool {
+    let c = command.to_lowercase();
+    const RUNNERS: &[&str] = &[
+        "flutter test",
+        "dart test",
+        "cargo test",
+        "cargo nextest",
+        "pytest",
+        "go test",
+        "npm test",
+        "npm run test",
+        "yarn test",
+        "pnpm test",
+        "jest",
+        "vitest",
+        "phpunit",
+        "rspec",
+    ];
+    RUNNERS.iter().any(|r| c.contains(r))
+}
+
+/// Builds the `content` of a synthesized `test.completed` event from the hook's
+/// `tool_response`. The exit code is authoritative (jflow's rule); when it is
+/// absent, fall back to failure signatures in the output. The word `FAILED` is
+/// present in the content exactly when the run failed, so a companion rule
+/// (`builtin:text.contains { value: FAILED }`) classifies it Invalid.
+fn test_outcome_content(v: &serde_json::Value) -> String {
+    let tr = v.get("tool_response");
+    let exit = tr.and_then(|r| {
+        r.get("exit_code")
+            .or_else(|| r.get("exitCode"))
+            .or_else(|| r.get("code"))
+    });
+    let output = tr
+        .and_then(|r| {
+            r.get("stdout")
+                .or_else(|| r.get("output"))
+                .or_else(|| r.get("stderr"))
+        })
+        .and_then(|o| o.as_str())
+        .unwrap_or("");
+
+    let failed = match exit.and_then(serde_json::Value::as_i64) {
+        Some(0) => false,
+        Some(_) => true,
+        // No exit code reported: read the output for a failure signature.
+        None => {
+            let o = output.to_lowercase();
+            o.contains("failed")
+                || o.contains("panicked")
+                || o.contains("error:")
+                || o.contains("test result: fail")
+        }
+    };
+
+    if failed {
+        format!("FAILED\n{output}")
+    } else {
+        format!("passed\n{output}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_runner_detection_covers_the_common_ecosystems() {
+        assert!(is_test_runner("cargo test --workspace"));
+        assert!(is_test_runner("TZ=UTC flutter test"));
+        assert!(is_test_runner("pytest -q"));
+        assert!(is_test_runner("npm test"));
+        // Not a test runner → stays a plain command.completed.
+        assert!(!is_test_runner("cargo build"));
+        assert!(!is_test_runner("git commit -m x"));
+        assert!(!is_test_runner("echo hi > f.txt"));
+    }
+
+    #[test]
+    fn a_failing_test_run_becomes_test_completed_evidence_marked_failed() {
+        // PostToolUse Bash of `cargo test` that exited non-zero → a
+        // `test.completed` event whose content contains FAILED (so a
+        // record-test-result rule classifies it Invalid) and is feedback-only.
+        let payload = serde_json::json!({
+            "hook_event_name": "PostToolUse",
+            "session_id": "s1",
+            "tool_name": "Bash",
+            "tool_input": { "command": "cargo test --workspace" },
+            "tool_response": { "exit_code": 101, "stdout": "test result: FAILED. 1 failed" }
+        })
+        .to_string();
+
+        let (event, preventable) = parse_claude_code_hook(&payload).expect("parsed");
+        assert_eq!(event.kind, EventKind::TestCompleted);
+        assert!(
+            !preventable,
+            "a completed run is post-hoc feedback, never a block"
+        );
+        assert!(
+            event.content.as_deref().unwrap_or("").contains("FAILED"),
+            "a non-zero exit must surface as FAILED for the classifying rule"
+        );
+    }
+
+    #[test]
+    fn a_passing_test_run_is_test_completed_without_failed_marker() {
+        let payload = serde_json::json!({
+            "hook_event_name": "PostToolUse",
+            "session_id": "s1",
+            "tool_name": "Bash",
+            "tool_input": { "command": "cargo test" },
+            "tool_response": { "exit_code": 0, "stdout": "test result: ok. 12 passed" }
+        })
+        .to_string();
+
+        let (event, _) = parse_claude_code_hook(&payload).expect("parsed");
+        assert_eq!(event.kind, EventKind::TestCompleted);
+        assert!(!event.content.as_deref().unwrap_or("").contains("FAILED"));
+    }
+
+    #[test]
+    fn a_non_test_bash_completion_stays_command_completed() {
+        let payload = serde_json::json!({
+            "hook_event_name": "PostToolUse",
+            "session_id": "s1",
+            "tool_name": "Bash",
+            "tool_input": { "command": "cargo build" },
+            "tool_response": { "exit_code": 0 }
+        })
+        .to_string();
+
+        let (event, _) = parse_claude_code_hook(&payload).expect("parsed");
+        assert_eq!(event.kind, EventKind::CommandCompleted);
     }
 }

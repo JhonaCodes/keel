@@ -15,7 +15,7 @@ mod store;
 
 pub use executor::{
     CliModelExecutor, ExecutorError, MockModelExecutor, ModelExecutor, ModelMessage, ModelRequest,
-    ModelResponse, ToolCall, ToolDefinition, executor_command,
+    ModelResponse, ToolCall, ToolDefinition, executor_command, executor_env,
 };
 pub use knowledge_chain::{
     BrokenLink, ChainVerification, KnowledgeChain, KnowledgeChainError, KnowledgeEntry,

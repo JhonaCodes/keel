@@ -164,6 +164,11 @@ pub struct CliModelExecutor {
     root: PathBuf,
     provider_id: String,
     model_id: String,
+    /// Extra env vars set on the child AFTER `env_clear` (which still strips the
+    /// ambient environment). Declared per-executor in `config.env`; the only way
+    /// to hand a governed CLI what it needs to run (e.g. `HOME` for its auth
+    /// config) without inheriting ambient secrets wholesale.
+    env: Vec<(String, String)>,
 }
 
 impl CliModelExecutor {
@@ -177,7 +182,15 @@ impl CliModelExecutor {
             root: root.into(),
             provider_id: "cli".to_string(),
             model_id,
+            env: Vec::new(),
         }
+    }
+
+    /// Declares extra env vars for the child (from `config.env`). `env_clear`
+    /// still runs first, so only `PATH` plus these reach the CLI.
+    pub fn with_env(mut self, env: Vec<(String, String)>) -> Self {
+        self.env = env;
+        self
     }
 
     fn prompt(request: &ModelRequest) -> String {
@@ -214,6 +227,9 @@ impl ModelExecutor for CliModelExecutor {
             .stderr(Stdio::piped());
         if let Some(path) = std::env::var_os("PATH") {
             process.env("PATH", path);
+        }
+        for (name, value) in &self.env {
+            process.env(name, value);
         }
 
         let mut child = process
@@ -283,4 +299,89 @@ pub fn executor_command(
         )));
     }
     Ok(argv)
+}
+
+/// Resolves a `model-executor` component's `config.env` map into concrete
+/// name/value pairs for the child. A value of the exact form `${NAME}` inherits
+/// `NAME` from keel's own environment (the same `${VAR}` convention used by MCP
+/// provider configs) — so `env: { HOME: "${HOME}" }` passes the operator's HOME
+/// through without inheriting the whole environment. Any other value is literal.
+/// A missing `${NAME}` resolves to empty (declared-but-unset is not an error).
+/// Absent `config.env` yields an empty vec (the pre-existing PATH-only behavior).
+pub fn executor_env(
+    components: &std::collections::BTreeMap<String, keel_engine::snapshot::CompiledComponent>,
+    executor_id: &str,
+) -> Vec<(String, String)> {
+    let key = format!("model-executor:{executor_id}");
+    let Some(map) = components
+        .get(&key)
+        .and_then(|c| c.config.as_ref())
+        .and_then(|c| c.get("env"))
+        .and_then(|e| e.as_object())
+    else {
+        return Vec::new();
+    };
+    map.iter()
+        .filter_map(|(name, value)| {
+            let raw = value.as_str()?;
+            let resolved = match raw.strip_prefix("${").and_then(|r| r.strip_suffix('}')) {
+                Some(var) => std::env::var(var).unwrap_or_default(),
+                None => raw.to_string(),
+            };
+            Some((name.clone(), resolved))
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod executor_env_tests {
+    use super::executor_env;
+    use keel_engine::snapshot::CompiledComponent;
+    use std::collections::BTreeMap;
+
+    fn executor_with_config(config: serde_json::Value) -> BTreeMap<String, CompiledComponent> {
+        let mut m = BTreeMap::new();
+        m.insert(
+            "model-executor:x".to_string(),
+            CompiledComponent {
+                kind: "ModelExecutor".into(),
+                id: "x".into(),
+                version: "0".into(),
+                content: None,
+                inline: None,
+                requirements: vec![],
+                capabilities: vec![],
+                config: Some(config),
+            },
+        );
+        m
+    }
+
+    #[test]
+    fn resolves_literal_and_dollar_var_and_ignores_missing_env() {
+        // `${VAR}` inherits from keel's own environment; a plain value is
+        // literal; an absent config.env yields nothing.
+        // SAFETY: single-threaded unit test setting a private, test-only var.
+        unsafe {
+            std::env::set_var("KEEL_TEST_HOME", "/home/keeltest");
+        }
+        let components = executor_with_config(serde_json::json!({
+            "command": ["claude", "-p"],
+            "env": { "HOME": "${KEEL_TEST_HOME}", "MODE": "batch", "GONE": "${KEEL_TEST_UNSET_XYZ}" }
+        }));
+        let mut env = executor_env(&components, "x");
+        env.sort();
+        assert_eq!(
+            env,
+            vec![
+                ("GONE".to_string(), String::new()), // unset ${VAR} → empty, not an error
+                ("HOME".to_string(), "/home/keeltest".to_string()),
+                ("MODE".to_string(), "batch".to_string()),
+            ]
+        );
+
+        // No config.env → empty (preserves the PATH-only behavior).
+        let none = executor_with_config(serde_json::json!({ "command": ["claude"] }));
+        assert!(executor_env(&none, "x").is_empty());
+    }
 }

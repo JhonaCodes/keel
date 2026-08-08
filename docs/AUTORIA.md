@@ -102,6 +102,15 @@ spec:
     enforcement:
       valid: { decision: allow }
   ```
+  **Where does `test.completed` come from?** Under `keel claude`, keel's
+  client-hook bridge auto-captures it: when a Bash command that is a known test
+  runner (`cargo test`, `flutter test`, `pytest`, `npm test`, …) COMPLETES, keel
+  synthesizes a `test.completed` event whose content carries the pass/fail
+  signal from the real exit code (`FAILED` when it failed). So the companion
+  rule above only needs to CLASSIFY it (`builtin:text.contains { value: FAILED }`
+  → Invalid); the evidence is recorded by keel from the observed run, not the
+  model's claim. This closes the loop: a real RED test unblocks the write; a
+  passing one does not.
 - **Gotcha:** builtin detectors (`text.regex`/`text.contains`) look at the
   CONTENT, not the command string. To decide on a command by its text, use an
   external tool (below).
@@ -244,7 +253,17 @@ metadata: { id: auditor-cli, version: 1.0.0 }
 spec:
   config:
     command: [codex, exec, --json]   # or [claude, -p], or your own script
+    env:                              # optional: extra env for the child
+      HOME: "${HOME}"                 # ${VAR} inherits from keel's environment
 ```
+
+- **`config.env` (optional):** the child runs with `env_clear` + `PATH` only, so
+  it inherits NO ambient secrets. Most real CLIs still need a couple of vars to
+  run — e.g. `claude -p` / `codex` need `HOME` to find their auth config. Declare
+  them here: a value of the exact form `${NAME}` inherits `NAME` from keel's own
+  environment (same convention as MCP provider configs); any other value is
+  literal; a `${NAME}` that is unset resolves to empty. Without this, an executor
+  whose CLI needs `HOME` fails to authenticate.
 
 ---
 

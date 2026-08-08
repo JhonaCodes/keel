@@ -87,6 +87,98 @@ spec:
     .unwrap();
 }
 
+/// The evidence-capture pair: a rule that records `test.completed` (Invalid
+/// when the run FAILED) and a rule that forbids editing a prod `.rs` file until
+/// such RED evidence exists this session.
+fn author_require_red_via_captured_evidence(root: &Path) {
+    let rules = root.join("global/rules");
+    fs::create_dir_all(&rules).unwrap();
+    fs::write(
+        rules.join("record-test.yaml"),
+        r#"apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: global.record-test, author: test, adrRef: adr:ADR-004, reviewAfter: P6M }
+spec:
+  on: [test.completed]
+  validate: { using: "builtin:text.contains", with: { value: "FAILED" } }
+  enforcement:
+    invalid: { decision: allow }
+    valid: { decision: allow }
+"#,
+    )
+    .unwrap();
+    fs::write(
+        rules.join("require-red.yaml"),
+        r#"apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: global.require-red, author: test, adrRef: adr:ADR-005, reviewAfter: P6M }
+spec:
+  on: [file.edited]
+  scope: { paths: { include: ["**/*.rs"] } }
+  preconditions:
+    - using: "builtin:evidence.recorded"
+      with: { event: "test.completed", verdict: invalid }
+      onFail: block
+  enforcement:
+    valid: { decision: allow }
+"#,
+    )
+    .unwrap();
+}
+
+/// evidence-capture end to end through the claude-code bridge: a real `cargo
+/// test` completion that FAILED (PostToolUse Bash, non-zero exit) is turned
+/// into durable `test.completed`/Invalid evidence by keel itself, which then
+/// UNBLOCKS a `.rs` write the same session — no hand-fed native event. Before
+/// the test run, the write is blocked; after it, allowed.
+#[test]
+fn a_failing_test_run_captured_by_keel_unblocks_a_write_the_same_session() {
+    let ws = Workspace::new();
+    let root = ws.path().to_str().unwrap().to_string();
+    assert!(ws.run(&["init", &root, "--json"]).status.success());
+    author_require_red_via_captured_evidence(ws.path());
+    assert!(ws.run(&["compile", "--workspace", &root]).status.success());
+
+    let gate_args = [
+        "gate",
+        "--client",
+        "claude-code",
+        "--workspace",
+        &root,
+        "--session",
+        "s1",
+    ];
+
+    // No evidence yet → a .rs write is blocked.
+    let write = r#"{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Write","tool_input":{"file_path":"src/lib.rs","content":"fn f(){}"}}"#;
+    let blocked = ws.run_stdin(&gate_args, write);
+    assert_eq!(
+        blocked.status.code(),
+        Some(2),
+        "a .rs write with no prior RED must be blocked: {}",
+        String::from_utf8_lossy(&blocked.stderr)
+    );
+
+    // keel OBSERVES a failing `cargo test` (PostToolUse Bash, non-zero exit) and
+    // records test.completed/Invalid itself — feedback-only, so exit 0.
+    let post_test = r#"{"hook_event_name":"PostToolUse","session_id":"s1","tool_name":"Bash","tool_input":{"command":"cargo test --workspace"},"tool_response":{"exit_code":101,"stdout":"test result: FAILED. 1 failed"}}"#;
+    let captured = ws.run_stdin(&gate_args, post_test);
+    assert_eq!(
+        captured.status.code(),
+        Some(0),
+        "capturing a completed test run is post-hoc, never a block"
+    );
+
+    // Same session, now WITH the captured RED evidence → the write is allowed.
+    let allowed = ws.run_stdin(&gate_args, write);
+    assert_eq!(
+        allowed.status.code(),
+        Some(0),
+        "the .rs write must pass once keel captured the failing test: {}",
+        String::from_utf8_lossy(&allowed.stderr)
+    );
+}
+
 #[test]
 fn the_hook_bridge_blocks_an_internal_write_via_pretooluse() {
     let ws = Workspace::new();

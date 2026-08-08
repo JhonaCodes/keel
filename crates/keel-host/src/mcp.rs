@@ -23,7 +23,8 @@ use keel_engine::session::{SessionStore, deliver_skills};
 use keel_engine::snapshot::Snapshot;
 use keel_engine::workspace::WorkspaceFiles;
 use keel_runtime::{
-    AgentBroker, AgentScheduler, CliModelExecutor, RuntimeStore, SkillReadReceipt, executor_command,
+    AgentBroker, AgentScheduler, CliModelExecutor, RuntimeStore, SkillReadReceipt,
+    executor_command, executor_env,
 };
 use serde_json::{Value, json};
 use std::io::{BufRead, Write};
@@ -282,6 +283,7 @@ impl Server {
             Ok(c) => c,
             Err(e) => return format!("cannot run agent `{agent_id}`: {e}"),
         };
+        let env = executor_env(&self.snapshot.components, &executor_id);
         let mut scheduler = match AgentScheduler::open(
             &WorkspaceFiles::empty(self.root.clone())
                 .state_dir()
@@ -291,7 +293,8 @@ impl Server {
             Ok(s) => s,
             Err(e) => return format!("scheduler unavailable: {e}"),
         };
-        let mut executor = CliModelExecutor::new(command, self.root.clone(), executor_id);
+        let mut executor =
+            CliModelExecutor::new(command, self.root.clone(), executor_id).with_env(env);
         match broker.invoke(
             &self.session_id,
             agent_id,
