@@ -121,6 +121,41 @@ SURFACES a suggestion to the operator in the transcript. It does NOT write to th
 model's stream: Keel helps without interfering with its reasoning. `--no-suggest`
 silences it.
 
+## Versioned Memory (Knowledge)
+
+A `kind: Knowledge` component grows across sessions without ever showing up
+as drift in `keel lock --verify` (see `docs/AUTORIA.md`'s Knowledge
+section for the full authoring shape):
+
+```bash
+keel knowledge append --id session-notes --content "decided X because Y"
+keel knowledge verify --id session-notes   # recomputes the chain from storage,
+                                            # reports where it broke, if ever
+```
+
+## Registering a Default Workspace
+
+`keel init` already registers the workspace it creates. To point `keel
+<client>` at a workspace from anywhere without passing `--workspace` every
+time (e.g. an existing workspace, or one built by hand):
+
+```bash
+keel use /path/to/workspace
+```
+
+## Compliance Plane (CI)
+
+`keel ci resolve` runs the SAME engine CI uses over the pinned lock — fails
+BEFORE doing any work unless the binding and lock resolve (compiles,
+RuleTests pass, lock matches a fresh compile with no drift). `keel ci run`
+resolves, then reports the ledger. See `examples/ci/keel-audit.yml` for a
+ready-to-copy GitHub Actions job.
+
+```bash
+keel ci resolve --workspace .
+keel ci run --workspace .
+```
+
 ## Development and Verification
 
 ```bash

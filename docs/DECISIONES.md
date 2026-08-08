@@ -24,6 +24,16 @@ Los hooks de Claude Code, configuraciones del cliente y MCP no son el plano de c
 
 Evidencia: `crates/keel-runtime/src/lib.rs`, `crates/keel-runtime/src/executor.rs` y la seccion 6.2 de `docs/RACC_reference_architecture_v0_9_1.md`.
 
+> **Nota de estado (verificar antes de confiar en este parrafo).** `RuntimeHost`
+> y su `PhaseController` (`crates/keel-runtime/src/{lib,phase}.rs`) existen y
+> estan probados, pero HOY no estan conectados al camino de produccion: ni
+> `keel-host` ni `keel-cli` los importan (`grep -rln "RuntimeHost"
+> --include="*.rs" .` solo devuelve sus propios tests de crate y `lib.rs`). El
+> enforcement real que corre en `keel gate`/el broker es
+> `keel_engine::runtime::evaluate_event`, sin concepto de fases. Este D-001
+> describe el diseño de `RuntimeHost`, no lo que se ejecuta hoy cuando un
+> usuario corre `keel claude`.
+
 ## D-002 Recursos propiedad de Keel
 
 Skills, knowledge, blueprints, agents, workflows, policies, rules, tools, hooks
@@ -153,7 +163,7 @@ keel cablea al lanzar la sesion (config efimera por proceso). Tools: `keel.
 skills.list`, `keel.skills.load` (entrega el contenido al contexto y registra el
 receipt en el store — la evidencia es de keel, no la palabra del modelo, D-003),
 `keel.rules.query` (que reglas aplican, advisory, NUNCA bloquea) y
-`keel.agent.invoke` (stub honesto hasta F4). Cada cliente declara en el
+`keel.agent.invoke` (resuelto por completo, no un stub — ver D-012.c). Cada cliente declara en el
 `AdapterManifest` COMO se inyecta el MCP (claude `--mcp-config`, codex `-c
 mcp_servers…`) y COMO se le anuncia al modelo que esta gobernado
 (`--append-system-prompt` o linea al PTY); `generic` no asume flags (convergencia

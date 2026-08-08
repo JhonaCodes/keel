@@ -30,6 +30,11 @@ keel claude --workspace ~/keel-workspace     # or: keel codex, or keel launch --
 create or modify provider configuration: keel governs the CLI's ENVIRONMENT, not
 its API.
 
+`init` ships with zero rules on purpose — nothing is enforced until you author
+some. For a working, non-trivial workspace with real rules and passing tests
+to copy instead of starting blank, see
+[`examples/starter-workspace/`](examples/starter-workspace/).
+
 ## How It Governs (Three Planes)
 
 ```text

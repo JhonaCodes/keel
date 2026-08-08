@@ -1,0 +1,12 @@
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: starter.require-deploy-token, author: starter, adrRef: adr:ADR-000, reviewAfter: P6M }
+spec:
+  on: [command.requested]
+  detect: { using: "builtin:command.classify", with: { families: ["git"] } }
+  preconditions:
+    - using: "builtin:env.present"
+      with: { name: DEPLOY_TOKEN }
+      onFail: block
+  enforcement:
+    valid: { decision: allow }

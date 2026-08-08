@@ -1,0 +1,7 @@
+apiVersion: keel/v1alpha1
+kind: RuleTest
+metadata: { id: starter.require-deploy-token.allows-with-token }
+spec:
+  target: rule:starter.require-deploy-token
+  event: { kind: command.requested, command: "git --version", env: { DEPLOY_TOKEN: "x" } }
+  expect: { fired: true, verdict: unknown, decision: review, origin: deterministic }

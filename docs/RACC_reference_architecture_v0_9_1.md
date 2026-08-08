@@ -13,7 +13,9 @@
 ## Especificación conceptual, arquitectónica y operativa
 
 **Estado:** borrador para revisión técnica
-**Versión del documento:** 0.9.1
+**Versión del documento:** 0.9.1 (número de documento independiente del
+`version` de `Cargo.toml` del workspace — no se sincronizan 1:1; ver
+`CHANGELOG.md` para la versión de crate/binario real)
 **Alcance:** desarrollo de software asistido por agentes y modelos de lenguaje
 **Criterio de esta revisión:** el núcleo se especifica para construir el runtime soberano y medir sus garantías. Las extensiones organizacionales a escala (Control Plane, catálogo firmado, certificación de workflows y panel web) quedan fuera del alcance actual y deben registrarse en `docs/planificacion/ordenes_trabajo/PLAN_MAESTRO.md`, no en documentos futuros paralelos. Respecto a la v0.8, esta versión formaliza `locked`, la frontera de confianza, el ComponentRegistry, el ciclo cognitivo propiedad del runtime y la integración por `ModelExecutor`.
 

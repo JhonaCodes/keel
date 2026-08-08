@@ -1,0 +1,11 @@
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: starter.record-test-result, author: starter, adrRef: adr:ADR-000, reviewAfter: P6M }
+spec:
+  on: [test.completed]
+  validate:
+    using: "builtin:text.contains"
+    with: { value: "FAILED" }
+  enforcement:
+    invalid: { decision: allow }
+    valid: { decision: allow }

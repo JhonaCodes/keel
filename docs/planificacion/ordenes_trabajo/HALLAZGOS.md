@@ -3,8 +3,14 @@
 ## H-001 Workflow parcialmente compilado
 
 Los documentos Workflow se validan, hashean y pueden declarar requirements y
-capabilities. La secuencia efectiva de ocho fases aun vive en `phase.rs`; por
-eso cambiar `config.phases` no altera todavia la maquina.
+capabilities. La maquina de ocho fases (`PhaseController`, `phase.rs`) esta
+implementada y probada, pero **no corre en el camino de produccion hoy** —
+ni `keel-host` ni `keel-cli` la importan (`grep -rln "RuntimeHost"
+--include="*.rs" .` solo devuelve sus propios tests de crate). Solo se
+ejecuta dentro de `crates/keel-runtime/tests/phase_controller.rs`. Por eso
+cambiar `config.phases` no altera ningun comportamiento observable de una
+sesion real, no solo "todavia no reemplaza" la maquina interna — hoy no hay
+ninguna maquina de fases en el camino real que reemplazar.
 
 ## H-002 Contracts no son autoridad completa
 

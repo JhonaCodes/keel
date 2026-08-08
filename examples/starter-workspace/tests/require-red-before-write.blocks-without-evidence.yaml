@@ -1,0 +1,7 @@
+apiVersion: keel/v1alpha1
+kind: RuleTest
+metadata: { id: starter.require-red-before-write.blocks-without-evidence }
+spec:
+  target: rule:starter.require-red-before-write
+  event: { kind: command.requested, command: "rm notes.txt" }
+  expect: { fired: true, verdict: invalid, decision: block, origin: deterministic }

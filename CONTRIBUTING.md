@@ -26,8 +26,10 @@ By signing off you agree your contribution is licensed under Apache-2.0.
 
 Keel's guarantees are structural, so contributions must preserve them:
 
-- **Tests stay green.** `cargo test --workspace` (currently 61 tests). New
-  behavior comes with a test that fails for the right reason first.
+- **Tests stay green.** `cargo test --workspace` (191 tests as of this
+  writing — re-count with `grep -rn '#\[test\]' crates/ test/ | wc -l` rather
+  than trusting this number, it drifts). New behavior comes with a test that
+  fails for the right reason first.
 - **Forbidden dependency edges hold.** `compiler ⇏ runtime`, `runtime ⇏ dsl`,
   `snapshot ⇏ dsl`, `ledger ⇏ runtime`, and the session/packet/audit modules
   never import `keel-dsl`. This is enforced by
