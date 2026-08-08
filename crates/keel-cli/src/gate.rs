@@ -76,8 +76,14 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
 
     // Evidence is best-effort: a ledger that cannot be written (e.g. a
     // read-only sandbox) must NEVER turn a block into a pass. The decision
-    // comes from the engine, not from a successful ledger write.
+    // comes from the engine, not from a successful ledger write. Opened
+    // BEFORE evaluation (not just for the append loop below) so
+    // `evidence.recorded` preconditions can see this session's history too.
     let ledger = Ledger::open(&files.ledger_path()).ok();
+    event.recorded_evidence = ledger
+        .as_ref()
+        .and_then(|l| l.recorded_evidence(&session_id).ok())
+        .unwrap_or_default();
     let evals = evaluate_event(&snapshot, &event, &files.root, Mode::Enforce);
 
     let mut worst = Decision::Allow;
@@ -151,6 +157,7 @@ fn parse_claude_code_hook(input: &str) -> Option<(Event, bool)> {
         env: Default::default(),
         files: vec![],
         loaded_skills: vec![],
+        recorded_evidence: vec![], // populated by gate() before evaluate_event
     };
 
     let pre = hook == "PreToolUse";

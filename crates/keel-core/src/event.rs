@@ -13,6 +13,7 @@
 //! own phase. In Phase 0 (passive replay) they may appear in fixtures as
 //! already-authorized events.
 
+use crate::Verdict;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -116,6 +117,15 @@ pub struct Event {
     /// cognitive activation as a hard gate). Empty when unknown.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub loaded_skills: Vec<String>,
+    /// Distinct (event_kind, verdict) pairs already recorded in the ledger
+    /// for this session at request time (populated by the broker/gate from
+    /// `Ledger::recorded_evidence`). Lets a rule REQUIRE evidence of a past
+    /// event via the `evidence.recorded` precondition — the generic
+    /// counterpart of `loaded_skills` for any event kind, not just skills.
+    /// Bounded by construction: at most `#EventKind * #Verdict` distinct
+    /// pairs, so this does not grow with ledger size.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recorded_evidence: Vec<(EventKind, Verdict)>,
 }
 
 #[cfg(test)]

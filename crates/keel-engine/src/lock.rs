@@ -12,6 +12,7 @@
 
 use crate::snapshot::Snapshot;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// Directory (versioned, unlike `.keel-state/`) that holds the binding + lock.
@@ -116,6 +117,21 @@ pub struct Lock {
     /// inspectable.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub composition: Vec<String>,
+    /// Per-`Knowledge`-component head hash at lock time (`"knowledge:<id>"`
+    /// → `KnowledgeChain::head` entry hash), an external witness that
+    /// `keel knowledge verify` cross-checks against the live chain to detect
+    /// retroactive rewriting of entries written BEFORE this lock. Versioned
+    /// here (unlike `.keel-state/`) so the witness cannot be silently
+    /// rewritten alongside the chain by whoever has local write access.
+    ///
+    /// DELIBERATELY EXCLUDED from `Lock::verify`'s drift comparison: a chain
+    /// growing between locks is legitimate, expected behavior, not drift —
+    /// `keel-engine` does not depend on `keel-runtime` (no cycle: the crate
+    /// that owns `KnowledgeChain` depends on this one, not the reverse), so
+    /// this field is populated by the CALLER (`keel-cli`, which depends on
+    /// both) and treated here as opaque data, never re-derived or diffed.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub knowledge_checkpoints: BTreeMap<String, String>,
 }
 
 impl Lock {
@@ -124,8 +140,16 @@ impl Lock {
     }
 
     /// Builds the lock from a binding + the published snapshot. Deterministic:
-    /// same binding + same snapshot ⇒ identical lock (invariant 9).
-    pub fn generate(binding: &ProjectBinding, snapshot: &Snapshot, keel_version: &str) -> Self {
+    /// same binding + same snapshot ⇒ identical lock (invariant 9) — EXCEPT
+    /// for `knowledge_checkpoints`, which the caller supplies as opaque data
+    /// (see the field doc: it is never derived here, to avoid a dependency
+    /// on `keel-runtime`, and never diffed by `verify`).
+    pub fn generate(
+        binding: &ProjectBinding,
+        snapshot: &Snapshot,
+        keel_version: &str,
+        knowledge_checkpoints: BTreeMap<String, String>,
+    ) -> Self {
         let mut rules: Vec<String> = snapshot.rules.iter().map(|r| r.id.clone()).collect();
         rules.sort();
         // BTreeMap keys are already ordered, but collect explicitly for clarity.
@@ -153,6 +177,7 @@ impl Lock {
                 components,
             },
             composition,
+            knowledge_checkpoints,
         }
     }
 
@@ -192,7 +217,10 @@ impl Lock {
         snapshot: &Snapshot,
         keel_version: &str,
     ) -> Result<(), String> {
-        let fresh = Lock::generate(binding, snapshot, keel_version);
+        // The fresh comparison never needs real checkpoints: this field is
+        // deliberately excluded from every check below (growth is not
+        // drift), so an empty map here is equivalent to a real one.
+        let fresh = Lock::generate(binding, snapshot, keel_version, BTreeMap::new());
         if fresh.snapshot_hash != self.snapshot_hash {
             return Err(format!(
                 "snapshot hash drift: lock={} current={}",

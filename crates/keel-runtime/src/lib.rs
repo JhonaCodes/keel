@@ -7,6 +7,7 @@
 mod broker;
 mod capability;
 mod executor;
+mod knowledge_chain;
 mod phase;
 mod registry;
 mod scheduler;
@@ -15,6 +16,9 @@ mod store;
 pub use executor::{
     CliModelExecutor, ExecutorError, MockModelExecutor, ModelExecutor, ModelMessage, ModelRequest,
     ModelResponse, ToolCall, ToolDefinition, executor_command,
+};
+pub use knowledge_chain::{
+    BrokenLink, ChainVerification, KnowledgeChain, KnowledgeChainError, KnowledgeEntry,
 };
 pub use phase::{ArtifactKind, ArtifactReceipt, Phase, PhaseError, PhaseTransitionReceipt};
 pub use registry::{ComponentDescriptor, ComponentRegistry};

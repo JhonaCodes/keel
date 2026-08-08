@@ -9,6 +9,7 @@ use keel_engine::ledger::{Ledger, LedgerEntry};
 use keel_engine::runtime::{Evaluation, Mode, evaluate_event};
 use keel_engine::snapshot::Snapshot;
 use keel_engine::{compile as compiler, sarif, testkit, workspace};
+use keel_runtime::KnowledgeChain;
 // The `keel init` scaffold content (READMEs + templates). Module namespace, so
 // it coexists with the `init` function below.
 use crate::init;
@@ -733,6 +734,7 @@ pub fn doctor(root: &Path) -> Result<ExitCode> {
             env: Default::default(),
             files: vec![],
             loaded_skills: vec![],
+            recorded_evidence: vec![],
         };
         let evals = evaluate_event(&snap, &synthetic, root, Mode::Passive);
         let over_review = evals
@@ -828,11 +830,138 @@ pub(crate) fn lock(root: &Path, verify: bool) -> Result<ExitCode> {
         };
     }
 
-    let lock = Lock::generate(&binding, &snapshot, keel_version);
+    let lock = Lock::generate(
+        &binding,
+        &snapshot,
+        keel_version,
+        knowledge_checkpoints(root, &snapshot),
+    );
     lock.write(root)?;
     println!("locked {} @ {}", binding.project, lock.snapshot_hash);
     println!("wrote {}", Lock::path(root).display());
     Ok(ExitCode::SUCCESS)
+}
+
+// ─────────────────────────── knowledge (hash-chained growth) ───────────────────────────
+
+/// Head entry hash of every declared `Knowledge` component's chain, at THIS
+/// moment — the external witness `Lock::knowledge_checkpoints` versions.
+/// Best-effort by design (mirrors `Ledger::recorded_evidence`'s posture
+/// elsewhere): a component with no chain file yet (nothing appended so far)
+/// or an unreadable one is simply absent from the map, never a `keel lock`
+/// failure — locking a workspace before any knowledge has grown is normal.
+fn knowledge_checkpoints(
+    root: &Path,
+    snapshot: &Snapshot,
+) -> std::collections::BTreeMap<String, String> {
+    snapshot
+        .components
+        .values()
+        .filter(|c| c.kind == "knowledge")
+        .filter_map(|c| {
+            let path = knowledge_chain_path(root, snapshot, &c.id).ok()?;
+            let head = KnowledgeChain::open(&path).ok()?.head(&c.id).ok()??;
+            Some((format!("knowledge:{}", c.id), head.entry_hash))
+        })
+        .collect()
+}
+
+/// Resolves a `Knowledge` component's chain database path from the compiled
+/// snapshot's `spec.content` — the SAME field `keel lock` already treats as
+/// a path, not hashed content (`snapshot.rs`: "paths only"). A `Knowledge`
+/// component with no `content` (e.g. only `inline`) is a workspace-authoring
+/// error for this purpose: the chain needs a durable file to grow into.
+fn knowledge_chain_path(root: &Path, snapshot: &Snapshot, id: &str) -> Result<std::path::PathBuf> {
+    // NOTE: component kind keys are lowercase in the compiled snapshot
+    // (`workspace.rs` pushes `("knowledge".to_string(), ...)`, `compile.rs`
+    // builds the key as `format!("{kind}:{id}")`) — NOT `Knowledge:<id>`.
+    let key = format!("knowledge:{id}");
+    let component = snapshot.components.get(&key).with_context(|| {
+        format!("no `Knowledge` component `{id}` in the compiled snapshot (looked for `{key}`)")
+    })?;
+    let rel = component.content.as_deref().with_context(|| {
+        format!("Knowledge `{id}` has no `spec.content` (chain path) — `spec.inline` is not supported here")
+    })?;
+    Ok(root.join(rel))
+}
+
+/// `keel knowledge append` — writes one entry to a `Knowledge` component's
+/// hash chain (spec-adjacent: see `keel-runtime::knowledge_chain`). Never
+/// touches the snapshot hash: this is deliberately a different plane than
+/// `keel compile`/`keel lock`.
+pub(crate) fn knowledge_append(
+    root: &Path,
+    id: &str,
+    content: &str,
+    session: Option<&str>,
+) -> Result<ExitCode> {
+    let files = workspace::load(root)?;
+    let snapshot = Snapshot::load(&files.snapshot_path())
+        .context("no published snapshot — run `keel compile` first")?;
+    let path = knowledge_chain_path(root, &snapshot, id)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("could not create {}", parent.display()))?;
+    }
+    let chain = KnowledgeChain::open(&path)
+        .with_context(|| format!("could not open knowledge chain at {}", path.display()))?;
+    let entry = chain.append(id, session, content)?;
+    println!("appended {} to `{id}` (seq {})", entry.entry_id, entry.seq);
+    println!("entry_hash: {}", entry.entry_hash);
+    Ok(ExitCode::SUCCESS)
+}
+
+/// `keel knowledge verify` — recomputes a `Knowledge` component's chain from
+/// storage and reports where it broke, if ever. Without `id`, verifies every
+/// `Knowledge` component declared in the snapshot. This is integrity
+/// verification (was any past entry rewritten), NOT drift detection (that
+/// remains `keel lock --verify`'s job) — the two are deliberately separate.
+pub(crate) fn knowledge_verify(root: &Path, id: Option<&str>) -> Result<ExitCode> {
+    let files = workspace::load(root)?;
+    let snapshot = Snapshot::load(&files.snapshot_path())
+        .context("no published snapshot — run `keel compile` first")?;
+
+    let ids: Vec<String> = match id {
+        Some(id) => vec![id.to_string()],
+        None => snapshot
+            .components
+            .values()
+            .filter(|c| c.kind == "knowledge")
+            .map(|c| c.id.clone())
+            .collect(),
+    };
+    if ids.is_empty() {
+        println!("no `Knowledge` components declared in the snapshot.");
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    let mut any_broken = false;
+    for id in &ids {
+        let path = knowledge_chain_path(root, &snapshot, id)?;
+        let chain = KnowledgeChain::open(&path)
+            .with_context(|| format!("could not open knowledge chain at {}", path.display()))?;
+        let report = chain.verify_chain(id)?;
+        match report.broken_at {
+            None => println!(
+                "`{id}`: OK — {} entries, chain intact.",
+                report.verified_entries
+            ),
+            Some(broken) => {
+                any_broken = true;
+                println!(
+                    "`{id}`: BROKEN at seq {} (entry {}) — {} entries verified before the break.",
+                    broken.seq, broken.entry_id, report.verified_entries
+                );
+                println!("  expected: {}", broken.expected_hash);
+                println!("  found:    {}", broken.found_hash);
+            }
+        }
+    }
+    Ok(if any_broken {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
 }
 
 /// Derives `project:<org>/<repo>` from the git `origin` remote. Best-effort:

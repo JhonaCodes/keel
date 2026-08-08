@@ -421,7 +421,12 @@ spec: { on: [file.edited], enforcement: { valid: { decision: allow } } }
         project: "project:demo/app".into(),
         workspace: "org:local".into(),
     };
-    let lock = Lock::generate(&binding, &outcome.snapshot, "0.1.0");
+    let lock = Lock::generate(
+        &binding,
+        &outcome.snapshot,
+        "0.1.0",
+        std::collections::BTreeMap::new(),
+    );
     assert_eq!(
         lock.composition,
         vec!["global".to_string(), "project:demo".to_string()],
