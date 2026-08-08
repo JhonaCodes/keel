@@ -340,6 +340,30 @@ impl Ledger {
         rows.collect()
     }
 
+    /// Distinct `(event_kind, verdict)` pairs recorded for a session — the
+    /// read side of the `evidence.recorded` precondition (spec-adjacent to
+    /// `skill.loaded`): the broker/gate populates `Event::recorded_evidence`
+    /// from this before evaluation, so a rule can require evidence of a past
+    /// event without the runtime ever querying the ledger itself. `DISTINCT`
+    /// bounds the result at `#EventKind * #Verdict` regardless of ledger size.
+    pub fn recorded_evidence(&self, session_id: &str) -> rusqlite::Result<Vec<(EventKind, Verdict)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT DISTINCT event_kind, verdict FROM evidence WHERE session_id = ?1")?;
+        let rows = stmt.query_map(params![session_id], |row| {
+            let ek: String = row.get(0)?;
+            let v: String = row.get(1)?;
+            let event_kind: EventKind = serde_json::from_str(&ek).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
+            })?;
+            let verdict: Verdict = serde_json::from_str(&v).map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(1, rusqlite::types::Type::Text, Box::new(e))
+            })?;
+            Ok((event_kind, verdict))
+        })?;
+        rows.collect()
+    }
+
     pub fn count(&self) -> rusqlite::Result<u64> {
         self.conn
             .query_row("SELECT COUNT(*) FROM evidence", [], |r| r.get(0))

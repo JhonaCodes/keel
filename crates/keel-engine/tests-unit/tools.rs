@@ -16,6 +16,7 @@ fn event_with(content: Option<&str>, command: Option<&str>) -> Event {
         env: Default::default(),
         files: vec![],
         loaded_skills: vec![],
+        recorded_evidence: vec![],
     }
 }
 
@@ -146,6 +147,57 @@ fn precondition_skill_loaded_gates_on_the_session_state() {
     // A different loaded skill does not satisfy the gate.
     ev.loaded_skills = vec!["meeting-notes".into()];
     assert!(!run_precondition(&pre, &ev, &Default::default(), ctx()));
+}
+
+/// `evidence.recorded` is the generic counterpart of `skill.loaded` for any
+/// event kind: gates on a (event_kind, verdict) pair the broker/gate already
+/// found in the ledger for this session, never a live query from inside the
+/// runtime.
+#[test]
+fn precondition_evidence_recorded_gates_on_session_history() {
+    let pre = CompiledPrecondition {
+        using: CompiledToolRef::Builtin("evidence.recorded".into()),
+        with: Some(serde_json::json!({"event": "test.completed", "verdict": "invalid"})),
+        on_fail_declared: keel_core::Decision::Block,
+    };
+
+    // No evidence yet → fails (the rule will block).
+    let mut ev = event_with(None, Some("git push"));
+    assert!(!run_precondition(&pre, &ev, &Default::default(), ctx()));
+
+    // Exact (event_kind, verdict) pair recorded → passes.
+    ev.recorded_evidence = vec![(EventKind::TestCompleted, Verdict::Invalid)];
+    assert!(run_precondition(&pre, &ev, &Default::default(), ctx()));
+
+    // Same event_kind, different verdict → does not satisfy the gate.
+    ev.recorded_evidence = vec![(EventKind::TestCompleted, Verdict::Valid)];
+    assert!(!run_precondition(&pre, &ev, &Default::default(), ctx()));
+
+    // Omitting `verdict` in the rule matches any verdict for that event_kind.
+    let any_verdict_pre = CompiledPrecondition {
+        using: CompiledToolRef::Builtin("evidence.recorded".into()),
+        with: Some(serde_json::json!({"event": "test.completed"})),
+        on_fail_declared: keel_core::Decision::Block,
+    };
+    assert!(run_precondition(
+        &any_verdict_pre,
+        &ev,
+        &Default::default(),
+        ctx()
+    ));
+
+    // A malformed `event` parameter fails closed, not open.
+    let malformed_pre = CompiledPrecondition {
+        using: CompiledToolRef::Builtin("evidence.recorded".into()),
+        with: Some(serde_json::json!({"event": "not.a.real.event"})),
+        on_fail_declared: keel_core::Decision::Block,
+    };
+    assert!(!run_precondition(
+        &malformed_pre,
+        &ev,
+        &Default::default(),
+        ctx()
+    ));
 }
 
 /// FAIL-SAFE: missing binary → `unknown`, never a crash (section 6.4).

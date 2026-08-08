@@ -113,6 +113,55 @@ fn oscillation_detects_repeated_findings_at_same_location() {
     assert_eq!(osc[0].count, 3);
 }
 
+/// Read side of the `evidence.recorded` precondition: distinct (event_kind,
+/// verdict) pairs for a session, filtered by session, deduplicated even when
+/// the same pair fires many times.
+#[test]
+fn recorded_evidence_is_distinct_and_scoped_to_the_session() {
+    let ledger = Ledger::open_in_memory().unwrap();
+    // s1: test.completed/invalid fires 3 times — must collapse to one pair.
+    for i in 0..3 {
+        ledger
+            .append(&LedgerEntry {
+                event_kind: EventKind::TestCompleted,
+                ..entry(&format!("ev_s1_{i}"), "r1", Verdict::Invalid, "2026-01-01T00:00:00Z")
+            })
+            .unwrap();
+    }
+    // s1: a second, distinct pair.
+    ledger
+        .append(&LedgerEntry {
+            event_kind: EventKind::FileEdited,
+            ..entry("ev_s1_other", "r2", Verdict::Valid, "2026-01-01T00:00:01Z")
+        })
+        .unwrap();
+    // s2: same event_kind/verdict as s1's first pair, but a DIFFERENT session
+    // — must not leak into s1's result.
+    ledger
+        .append(&LedgerEntry {
+            event_kind: EventKind::TestCompleted,
+            session_id: Some("s2".into()),
+            ..entry("ev_s2", "r1", Verdict::Invalid, "2026-01-01T00:00:02Z")
+        })
+        .unwrap();
+
+    let mut s1 = ledger.recorded_evidence("s1").unwrap();
+    s1.sort_by_key(|(k, v)| (format!("{k:?}"), format!("{v:?}")));
+    assert_eq!(
+        s1,
+        vec![
+            (EventKind::FileEdited, Verdict::Valid),
+            (EventKind::TestCompleted, Verdict::Invalid),
+        ]
+    );
+
+    let s2 = ledger.recorded_evidence("s2").unwrap();
+    assert_eq!(s2, vec![(EventKind::TestCompleted, Verdict::Invalid)]);
+
+    let unknown = ledger.recorded_evidence("no-such-session").unwrap();
+    assert!(unknown.is_empty());
+}
+
 #[test]
 fn human_decisions_are_recorded_with_human_class() {
     let ledger = Ledger::open_in_memory().unwrap();

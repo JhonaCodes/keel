@@ -80,6 +80,16 @@ impl Broker {
             .unwrap_or_default()
     }
 
+    /// Distinct (event_kind, verdict) pairs already recorded in THIS
+    /// session's ledger, read live before evaluation — same pattern as
+    /// `loaded_skills` but generic to any event kind. Best-effort: on any
+    /// error, empty, which makes `evidence.recorded` fail closed (block).
+    fn recorded_evidence(&self) -> Vec<(keel_core::event::EventKind, keel_core::Verdict)> {
+        self.ledger
+            .recorded_evidence(&self.session_id)
+            .unwrap_or_default()
+    }
+
     /// Evaluates one interposed command. Pure with respect to the socket —
     /// used directly by unit tests.
     pub fn decide(&self, req: &ShimRequest) -> Result<ShimResponse> {
@@ -94,6 +104,7 @@ impl Broker {
             env: self.env.clone(),
             files: Vec::new(),
             loaded_skills: self.loaded_skills(),
+            recorded_evidence: self.recorded_evidence(),
         };
 
         let evals = evaluate_event(&self.snapshot, &event, &self.root, Mode::Enforce);

@@ -101,6 +101,48 @@ spec:
 }
 
 #[test]
+fn evidence_recorded_precondition_compiles() {
+    let yaml = r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: r-evidence, author: t, adrRef: "adr:ADR-1", reviewAfter: P6M }
+spec:
+  on: [command.requested]
+  preconditions:
+    - using: "builtin:evidence.recorded"
+      with: { event: "test.completed", verdict: invalid }
+      onFail: block
+  enforcement:
+    valid: { decision: allow }
+"#;
+    let files = files_from_yaml(yaml);
+    let out = compile(&files, "t".into()).unwrap();
+    assert!(out.snapshot.rule_by_id("r-evidence").is_some());
+}
+
+/// Regression: an invented builtin precondition must still fail compilation
+/// — `evidence.recorded` was ADDED to `BUILTIN_PRECONDITIONS`, not a
+/// loosening of the allowlist itself.
+#[test]
+fn unknown_builtin_precondition_is_still_a_compile_error() {
+    let yaml = r#"
+apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: r-ghost, author: t, adrRef: "adr:ADR-1", reviewAfter: P6M }
+spec:
+  on: [command.requested]
+  preconditions:
+    - using: "builtin:not.a.real.precondition"
+      onFail: block
+  enforcement:
+    valid: { decision: allow }
+"#;
+    let files = files_from_yaml(yaml);
+    let err = compile(&files, "t".into()).unwrap_err();
+    assert!(matches!(err, CompileError::UnresolvedTool { .. }));
+}
+
+#[test]
 fn duplicate_rule_ids_conflict_loudly() {
     let yaml = r#"
 apiVersion: keel/v1alpha1

@@ -216,6 +216,40 @@ enum Command {
         #[command(subcommand)]
         command: CiCommand,
     },
+    /// A `Knowledge` component's hash-chained growth (memory that grows
+    /// session to session without disturbing the snapshot hash — see
+    /// `keel-runtime::knowledge_chain`). `append` writes one entry; `verify`
+    /// recomputes the chain from storage and reports where it broke, if ever.
+    Knowledge {
+        #[command(subcommand)]
+        command: KnowledgeCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum KnowledgeCommand {
+    /// Appends one entry to a `Knowledge` component's chain, resolving its
+    /// storage path from the compiled snapshot's `spec.content`.
+    Append {
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        /// The `Knowledge` component id (its `metadata.id` in the DSL).
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        content: String,
+        #[arg(long)]
+        session: Option<String>,
+    },
+    /// Recomputes a `Knowledge` component's chain from storage and reports
+    /// where it broke, if ever. Without `--id`, verifies every declared
+    /// `Knowledge` component.
+    Verify {
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long)]
+        id: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -348,6 +382,17 @@ fn main() -> ExitCode {
         Command::Ci { command } => match command {
             CiCommand::Resolve { workspace } => commands::ci_resolve(&workspace),
             CiCommand::Run { workspace } => commands::ci_run(&workspace),
+        },
+        Command::Knowledge { command } => match command {
+            KnowledgeCommand::Append {
+                workspace,
+                id,
+                content,
+                session,
+            } => commands::knowledge_append(&workspace, &id, &content, session.as_deref()),
+            KnowledgeCommand::Verify { workspace, id } => {
+                commands::knowledge_verify(&workspace, id.as_deref())
+            }
         },
     };
 

@@ -46,6 +46,28 @@ impl Workspace {
         command.current_dir(&self.root);
         command.args(args).output().expect("spawn keel")
     }
+
+    /// Pipes `stdin` to `keel <args>` (for `keel gate --client native`).
+    fn run_stdin(&self, args: &[&str], stdin: &str) -> Output {
+        use std::io::Write;
+        use std::process::Stdio;
+        let mut child = Command::new(keel_bin())
+            .env_clear()
+            .args(args)
+            .current_dir(&self.root)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn keel gate");
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(stdin.as_bytes())
+            .unwrap();
+        child.wait_with_output().expect("wait keel gate")
+    }
 }
 
 impl Drop for Workspace {
@@ -166,6 +188,50 @@ spec:
   preconditions:
     - using: "builtin:skill.loaded"
       with: { id: web-guide }
+      onFail: block
+  enforcement:
+    valid: { decision: allow }
+"#,
+    )
+    .unwrap();
+}
+
+/// Two rules exercising `evidence.recorded` end to end:
+/// - `global.record-test-result` leaves an evidence trail for `test.completed`
+///   (invalid when the content says FAILED) — it never blocks BY ITSELF, it
+///   only records.
+/// - `global.require-red-before-write` FORCES that evidence to exist before
+///   `rm` runs — the generic counterpart of `skill.loaded`, for any event.
+fn author_require_red_evidence_for_write(root: &Path) {
+    let rules = root.join("global/rules");
+    fs::create_dir_all(&rules).unwrap();
+    fs::write(
+        rules.join("record-test-result.yaml"),
+        r#"apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: global.record-test-result, author: test, adrRef: adr:ADR-004, reviewAfter: P6M }
+spec:
+  on: [test.completed]
+  validate:
+    using: "builtin:text.contains"
+    with: { value: "FAILED" }
+  enforcement:
+    invalid: { decision: allow }
+    valid: { decision: allow }
+"#,
+    )
+    .unwrap();
+    fs::write(
+        rules.join("require-red-before-write.yaml"),
+        r#"apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: global.require-red-before-write, author: test, adrRef: adr:ADR-005, reviewAfter: P6M }
+spec:
+  on: [command.requested]
+  detect: { using: "builtin:command.classify", with: { families: ["rm"] } }
+  preconditions:
+    - using: "builtin:evidence.recorded"
+      with: { event: "test.completed", verdict: invalid }
       onFail: block
   enforcement:
     valid: { decision: allow }
@@ -318,6 +384,120 @@ fn a_command_is_blocked_until_the_required_skill_is_loaded() {
             && transcript.contains("keel.skills.load"),
         "the packet must tell the model which skill to load: {transcript}"
     );
+}
+
+/// `evidence.recorded` — the generic counterpart of `skill.loaded` for any
+/// event kind: `rm` is blocked until this SESSION has a `test.completed`
+/// evidence entry with verdict `invalid` (a "RED test" happened), recorded
+/// through `keel gate --client native` (the same ledger the shim/broker path
+/// reads from — evidence is session-scoped, not command-scoped).
+#[test]
+fn a_write_is_blocked_until_red_evidence_is_recorded_in_the_session() {
+    let workspace = Workspace::new();
+    let root = workspace.path().to_str().unwrap().to_string();
+    assert!(workspace.run(&["init", &root, "--json"]).status.success());
+    author_require_red_evidence_for_write(workspace.path());
+    let compile = workspace.run(&["compile", "--workspace", &root]);
+    assert!(
+        compile.status.success(),
+        "compile failed: {}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    fs::write(workspace.path().join("target.txt"), "expendable\n").unwrap();
+
+    // No evidence yet in session s1 → rm is refused.
+    let blocked = workspace.run(&[
+        "launch",
+        "--client",
+        "generic",
+        "--workspace",
+        &root,
+        "--session",
+        "s1",
+        "--",
+        "/bin/sh",
+        "-c",
+        "rm target.txt",
+    ]);
+    let transcript = format!(
+        "{}{}",
+        String::from_utf8_lossy(&blocked.stdout),
+        String::from_utf8_lossy(&blocked.stderr)
+    );
+    assert!(
+        !blocked.status.success(),
+        "rm must be blocked without prior RED evidence: {transcript}"
+    );
+    assert!(
+        transcript.contains("BLOCKED (global.require-red-before-write)"),
+        "the packet must name the blocking rule: {transcript}"
+    );
+    assert!(
+        workspace.path().join("target.txt").exists(),
+        "a blocked command never exists as a process"
+    );
+
+    // Record a RED test result for session s1 via `keel gate --client native`
+    // (the same channel Piece A wires into evaluate_event — proves the
+    // evidence is genuinely session-scoped, read back from the ledger, not a
+    // fixture threaded through by the test).
+    let record = workspace.run_stdin(
+        &["gate", "--client", "native", "--workspace", &root, "--session", "s1"],
+        r#"{"kind":"test.completed","session_id":"s1","content":"1 failed — assertion FAILED"}"#,
+    );
+    assert_eq!(
+        record.status.code(),
+        Some(0),
+        "recording a test.completed event must not itself block: {}",
+        String::from_utf8_lossy(&record.stderr)
+    );
+
+    // Same session, now WITH evidence → rm is allowed.
+    let allowed = workspace.run(&[
+        "launch",
+        "--client",
+        "generic",
+        "--workspace",
+        &root,
+        "--session",
+        "s1",
+        "--",
+        "/bin/sh",
+        "-c",
+        "rm target.txt",
+    ]);
+    assert!(
+        allowed.status.success(),
+        "rm must pass once RED evidence is recorded: {}{}",
+        String::from_utf8_lossy(&allowed.stdout),
+        String::from_utf8_lossy(&allowed.stderr)
+    );
+    assert!(
+        !workspace.path().join("target.txt").exists(),
+        "the allowed command actually ran"
+    );
+
+    // A DIFFERENT session never sees s1's evidence — evidence.recorded is
+    // scoped to the session, not global.
+    fs::write(workspace.path().join("other.txt"), "expendable\n").unwrap();
+    let other_session = workspace.run(&[
+        "launch",
+        "--client",
+        "generic",
+        "--workspace",
+        &root,
+        "--session",
+        "s2",
+        "--",
+        "/bin/sh",
+        "-c",
+        "rm other.txt",
+    ]);
+    assert!(
+        !other_session.status.success(),
+        "s2 has no evidence of its own — rm must still be blocked there"
+    );
+    assert!(workspace.path().join("other.txt").exists());
 }
 
 /// F2: the OS-sandbox backstop closes the absolute-path bypass that shims

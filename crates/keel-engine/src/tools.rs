@@ -16,7 +16,7 @@
 use crate::snapshot::{
     CompiledPrecondition, CompiledToolCall, CompiledToolRef, ExternalToolDef, OutputKind,
 };
-use keel_core::event::Event;
+use keel_core::event::{Event, EventKind};
 use keel_core::{OriginClass, Verdict};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -55,7 +55,8 @@ pub struct Finding {
 /// IDs of builtins supported in Phase 0. This is the list the compiler uses
 /// to resolve references (spec section 10.1 "Tool validation").
 pub const BUILTIN_DETECTORS: &[&str] = &["text.contains", "text.regex", "command.classify"];
-pub const BUILTIN_PRECONDITIONS: &[&str] = &["env.present", "flag.present", "skill.loaded"];
+pub const BUILTIN_PRECONDITIONS: &[&str] =
+    &["env.present", "flag.present", "skill.loaded", "evidence.recorded"];
 
 /// Runs a builtin DETECTOR. Returns only hit/no-hit: the detector never
 /// decides (section 4.5) — a match opens the door to `validate`, nothing more.
@@ -169,6 +170,28 @@ pub fn run_precondition(
                         return false;
                     };
                     event.loaded_skills.iter().any(|s| s == id)
+                }
+                "evidence.recorded" => {
+                    // Generic counterpart of `skill.loaded` for any event
+                    // kind (not just skills): the action is allowed only if
+                    // this session already has a ledger entry for `event`
+                    // (and, if given, matching `verdict`). Same source of
+                    // truth as skill.loaded — a field the broker/gate
+                    // populated on `Event` BEFORE evaluation, never a live
+                    // query from inside the runtime (⇏ dsl/store boundary).
+                    let Some(target_kind) = with
+                        .and_then(|w| w.get("event"))
+                        .and_then(|v| serde_json::from_value::<EventKind>(v.clone()).ok())
+                    else {
+                        return false; // malformed parameter ≠ evidence: fail-closed
+                    };
+                    let target_verdict = with
+                        .and_then(|w| w.get("verdict"))
+                        .and_then(|v| serde_json::from_value::<Verdict>(v.clone()).ok());
+                    event
+                        .recorded_evidence
+                        .iter()
+                        .any(|(k, v)| *k == target_kind && target_verdict.is_none_or(|tv| tv == *v))
                 }
                 _ => false,
             }
