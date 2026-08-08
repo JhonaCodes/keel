@@ -5,6 +5,22 @@ whole project history (that lives in `git log`). Versions here track
 `Cargo.toml`'s workspace `version`, which is independent of the "spec
 version" used by `docs/RACC_reference_architecture_v0_9_1.md`.
 
+## Unreleased
+
+- **Evidence auto-capture** (`keel gate`, client-hook bridge): when a Bash
+  command that is a known test runner (`cargo test`, `flutter test`, `pytest`,
+  `npm test`, …) completes, keel synthesizes a `test.completed` event whose
+  content carries the pass/fail signal from the real exit code. This lets an
+  `evidence.recorded` precondition auto-unblock (e.g. "no write until a RED test
+  was recorded") from an OBSERVED run, without the model hand-feeding evidence —
+  the port of jflow's evidence-capture into the Keel enforcement path.
+- **`ModelExecutor` `config.env`**: a governed CLI executor can now declare
+  extra environment variables for its child (still `env_clear` + `PATH` only
+  otherwise). A `${NAME}` value inherits from keel's environment (same
+  convention as MCP provider configs). Fixes agent invocation for CLIs that need
+  `HOME` to find their auth config (`claude -p`, `codex`), which previously
+  failed under the stripped environment.
+
 ## 0.11.0
 
 - `evidence.recorded` builtin precondition: block an action until the
