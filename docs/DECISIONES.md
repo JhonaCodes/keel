@@ -375,3 +375,50 @@ Evidencia: `crates/keel-engine/src/workspace.rs` (`LayerId::Package` en el enum,
 `crates/keel-cli/src/{commands.rs,init.rs}` (label + README),
 `crates/keel-engine/tests-unit/workspace.rs`
 (`packages_compose_as_a_technology_layer...`).
+
+## D-016 Entrega OPORTUNA de contexto (el recurso correcto en el momento correcto)
+
+Extension de D-013/D-014 (decidida con el dueno: "mas importante es que cargue el
+contexto, reglas, skills, agents en su momento adecuado, que no omita lo que se
+necesita"). Hasta D-014, keel entregaba contexto SOLO en el prompt (enrichment) o
+en un BLOCK (packet). El resto de los momentos quedaban sin cobertura: al editar
+Dart, al correr un comando, al usar un tool nativo, el modelo no recibia la regla/
+skill/blueprint relevante salvo que bloqueara. Ese es el hueco que las reglas
+advisory nunca cierran (llegan tarde o no llegan).
+
+Decision: keel entrega el recurso relevante EN CADA MOMENTO, de forma no
+bloqueante y sin tocar el flujo de permisos del cliente.
+
+- Mas momentos: el matcher PreToolUse del `settings.json` pasa a catch-all (`""`),
+  asi keel VE todo tool antes de usarse. Bash/Edit/Write/WebFetch mapean a sus
+  eventos; cualquier otro (un MCP nativo, un read, un search) es el nuevo evento
+  `tool.requested` — observe, nunca bloqueo por si mismo. Se cablea `SessionStart`.
+- Canal de entrega: en `file.edited`/`command.requested`/`tool.requested`
+  (PreToolUse) y en `SessionStart`, `keel gate` emite `hookSpecificOutput.
+  additionalContext` SIN `permissionDecision` — agrega contexto pero NO fuerza
+  "allow" (forzarlo saltearia el gate de permisos del usuario). Confirmado contra
+  las docs de Claude Code (2026): PreToolUse admite additionalContext sin
+  bloquear; limite 10k chars. Nada relevante → sin salida (un `Read` trivial no
+  hace ruido).
+- Que se entrega: un ensamblador unico (`build_delivery_context`) junta (1) la
+  salida de tools de reglas (D-013), (2) el catalogo enrutado (D-014) de skills/
+  agentes/COMPONENTS relevantes al momento, y (3) los skills que una regla
+  adjunto (`enforcement.*.load.skills`, incluida la rama `always` de activacion
+  cognitiva). Un emisor unico (`emit_delivery`) lo manda por el canal del momento.
+- Enrutar TODOS los kinds: el `match`/routing se extiende del par skills+agents al
+  mapa `components` (blueprints, knowledge, workflows). `route` devuelve
+  `RouteResult { skills, agents, components }`. Asi "vas a tocar X" surface el
+  blueprint/knowledge relevante, no solo skills.
+- Sin re-enviar: reusa `deliver_skills` (no re-manda lo ya cargado, re-entrega en
+  oscilacion). El bloqueo duro y la captura PostToolUse quedan para una fase
+  posterior (este cambio es entrega-primero).
+
+Evidencia: `crates/keel-cli/src/gate.rs` (`build_delivery_context`,
+`emit_delivery`, `routed_catalog_block`, fallback `tool.requested`, delivery en
+PreToolUse/SessionStart), `crates/keel-host/src/launch.rs` (matcher `""` +
+`SessionStart`), `crates/keel-core/src/event.rs` (`ToolRequested`),
+`crates/keel-engine/src/routing.rs` (`RouteResult`, `route` sobre components),
+`crates/keel-engine/src/snapshot.rs` (`CompiledComponent.match_`),
+`crates/keel-dsl/src/lib.rs` + `schemas/governed-component.schema.json` (`match`),
+`crates/keel-engine/tests-unit/routing.rs` + `test/tests/gate_hook.rs`
+(`a_file_edit_surfaces_the_relevant_skill_without_blocking`).

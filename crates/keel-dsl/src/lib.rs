@@ -150,6 +150,14 @@ pub struct GovernedComponentSpec {
     pub content: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inline: Option<String>,
+    /// One-line description for the exposed catalog + routing derivation (D-014).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Declarative routing (D-014/D-016): when this component (blueprint,
+    /// knowledge, workflow, …) is relevant to a moment. Optional — the compiler
+    /// derives terms from `id` + `description`.
+    #[serde(default, rename = "match", skip_serializing_if = "Option::is_none")]
+    pub match_: Option<MatchSpec>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requirements: Vec<ComponentRequirement>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

@@ -28,6 +28,20 @@
       "properties": {
         "content": { "type": "string" },
         "inline": { "type": "string" },
+        "description": {
+          "type": "string",
+          "description": "One-line description for the exposed catalog and routing derivation (D-014)."
+        },
+        "match": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Declarative routing (D-014/D-016): when this component is relevant to a moment. Optional — derived from id+description otherwise.",
+          "properties": {
+            "terms": { "type": "array", "items": { "type": "string" } },
+            "context": { "type": "array", "items": { "type": "string" } },
+            "autoload": { "type": "boolean" }
+          }
+        },
         "requirements": {
           "type": "array",
           "items": {

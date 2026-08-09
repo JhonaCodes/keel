@@ -150,13 +150,30 @@ pub fn score(
     Some((total, trigger))
 }
 
-/// Ranks every skill and agent in the snapshot against `prompt`, returning at
-/// most `limit` of each, most relevant first. Ties break by specificity (more
-/// declared conditions wins), then id (stable). A capability with no match is
-/// dropped. This is the deterministic core the gate turns into `additionalContext`.
-pub fn route(snapshot: &Snapshot, prompt: &str, limit: usize) -> (Vec<Routed>, Vec<Routed>) {
-    let words: BTreeSet<String> = derive_terms(&[prompt]).into_iter().collect();
-    let contexts = detect_contexts(prompt);
+/// The ranked, relevant capabilities for one moment: skills, agents and other
+/// governed components (blueprints, knowledge, workflows…). Everything the gate
+/// turns into `additionalContext` — "you're about to touch X, keel has these".
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RouteResult {
+    pub skills: Vec<Routed>,
+    pub agents: Vec<Routed>,
+    pub components: Vec<Routed>,
+}
+
+impl RouteResult {
+    pub fn is_empty(&self) -> bool {
+        self.skills.is_empty() && self.agents.is_empty() && self.components.is_empty()
+    }
+}
+
+/// Ranks every skill, agent and governed component in the snapshot against
+/// `moment` (the prompt text, the edited file's content, or a command — whatever
+/// text describes the current moment), returning at most `limit` of each, most
+/// relevant first. Ties break by specificity (more declared conditions wins),
+/// then id (stable). A capability with no match is dropped. Deterministic core.
+pub fn route(snapshot: &Snapshot, moment: &str, limit: usize) -> RouteResult {
+    let words: BTreeSet<String> = derive_terms(&[moment]).into_iter().collect();
+    let contexts = detect_contexts(moment);
 
     let rank = |matches: Vec<Routed>| -> Vec<Routed> {
         let mut v = matches;
@@ -203,7 +220,28 @@ pub fn route(snapshot: &Snapshot, prompt: &str, limit: usize) -> (Vec<Routed>, V
             })
             .collect(),
     );
-    (skills, agents)
+    let components = rank(
+        snapshot
+            .components
+            .values()
+            // ModelExecutors are wiring, not something to surface to the model.
+            .filter(|c| c.kind != "model-executor")
+            .filter_map(|c| {
+                score(&words, &contexts, &c.match_).map(|(sc, trigger)| Routed {
+                    id: format!("{}:{}", c.kind, c.id),
+                    score: sc,
+                    trigger,
+                    specificity: c.match_.terms.len() + c.match_.context.len(),
+                    autoload: false,
+                })
+            })
+            .collect(),
+    );
+    RouteResult {
+        skills,
+        agents,
+        components,
+    }
 }
 
 #[cfg(test)]

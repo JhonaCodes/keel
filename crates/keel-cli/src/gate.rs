@@ -116,11 +116,25 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
     // with its id) instead of fetching it itself. Deterministic, by code, not a
     // model choice. Emitted as the client's `additionalContext`; never blocks.
     if event.kind == EventKind::PromptSubmitted {
-        return Ok(emit_prompt_enrichment(
+        return Ok(emit_delivery(
             &evals,
             &snapshot,
             event.content.as_deref(),
             &files.root,
+            "UserPromptSubmit",
+            "contexto entregado al modelo",
+        ));
+    }
+    // Session start (D-016): deliver the base context/rules up front — no moment
+    // text, so only `session.started`-scoped rules and their skills surface.
+    if event.kind == EventKind::SessionStarted {
+        return Ok(emit_delivery(
+            &evals,
+            &snapshot,
+            None,
+            &files.root,
+            "SessionStart",
+            "contexto de inicio",
         ));
     }
 
@@ -132,33 +146,60 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
     // it (exit 2). PostToolUse is post-hoc → feedback only (exit 0): the tool
     // already ran, so a false exit-2 would be a lie (invariant 8).
     if worst >= Decision::Block && preventable {
-        Ok(ExitCode::from(2))
-    } else {
-        Ok(ExitCode::SUCCESS)
+        return Ok(ExitCode::from(2));
     }
+
+    // Opportune delivery (D-016): a pre-action tool moment that did NOT block is
+    // the moment to hand the model the relevant rules/skills/agents/blueprints —
+    // "you're about to touch this, keel has these". Uses the file content / the
+    // command as the moment text; emits `additionalContext` without a permission
+    // decision, so the client's own approval flow is untouched.
+    if preventable
+        && matches!(
+            event.kind,
+            EventKind::FileEdited | EventKind::CommandRequested | EventKind::ToolRequested
+        )
+    {
+        let moment = event
+            .content
+            .as_deref()
+            .or(event.command.as_deref())
+            .or(event.file.as_deref());
+        return Ok(emit_delivery(
+            &evals,
+            &snapshot,
+            moment,
+            &files.root,
+            "PreToolUse",
+            "recursos en este momento",
+        ));
+    }
+
+    Ok(ExitCode::SUCCESS)
 }
 
-/// Hands the model context on a prompt (D-013/D-014), by code, deterministically.
-/// Two contributions, combined into one `additionalContext`:
+/// Assembles the context keel delivers at a MOMENT (D-013/D-014/D-016):
 ///
-/// 1. Rule enrichment (D-013): the tool output of every `prompt.submitted`
-///    evaluation — the task already deserialized (a decomposed ticket, a PR).
-/// 2. Declarative routing (D-014): the ranked shortlist of governed
-///    skills/agents whose `match` fits the prompt, so the model is TOLD which
-///    capabilities relate (and their trigger) instead of guessing; an
-///    `autoload` skill with a strong match has its content injected outright.
+/// 1. Rule enrichment (D-013): a matched rule's tool output — the task already
+///    deserialized (a decomposed ticket, a PR).
+/// 2. Routed catalog (D-014/D-016): the ranked, relevant skills / agents /
+///    governed components (blueprints, knowledge…) for `moment` — "you're about
+///    to touch this, keel has these" — plus any skill a matched rule asked to
+///    load (`enforcement.*.load.skills`). An `autoload` skill is injected whole.
 ///
-/// Nothing to inject → no output. Never blocks the prompt.
-fn emit_prompt_enrichment(
+/// Returns the joined context and the sources (for the operator banner), or
+/// `None` when nothing is relevant — silence, never noise (a trivial `Read`
+/// surfaces nothing).
+fn build_delivery_context(
     evals: &[keel_engine::runtime::Evaluation],
     snapshot: &Snapshot,
-    prompt: Option<&str>,
+    moment: Option<&str>,
     root: &Path,
-) -> ExitCode {
+) -> Option<(String, Vec<String>)> {
     let mut blocks: Vec<String> = Vec::new();
     let mut sources: Vec<String> = Vec::new();
 
-    // 1) Rule enrichment (D-013).
+    // 1) Rule enrichment (D-013): structured tool output (e.g. a decomposed ticket).
     for eval in evals {
         let before = blocks.len();
         for finding in &eval.findings {
@@ -171,72 +212,111 @@ fn emit_prompt_enrichment(
         }
     }
 
-    // 2) Declarative routing (D-014).
-    if let Some(prompt) = prompt {
-        let (skills, agents) = keel_engine::routing::route(snapshot, prompt, 6);
-        if let Some(block) = routed_catalog_block(snapshot, &skills, &agents, root) {
-            blocks.push(block);
-            for s in &skills {
-                sources.push(format!("{}·{}", s.id, s.trigger));
-            }
+    // 2) Skills a matched rule attached (always — they don't need a moment to
+    //    route on) + the routed catalog (only when there is moment text).
+    let rule_skills: Vec<String> = evals
+        .iter()
+        .flat_map(|e| e.load_skills.iter())
+        .map(|s| {
+            let id = s.strip_prefix("skill:").unwrap_or(s.as_str());
+            id.split('#').next().unwrap_or(id).to_string()
+        })
+        .collect();
+    let routed = match moment {
+        Some(moment) => keel_engine::routing::route(snapshot, moment, 6),
+        None => keel_engine::routing::RouteResult::default(),
+    };
+    if let Some(block) = routed_catalog_block(snapshot, &routed, &rule_skills, root) {
+        blocks.push(block);
+        for s in &routed.skills {
+            sources.push(format!("{}·{}", s.id, s.trigger));
+        }
+        for id in &rule_skills {
+            sources.push(format!("{id}·rule"));
         }
     }
 
     if blocks.is_empty() {
-        return ExitCode::SUCCESS;
+        None
+    } else {
+        Some((blocks.join("\n\n"), sources))
     }
-    let context = blocks.join("\n\n");
-    // Visible, elegant confirmation to the OPERATOR of what keel delivered and
-    // WHY (which rules + which capabilities, with their trigger). `systemMessage`
-    // shows in the client transcript; stderr is the fallback channel.
-    let banner = format!(
-        "keel ✦ contexto entregado al modelo: {}",
-        sources.join(", ")
-    );
+}
+
+/// Emits the assembled context to the model through a hook's `additionalContext`
+/// channel, tagged with `hook_event_name` (`UserPromptSubmit` on a prompt,
+/// `PreToolUse` at a tool moment, `SessionStart` at session start). Never blocks
+/// and — crucially at a tool moment — emits NO `permissionDecision`: keel adds
+/// context but leaves the client's own approval flow untouched (forcing "allow"
+/// would silently bypass the user's permission gate). Nothing relevant → no
+/// output, so trivial moments stay quiet. On the prompt it also surfaces the
+/// banner to the operator's screen (`systemMessage`).
+fn emit_delivery(
+    evals: &[keel_engine::runtime::Evaluation],
+    snapshot: &Snapshot,
+    moment: Option<&str>,
+    root: &Path,
+    hook_event_name: &str,
+    banner_label: &str,
+) -> ExitCode {
+    let Some((context, sources)) = build_delivery_context(evals, snapshot, moment, root) else {
+        return ExitCode::SUCCESS;
+    };
+    let banner = format!("keel ✦ {banner_label}: {}", sources.join(", "));
     eprintln!("[{banner}]");
-    let out = serde_json::json!({
-        "systemMessage": banner,
+    let mut out = serde_json::json!({
         "hookSpecificOutput": {
-            "hookEventName": "UserPromptSubmit",
+            "hookEventName": hook_event_name,
             "additionalContext": context,
         }
     });
+    if hook_event_name == "UserPromptSubmit" {
+        out["systemMessage"] = serde_json::Value::String(banner);
+    }
     println!("{out}");
     ExitCode::SUCCESS
 }
 
-/// Renders the routed skills/agents into one context block: a token-thrifty
-/// catalog (id + description + trigger) the model can pull from, plus the full
-/// content of any `autoload` skill (read from its compact file — a strong match
-/// earns a push, not just a mention). `None` when nothing routed.
+/// Renders the routed capabilities into one context block: a token-thrifty
+/// catalog (id + description + trigger) the model can pull from — skills, agents
+/// and other governed components (blueprints, knowledge…) — plus the skills a
+/// matched rule attached, and the full content of any `autoload` skill. `None`
+/// when there is nothing to surface.
 fn routed_catalog_block(
     snapshot: &Snapshot,
-    skills: &[keel_engine::routing::Routed],
-    agents: &[keel_engine::routing::Routed],
+    routed: &keel_engine::routing::RouteResult,
+    rule_skills: &[String],
     root: &Path,
 ) -> Option<String> {
-    if skills.is_empty() && agents.is_empty() {
+    if routed.is_empty() && rule_skills.is_empty() {
         return None;
     }
     let mut lines = vec![
-        "Keel tiene capacidades gobernadas relacionadas a tu tarea (no hace falta que las busques):"
+        "Keel tiene recursos gobernados relevantes a este momento (no hace falta que los busques):"
             .to_string(),
     ];
-    if !skills.is_empty() {
-        lines.push("\nSkills (cargá con keel.skills.load <id>):".to_string());
-        for s in skills {
-            let desc = snapshot
-                .skills
-                .get(&s.id)
-                .and_then(|c| c.description.as_deref())
-                .unwrap_or("");
-            let sep = if desc.is_empty() { "" } else { ": " };
-            lines.push(format!("- {} [{}]{sep}{desc}", s.id, s.trigger));
+
+    // Skills: routed + those a matched rule attached (deduped, rule-attached first).
+    let mut seen = std::collections::BTreeSet::new();
+    let mut skill_lines = Vec::new();
+    for id in rule_skills {
+        if seen.insert(id.clone()) {
+            skill_lines.push(catalog_skill_line(snapshot, id, "rule"));
         }
     }
-    if !agents.is_empty() {
+    for s in &routed.skills {
+        if seen.insert(s.id.clone()) {
+            skill_lines.push(catalog_skill_line(snapshot, &s.id, &s.trigger));
+        }
+    }
+    if !skill_lines.is_empty() {
+        lines.push("\nSkills (cargá con keel.skills.load <id>):".to_string());
+        lines.extend(skill_lines);
+    }
+
+    if !routed.agents.is_empty() {
         lines.push("\nAgentes (invocá con keel.agent.invoke agent=<id>):".to_string());
-        for a in agents {
+        for a in &routed.agents {
             let obj = snapshot
                 .agents
                 .get(&a.id)
@@ -246,19 +326,45 @@ fn routed_catalog_block(
             lines.push(format!("- {} [{}]{sep}{obj}", a.id, a.trigger));
         }
     }
+
+    if !routed.components.is_empty() {
+        lines.push("\nBlueprints/knowledge (consultá con keel.blueprints):".to_string());
+        for c in &routed.components {
+            let desc = snapshot
+                .components
+                .get(&c.id)
+                .and_then(|cc| cc.description.as_deref())
+                .unwrap_or("");
+            let sep = if desc.is_empty() { "" } else { ": " };
+            lines.push(format!("- {} [{}]{sep}{desc}", c.id, c.trigger));
+        }
+    }
+
     // Autoload: inject the compact content of strongly-matched opt-in skills.
-    for s in skills.iter().filter(|s| s.autoload) {
+    for s in routed.skills.iter().filter(|s| s.autoload) {
         if let Some(compact) = snapshot.skills.get(&s.id).map(|c| &c.compact)
             && let Ok(content) = std::fs::read_to_string(root.join(compact))
         {
             lines.push(format!("\n── skill cargada: {} ──\n{content}", s.id));
         }
     }
+
     lines.push(
         "\nEl listado completo está disponible con keel.skills.list en cualquier momento."
             .to_string(),
     );
     Some(lines.join("\n"))
+}
+
+/// One catalog line for a skill: `- <id> [<trigger>]: <description>`.
+fn catalog_skill_line(snapshot: &Snapshot, id: &str, trigger: &str) -> String {
+    let desc = snapshot
+        .skills
+        .get(id)
+        .and_then(|c| c.description.as_deref())
+        .unwrap_or("");
+    let sep = if desc.is_empty() { "" } else { ": " };
+    format!("- {id} [{trigger}]{sep}{desc}")
 }
 
 /// Parses the payload into a keel event and whether a block on it can PREVENT
@@ -374,7 +480,25 @@ fn parse_claude_code_hook(input: &str) -> Option<(Event, bool)> {
                     ev.command = ti.get("url").and_then(|u| u.as_str()).map(str::to_string);
                     Some((ev, pre))
                 }
-                _ => None,
+                other => {
+                    // Any other tool the model is about to use (a native MCP tool,
+                    // a read, a search): keel SEES it (matcher is catch-all) and can
+                    // DELIVER relevant context at that moment (D-016). Observe-only
+                    // — never blocks unless an authored rule decides otherwise. A
+                    // PostToolUse of an unmapped tool is ignored in Phase 1.
+                    if !pre {
+                        return None;
+                    }
+                    let mut ev = mk(EventKind::ToolRequested);
+                    ev.command = Some(other.to_string());
+                    // Tool name + a truncated view of its input as the moment text,
+                    // so routing can match (a native `linear` call surfaces the
+                    // linear resources).
+                    let input = ti.to_string();
+                    let input: String = input.chars().take(500).collect();
+                    ev.content = Some(format!("{other} {input}"));
+                    Some((ev, true))
+                }
             }
         }
         "Stop" => Some((mk(EventKind::CompletionRequested), true)),
@@ -387,6 +511,12 @@ fn parse_claude_code_hook(input: &str) -> Option<(Event, bool)> {
             let mut ev = mk(EventKind::PromptSubmitted);
             ev.content = v.get("prompt").and_then(|p| p.as_str()).map(str::to_string);
             Some((ev, false))
+        }
+        "SessionStart" => {
+            // Session start (startup / resume): a moment to deliver base context
+            // and `session.started` rules up front (D-016). Delivery only, never
+            // a block.
+            Some((mk(EventKind::SessionStarted), false))
         }
         _ => None,
     }
@@ -570,5 +700,61 @@ mod tests {
 
         let (event, _) = parse_claude_code_hook(&payload).expect("parsed");
         assert_eq!(event.kind, EventKind::CommandCompleted);
+    }
+
+    #[test]
+    fn an_unmapped_pretooluse_tool_becomes_observe_only_tool_requested() {
+        // Catch-all matcher (D-016): a native MCP tool the model is about to use
+        // is SEEN as `tool.requested` — carried so keel can deliver context at
+        // that moment — but it is observe-only (never a hard block by itself).
+        let payload = serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "session_id": "s1",
+            "tool_name": "mcp__linear-server__get_issue",
+            "tool_input": { "id": "ABC-123" }
+        })
+        .to_string();
+
+        let (event, preventable) = parse_claude_code_hook(&payload).expect("parsed");
+        assert_eq!(event.kind, EventKind::ToolRequested);
+        assert_eq!(
+            event.command.as_deref(),
+            Some("mcp__linear-server__get_issue")
+        );
+        assert!(
+            event.content.as_deref().unwrap_or("").contains("linear"),
+            "the moment text carries the tool + input so routing can match it"
+        );
+        assert!(
+            preventable,
+            "seen before the call, so a rule COULD gate it — default is observe"
+        );
+    }
+
+    #[test]
+    fn an_unmapped_posttooluse_tool_is_ignored() {
+        // A completed unmapped tool is post-hoc: nothing to deliver or prevent.
+        let payload = serde_json::json!({
+            "hook_event_name": "PostToolUse",
+            "session_id": "s1",
+            "tool_name": "mcp__linear-server__get_issue",
+            "tool_input": { "id": "ABC-123" }
+        })
+        .to_string();
+        assert!(parse_claude_code_hook(&payload).is_none());
+    }
+
+    #[test]
+    fn session_start_becomes_a_non_blocking_session_started() {
+        let payload = serde_json::json!({
+            "hook_event_name": "SessionStart",
+            "session_id": "s1",
+            "source": "startup"
+        })
+        .to_string();
+
+        let (event, preventable) = parse_claude_code_hook(&payload).expect("parsed");
+        assert_eq!(event.kind, EventKind::SessionStarted);
+        assert!(!preventable, "session start delivers context, never blocks");
     }
 }
