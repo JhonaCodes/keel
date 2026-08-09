@@ -41,6 +41,10 @@ pub enum Client {
 /// Reads one hook payload from stdin, evaluates it, and returns the exit code
 /// the client must honor: 2 = block the action, 0 = allow.
 pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result<ExitCode> {
+    // Load `<workspace>/.env` so `${VAR}` in governed configs resolves here too
+    // (standalone-safe; a shell export still wins).
+    keel_host::dotenv::load_workspace_env(root);
+
     let mut input = String::new();
     std::io::stdin()
         .read_to_string(&mut input)
