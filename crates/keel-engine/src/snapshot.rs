@@ -458,6 +458,39 @@ pub enum OutputKind {
     ExitCode,
 }
 
+/// Compiled routing signal (D-014): the resolved, hashable form of a
+/// capability's `match` block, with terms the compiler DERIVED from the id and
+/// description folded in. This is the deterministic input the native router
+/// scores a prompt against — no separate router owns intent, the capability
+/// declares (or the compiler derives) it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CompiledMatch {
+    /// Explicit alias words/phrases from the authored `match.terms` (high weight).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub terms: Vec<String>,
+    /// Terms the compiler derived from `id`+`description`/`objective` (low
+    /// weight): the automatic signal that lets a capability route with zero
+    /// authoring (D-014).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub derived: Vec<String>,
+    /// Structured object types (`github_pr`, `linear_ticket`, …) matched from
+    /// structured cues in the prompt (highest weight).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context: Vec<String>,
+    /// Opt-in push (D-014): inject on high-confidence match instead of exposing.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub autoload: bool,
+}
+
+impl CompiledMatch {
+    pub fn is_empty(&self) -> bool {
+        self.terms.is_empty()
+            && self.derived.is_empty()
+            && self.context.is_empty()
+            && !self.autoload
+    }
+}
+
 /// Compiled skill (spec section 14.12): loading levels + exemplar pairs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompiledSkill {
@@ -469,6 +502,13 @@ pub struct CompiledSkill {
     /// author did not provide one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Resolved routing signal (D-014): authored `match` + derived terms.
+    #[serde(
+        default,
+        rename = "match",
+        skip_serializing_if = "CompiledMatch::is_empty"
+    )]
+    pub match_: CompiledMatch,
     /// Workspace-relative path to the compact variant.
     pub compact: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -520,6 +560,13 @@ pub struct CompiledAgent {
     pub executor: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub objective: Option<String>,
+    /// Resolved routing signal (D-014): authored `match` + derived terms.
+    #[serde(
+        default,
+        rename = "match",
+        skip_serializing_if = "CompiledMatch::is_empty"
+    )]
+    pub match_: CompiledMatch,
     /// Workspace-relative path to the JSON Schema the AgentResult is validated
     /// against (invariant 12).
     #[serde(default, skip_serializing_if = "Option::is_none")]

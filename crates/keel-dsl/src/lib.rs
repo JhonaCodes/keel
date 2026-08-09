@@ -296,6 +296,11 @@ pub struct SkillSpec {
     /// is for" — without the model reading every skill's content. Optional.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Declarative routing (D-014): when this capability APPLIES to a prompt.
+    /// Optional — the compiler always DERIVES terms from `id`+`description`, so a
+    /// skill routes with zero authoring; `match` only augments/refines.
+    #[serde(default, rename = "match", skip_serializing_if = "Option::is_none")]
+    pub match_: Option<MatchSpec>,
     /// Workspace-relative path to the compact variant.
     pub compact: String,
     /// Workspace-relative path to the full variant (optional).
@@ -303,6 +308,31 @@ pub struct SkillSpec {
     pub full: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub examples: Vec<ExemplarPair>,
+}
+
+/// Declarative match block (D-014) — the AUTHORED half of routing. Intent is
+/// DECLARED here, next to the capability, never inferred by a separate router:
+/// one source of truth, deterministic, and auditable ("why did keel route this?"
+/// → the trigger that fired). The compiler merges this with terms it derives
+/// from `id`+`description`, so this block is always optional.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MatchSpec {
+    /// Explicit alias words/phrases that route to this capability, weighted
+    /// ABOVE derived terms (e.g. `coderabbit` for a CodeRabbit review skill).
+    /// This is the lever that disambiguates sibling capabilities.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub terms: Vec<String>,
+    /// Structured object types this capability applies to (e.g. `github_pr`,
+    /// `github_issue`, `linear_ticket`). Highest-precision signal: matched from
+    /// structured cues in the prompt (a PR URL, a ticket id), not fuzzy words.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context: Vec<String>,
+    /// Opt-in push (default false): when the trigger matches with high
+    /// confidence, keel INJECTS this skill's content instead of only exposing
+    /// it. Off by default — exposure respects "do not restrict the model".
+    #[serde(default, skip_serializing_if = "crate::is_false")]
+    pub autoload: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -329,6 +359,11 @@ pub struct AgentSpec {
     pub executor: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub objective: Option<String>,
+    /// Declarative routing (D-014): when this agent APPLIES to a prompt. Same
+    /// model as skills — the compiler derives terms from `id`+`objective`, so
+    /// `match` only augments/refines. Optional.
+    #[serde(default, rename = "match", skip_serializing_if = "Option::is_none")]
+    pub match_: Option<MatchSpec>,
     #[serde(
         default,
         rename = "outputSchema",

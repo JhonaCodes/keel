@@ -301,6 +301,7 @@ fn layer_label(layer: &keel_engine::workspace::Layer) -> String {
         LayerId::Global => "global",
         LayerId::Organization => "organization",
         LayerId::Platform => "platform",
+        LayerId::Package => "package",
         LayerId::Project => "project",
         LayerId::Team => "team",
         LayerId::Profile => "profile",

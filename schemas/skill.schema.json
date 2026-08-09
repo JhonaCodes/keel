@@ -30,6 +30,27 @@
           "type": "string",
           "description": "One-line description of what the skill does, for the exposed catalog (D-013)."
         },
+        "match": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Declarative routing (D-014): when this skill applies to a prompt. Optional — the compiler always derives terms from id+description; `match` augments/refines.",
+          "properties": {
+            "terms": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Explicit alias words/phrases (weighted above derived terms) — the lever that disambiguates sibling skills, e.g. `coderabbit`."
+            },
+            "context": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Structured object types this skill applies to, e.g. github_pr, github_issue, linear_ticket. Highest-precision signal."
+            },
+            "autoload": {
+              "type": "boolean",
+              "description": "Opt-in push: on a high-confidence match, inject this skill's content instead of only exposing it. Default false."
+            }
+          }
+        },
         "compact": {
           "type": "string",
           "description": "Workspace-relative path to the compact variant (delivered on first activation)."

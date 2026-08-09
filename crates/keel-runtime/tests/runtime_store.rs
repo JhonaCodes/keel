@@ -70,6 +70,7 @@ fn durable_host_hydrates_skills_from_the_compiled_snapshot() {
         CompiledSkill {
             id: "skill-a".to_string(),
             description: None,
+            match_: Default::default(),
             version: "1.0.0".to_string(),
             compact: "compact.md".to_string(),
             full: None,

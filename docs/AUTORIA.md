@@ -183,13 +183,17 @@ via `keel.skills.load` (MCP); Keel registers the receipt.
 ```yaml
 apiVersion: keel/v1alpha1
 kind: Skill
-metadata: { id: access-patterns, version: 0.1.0 }
+metadata: { id: keel_review_pr_coderabbit, version: 0.1.0 }   # keel_ + keyword (see below)
 spec:
-  description: Access patterns — prefer the query builder over raw SQL   # optional: for the catalog
-  compact: global/skills/access-patterns_keel.md   # short variant (first delivery)
-  full: global/skills/access-patterns-full_keel.md # optional: full variant (scales on oscillation)
+  description: Resolve CodeRabbit review comments on a GitHub PR   # optional but recommended
+  match:                                          # optional: declarative routing (D-014)
+    terms: [coderabbit]                           # explicit alias — the disambiguator
+    context: [github_pr]                          # structured object type
+    autoload: false                               # true → inject on a strong match
+  compact: global/skills/keel_review_pr_coderabbit_keel.md   # short variant (first delivery)
+  full: global/skills/keel_review_pr_coderabbit_full_keel.md # optional: scales on oscillation
   examples:                                        # optional: pairs for packet exemplar
-    - ["raw SQL query", "use the query builder"]
+    - ["skim the PR by hand", "resolve each CodeRabbit thread"]
 ```
 
 - **CONDITION (enforced on compile):** a skill's content files MUST end with
@@ -197,11 +201,48 @@ spec:
   (`SkillNaming`). The suffix makes provenance legible — delivered BY Keel —
   wherever content is read.
 - The `.md` is free text; Keel delivers it as-is to context.
-- A rule can request it: `enforcement.invalid.load.skills: ["skill:access-patterns"]`.
-- **`description` (optional):** a one-line summary that flows into the compiled
-  snapshot, so a `prompt.submitted` enrichment tool can EXPOSE a catalog to the
-  model (D-013) — "we have these skills; here is what each is for; consult them
-  when relevant" — without the model reading every skill's content.
+- A rule can request it: `enforcement.invalid.load.skills: ["skill:keel_review_pr_coderabbit"]`.
+- **`description` (recommended):** a one-line summary that flows into the compiled
+  snapshot, so Keel can EXPOSE a catalog to the model (D-013) and DERIVE routing
+  terms from it (D-014). See "Routing & naming standard" below.
+- **`match` (optional, D-014):** declares WHEN this skill applies. `terms` are
+  explicit aliases weighted above derived words (the lever that disambiguates
+  siblings); `context` is a structured object type (`github_pr`, `github_issue`,
+  `linear_ticket`, `jira_issue`); `autoload: true` injects the compact content on
+  a strong match instead of only exposing it. Omit it entirely and Keel still
+  routes the skill from terms derived off its `id` + `description`.
+
+---
+
+## Routing & naming standard (D-014) — read before authoring a skill or agent
+
+Keel decides which skills/agents relate to a prompt DETERMINISTICALLY, from what
+each capability declares. The name and the description ARE the automatic routing
+signal, so author them on purpose. This standard is portable: any agent on any
+machine authoring for a Keel workspace must follow it.
+
+1. **`id` = `keel_` + contextual keyword(s).** The `keel_` prefix marks
+   provenance (this is delivered by Keel) and is IGNORED by routing (it is a
+   stop-word). What routes is the rest, so it MUST carry the discriminating
+   keyword: `keel_review_pr_coderabbit`, not `keel_review_pr`. Structural words
+   (`skill`, `agent`, `workflow`) are also dropped — they are not intent.
+2. **`description` = one line with real semantics.** It is tokenized into derived
+   routing terms and shown in the exposed catalog. "Resolve CodeRabbit comments
+   on a GitHub PR" routes; "review helper" does not.
+3. **Add `match.terms` for anything that must win over a sibling.** Two review-PR
+   skills collide on `review`/`pr`; only the one that declares `terms:
+   [coderabbit]` wins a CodeRabbit prompt. This is the precision lever.
+4. **Add `match.context` for structured objects.** `github_pr`, `github_issue`,
+   `linear_ticket`, `jira_issue` — matched from a URL or cue word in the prompt,
+   the highest-weight signal. A cue like `pr`/`pull`/`linear`/`ticket` in the id
+   or description infers it automatically, but declaring it is clearer.
+5. **`autoload` sparingly.** Reserve it for a skill the model should always have
+   when its trigger fires strongly; everything else is exposed, not forced.
+
+Scoring (for intuition): structured context (3) > explicit term (2) > derived
+term (1); ties break by specificity (more declared conditions win). An agent
+declares the same `match` block; agents are exposed as suggestions, never
+auto-invoked.
 
 ---
 
@@ -288,13 +329,20 @@ against the `outputSchema` before trusting it (cross-model).
 ```yaml
 apiVersion: keel/v1alpha1
 kind: Agent
-metadata: { id: auditor }
+metadata: { id: keel_auditor_silent_failures }   # keel_ + keyword (routing standard)
 spec:
   role: audit                              # audit | review | implement
   executor: executor:auditor-cli           # the ModelExecutor that runs it
-  objective: Audit the diff for issues.
+  objective: Audit a diff for swallowed errors and silent failures.
+  match:                                    # optional: same routing model as skills (D-014)
+    terms: [silent, failures]
   outputSchema: global/agents/verdict.schema.json   # optional: validates output (invariant 12)
 ```
+
+- **`match` (optional, D-014):** same block as skills. Agents are EXPOSED as
+  suggestions on a matching prompt (`keel.agent.invoke agent=<id>`), never
+  auto-invoked; `autoload` does not apply. Terms are derived from `id` +
+  `objective` when `match` is absent, so follow the naming standard above.
 
 The schema (standard JSON Schema):
 
@@ -351,6 +399,34 @@ spec:
   scope: { paths: { include: ["src/reports/**"] } }   # lock lifts ONLY here
   expiry: "2027-01-01"                   # an expired exception does nothing
 ```
+
+---
+
+## Where technology content goes — the `packages/` layer (D-015)
+
+Reusable content for ONE technology lives in a package (invariant 3: reusable
+components live in packages, not copied per project — invariant 2):
+
+```text
+packages/
+├── flutter/            # namespaced by technology
+│   ├── rules/          # e.g. widget-classes, no-DI-in-VMs (scope: languages:[dart])
+│   ├── skills/         # e.g. keel_flutter_adaptive_ui  (match: terms:[flutter,adaptive])
+│   ├── knowledge/
+│   └── tools/
+└── rust/
+    ├── rules/          # scope: languages:[rust]
+    └── skills/
+```
+
+- A `packages/<tech>/` bundle COMPOSES for every project (between the base
+  layers and the project). What keeps a Flutter package off a Rust repo is each
+  component's own declaration: a rule scopes to `languages: [dart]`, a skill
+  declares `match`. So author those — an unscoped rule in a package would fire
+  everywhere.
+- Same `rules/ skills/ agents/ knowledge/ tools/` convention as any layer.
+- Versioned per component via `metadata.version`; cross-workspace pinning is not
+  implemented yet.
 
 ---
 
