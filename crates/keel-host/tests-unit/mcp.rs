@@ -19,6 +19,7 @@ fn server_with_skill() -> (Server, tempfile::TempDir) {
         "access-patterns".to_string(),
         CompiledSkill {
             id: "access-patterns".into(),
+            description: None,
             version: "0.1.0".into(),
             compact: "skills/access.md".into(),
             full: None,

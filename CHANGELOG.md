@@ -5,6 +5,14 @@ whole project history (that lives in `git log`). Versions here track
 `Cargo.toml`'s workspace `version`, which is independent of the "spec
 version" used by `docs/RACC_reference_architecture_v0_9_1.md`.
 
+## 0.14.0
+
+- **`Skill.description`**: an optional one-line description on a `Skill` that
+  flows into the compiled snapshot, so a `prompt.submitted` enrichment tool can
+  EXPOSE a catalog of available skills to the model (D-013) — "we have these
+  skills; here is what each is for" — without the model reading every skill's
+  content. Backward compatible (absent → none).
+
 ## 0.13.0
 
 - **Prompt enrichment — keel DELIVERS context on the prompt (D-013)**: keel now

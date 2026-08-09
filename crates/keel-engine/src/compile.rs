@@ -190,6 +190,7 @@ pub fn compile_layered(
                         .version
                         .clone()
                         .unwrap_or_else(|| "unversioned".to_string()),
+                    description: skill.spec.description.clone(),
                     compact: skill.spec.compact.clone(),
                     full: skill.spec.full.clone(),
                     examples: skill

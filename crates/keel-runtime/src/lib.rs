@@ -796,6 +796,7 @@ mod tests {
             "architecture.review".to_string(),
             CompiledSkill {
                 id: "architecture.review".to_string(),
+                description: None,
                 version: "1.2.0".to_string(),
                 compact: "compact.md".to_string(),
                 full: None,

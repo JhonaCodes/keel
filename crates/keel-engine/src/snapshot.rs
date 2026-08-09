@@ -465,6 +465,10 @@ pub struct CompiledSkill {
     /// Component version from the authored metadata.
     #[serde(default = "default_component_version")]
     pub version: String,
+    /// One-line description for the exposed catalog (D-013). Empty when the
+    /// author did not provide one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     /// Workspace-relative path to the compact variant.
     pub compact: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
