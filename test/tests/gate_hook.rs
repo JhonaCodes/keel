@@ -250,6 +250,15 @@ spec:
         stdout.contains("additionalContext") && stdout.contains("TICKET ABC-123"),
         "the tool output must be delivered to the model as additionalContext: {stdout}"
     );
+    // The operator gets a visible confirmation of WHAT was delivered.
+    assert!(
+        stdout.contains("systemMessage") && stdout.contains("global.enrich-linear"),
+        "a systemMessage must name the contributing rule for the operator: {stdout}"
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("keel ✦ contexto entregado"),
+        "the stderr banner is the fallback visible channel"
+    );
 
     // A prompt WITHOUT a linear URL yields no injected context (no finding).
     let plain =
