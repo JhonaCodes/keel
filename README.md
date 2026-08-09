@@ -8,6 +8,14 @@ and governs its actions deterministically — before they happen, and in a way t
 the model cannot misconfigure. Keel does NOT use APIs from model providers
 (see `docs/DECISIONES.md`, D-012).
 
+## Platform support
+
+For now the runtime runs on **macOS** — including the hard OS-sandbox ring
+(Seatbelt). **Linux is in progress**: the PTY + shim layer runs, but the kernel
+sandbox (Landlock, F2b) is pending, so containment degrades to shims (with a
+banner, never silently). Windows is via WSL2. See
+`docs/CONTENCION_MULTIPLATAFORMA.md`.
+
 ## Local Installation
 
 ```bash
