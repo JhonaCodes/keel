@@ -67,6 +67,11 @@ pub enum HookMethod {
     /// A flag pointing at a written settings JSON that declares the hook,
     /// e.g. `--settings <file>`.
     SettingsFileFlag { flag: String },
+    /// Inline config overrides, e.g. Codex's `-c hooks.PreToolUse=...`.
+    ConfigOverrideFlags {
+        flag: String,
+        trust_bypass_flag: Option<String>,
+    },
     /// A config directory written to an environment variable, e.g. OpenCode's
     /// `OPENCODE_CONFIG_DIR`, containing an ephemeral plugin.
     ConfigDirEnv { var: String },
@@ -169,10 +174,18 @@ impl AdapterManifest {
                     method: McpMethod::ConfigOverrideFlag { flag: "-c".into() },
                     announce: Announce::PtyLine,
                 }),
-                // Codex hook wiring is not modeled yet: commands are still
-                // governed by the shims; internal-edit visibility is claude-only
-                // for now.
-                None,
+                Some(HookInjection {
+                    dialect: "codex".into(),
+                    method: HookMethod::ConfigOverrideFlags {
+                        flag: "-c".into(),
+                        trust_bypass_flag: Some("--dangerously-bypass-hook-trust".into()),
+                    },
+                    blockable: vec![
+                        EventKind::FileEdited,
+                        EventKind::ToolRequested,
+                        EventKind::CompletionRequested,
+                    ],
+                }),
             )),
             "opencode" => Some(Self::containment(
                 "opencode",

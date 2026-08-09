@@ -349,6 +349,32 @@ fn wire_convergence(
                 argv.push(flag.clone());
                 argv.push(path.display().to_string());
             }
+            HookMethod::ConfigOverrideFlags {
+                flag,
+                trust_bypass_flag,
+            } => {
+                let script = write_codex_gate_script(host_dir, &keel_bin, &root_str, session_id)?;
+                let hook_command = shell_quote(&script.display().to_string());
+                let hook = format!(
+                    "{{hooks=[{{type=\"command\",command={},statusMessage=\"Keel gate\"}}]}}",
+                    toml_string(&hook_command)
+                );
+                argv.push(flag.clone());
+                argv.push("features.hooks=true".into());
+                for event in [
+                    "SessionStart",
+                    "UserPromptSubmit",
+                    "PreToolUse",
+                    "PostToolUse",
+                    "Stop",
+                ] {
+                    argv.push(flag.clone());
+                    argv.push(format!("hooks.{event}=[{hook}]"));
+                }
+                if let Some(trust_bypass_flag) = trust_bypass_flag {
+                    argv.push(trust_bypass_flag.clone());
+                }
+            }
             HookMethod::ConfigDirEnv { var } => {
                 let config_dir = host_dir.join("opencode");
                 let plugins_dir = config_dir.join("plugins");
@@ -419,6 +445,36 @@ fn level_label(level: sandbox::Level) -> &'static str {
 fn short_id(session_id: &str) -> String {
     let tail: String = session_id.chars().rev().take(12).collect();
     tail.chars().rev().collect()
+}
+
+fn write_codex_gate_script(
+    host_dir: &std::path::Path,
+    keel_bin: &str,
+    root: &str,
+    session_id: &str,
+) -> Result<std::path::PathBuf> {
+    let path = host_dir.join("codex-gate.sh");
+    let script = format!(
+        "#!/bin/sh\nexec {} gate --client codex --workspace {} --session {}\n",
+        shell_quote(keel_bin),
+        shell_quote(root),
+        shell_quote(session_id),
+    );
+    std::fs::write(&path, script)?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700))?;
+    Ok(path)
+}
+
+fn toml_string(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
+    format!("\"{escaped}\"")
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
 fn opencode_gate_plugin(keel_bin: &str, root: &str, session_id: &str) -> String {
@@ -557,6 +613,40 @@ mod tests {
         .unwrap();
         assert!(plugin.contains("\"tool.execute.before\""));
         assert!(plugin.contains("\"gate\", \"--client\", \"native\""));
+    }
+
+    #[test]
+    fn codex_convergence_writes_mcp_and_hooks_to_config_overrides() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let host_dir = root.join("host");
+        std::fs::create_dir_all(&host_dir).unwrap();
+
+        let manifest = AdapterManifest::for_client("codex").unwrap();
+        let mut env = BTreeMap::new();
+        let argv = wire_convergence(
+            manifest.command.clone(),
+            &mut env,
+            &manifest,
+            &host_dir,
+            root,
+            "session-test",
+            &["keel_verification".into()],
+        )
+        .unwrap();
+
+        assert!(
+            argv.iter()
+                .any(|a| a.starts_with("mcp_servers.keel.command="))
+        );
+        assert!(argv.iter().any(|a| a == "features.hooks=true"));
+        assert!(argv.iter().any(|a| a.starts_with("hooks.PreToolUse=[")));
+        assert!(argv.iter().any(|a| a.starts_with("hooks.Stop=[")));
+        assert!(argv.contains(&"--dangerously-bypass-hook-trust".to_string()));
+        let script = host_dir.join("codex-gate.sh");
+        assert!(script.exists());
+        let script = std::fs::read_to_string(script).unwrap();
+        assert!(script.contains("gate --client codex"));
     }
 }
 

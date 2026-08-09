@@ -77,7 +77,7 @@ fn outer_ring_block_is_not_flagged() {
 #[test]
 fn completion_block_is_flagged_in_v1() {
     let s = snap(vec![block_rule("r", vec![EventKind::CompletionRequested])]);
-    let v = preflight(&s, &AdapterManifest::for_client("codex").unwrap());
+    let v = preflight(&s, &AdapterManifest::for_client("generic").unwrap());
     assert_eq!(v.len(), 1, "completion.requested is not blockable in v1");
 }
 
@@ -127,6 +127,23 @@ fn known_clients_declare_how_to_inject_the_keel_mcp_endpoint() {
             .mcp
             .is_some()
     );
+}
+
+#[test]
+fn codex_is_a_known_governed_launch_client_with_hooks() {
+    let codex = AdapterManifest::for_client("codex").unwrap();
+    assert_eq!(codex.command, vec!["codex"]);
+    let hook = codex.hook.unwrap();
+    assert_eq!(hook.dialect, "codex");
+    assert_eq!(
+        hook.method,
+        HookMethod::ConfigOverrideFlags {
+            flag: "-c".into(),
+            trust_bypass_flag: Some("--dangerously-bypass-hook-trust".into())
+        }
+    );
+    assert!(hook.blockable.contains(&EventKind::FileEdited));
+    assert!(hook.blockable.contains(&EventKind::CompletionRequested));
 }
 
 #[test]

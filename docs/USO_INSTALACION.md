@@ -63,11 +63,11 @@ model discovers skills, agents, rules and workflows from the compiled workspace:
 Claude through an MCP config file, Codex through config overrides, and OpenCode
 through `OPENCODE_CONFIG_CONTENT`.
 
-When a client exposes a pre-tool hook, Keel also wires that hook as transport to
-`keel gate`: Claude through `PreToolUse`, OpenCode through a per-session plugin
-loaded from `OPENCODE_CONFIG_DIR`. The hook contains no rule logic; enforcement
-stays in Keel. Codex currently has MCP convergence and command shims, but no
-internal-tool hook modeled.
+When a client exposes lifecycle hooks, Keel also wires those hooks as transport
+to `keel gate`: Claude through `PreToolUse`, Codex through session-scoped
+`-c hooks.*` overrides, and OpenCode through a per-session plugin loaded from
+`OPENCODE_CONFIG_DIR`. The hook contains no rule logic; enforcement stays in
+Keel.
 
 Options:
 

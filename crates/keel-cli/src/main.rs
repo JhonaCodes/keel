@@ -113,7 +113,7 @@ enum Command {
     Gate {
         #[arg(long, default_value = ".")]
         workspace: PathBuf,
-        /// Payload dialect on stdin: `claude-code` (hook) or `native` (Event).
+        /// Payload dialect on stdin: `claude-code`, `codex`, or `native` (Event).
         #[arg(long, default_value = "native")]
         client: String,
         #[arg(long)]
@@ -343,9 +343,10 @@ fn main() -> ExitCode {
             session,
         } => match client.as_str() {
             "claude-code" => gate::gate(&workspace, gate::Client::ClaudeCode, session),
+            "codex" => gate::gate(&workspace, gate::Client::Codex, session),
             "native" => gate::gate(&workspace, gate::Client::Native, session),
             other => Err(anyhow::anyhow!(
-                "unknown --client `{other}` (expected claude-code|native)"
+                "unknown --client `{other}` (expected claude-code|codex|native)"
             )),
         },
         Command::Observe {
