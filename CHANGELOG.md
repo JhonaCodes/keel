@@ -5,6 +5,14 @@ whole project history (that lives in `git log`). Versions here track
 `Cargo.toml`'s workspace `version`, which is independent of the "spec
 version" used by `docs/RACC_reference_architecture_v0_9_1.md`.
 
+## 0.13.0
+
+- **`keel gate` governs `WebFetch`**: the client-hook bridge now maps a
+  `WebFetch` tool call to a preventable `command.requested` event carrying the
+  URL as `command`, so a rule can gate URL reads (e.g. force a governed tool
+  instead of reading a Linear/Jira/GitHub URL directly). Previously the bridge
+  saw only Bash/Edit/Write, so a direct `WebFetch` bypassed all rules.
+
 ## 0.12.1
 
 - **`keel init` no longer steals an established default workspace**: init

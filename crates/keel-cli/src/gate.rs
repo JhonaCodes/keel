@@ -222,6 +222,21 @@ fn parse_claude_code_hook(input: &str) -> Option<(Event, bool)> {
                     // PreToolUse Write has not landed yet → preventable.
                     Some((ev, pre))
                 }
+                "WebFetch" => {
+                    // Fetching a URL is a requested, preventable action. keel
+                    // surfaces the URL as `command` so a rule can gate on it —
+                    // e.g. force a governed tool instead of reading a Linear /
+                    // Jira / GitHub URL directly. Only PreToolUse can prevent
+                    // it; a completed fetch is post-hoc feedback.
+                    let kind = if pre {
+                        EventKind::CommandRequested
+                    } else {
+                        EventKind::CommandCompleted
+                    };
+                    let mut ev = mk(kind);
+                    ev.command = ti.get("url").and_then(|u| u.as_str()).map(str::to_string);
+                    Some((ev, pre))
+                }
                 _ => None,
             }
         }
@@ -353,6 +368,28 @@ mod tests {
         let (event, _) = parse_claude_code_hook(&payload).expect("parsed");
         assert_eq!(event.kind, EventKind::TestCompleted);
         assert!(!event.content.as_deref().unwrap_or("").contains("FAILED"));
+    }
+
+    #[test]
+    fn a_webfetch_becomes_a_preventable_command_requested_carrying_the_url() {
+        // A PreToolUse WebFetch surfaces its URL as `command` on a preventable
+        // command.requested, so a rule can force a governed tool instead of a
+        // direct read.
+        let payload = serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "session_id": "s1",
+            "tool_name": "WebFetch",
+            "tool_input": { "url": "https://linear.app/acme/issue/ABC-123/x" }
+        })
+        .to_string();
+
+        let (event, preventable) = parse_claude_code_hook(&payload).expect("parsed");
+        assert_eq!(event.kind, EventKind::CommandRequested);
+        assert!(preventable, "a PreToolUse fetch can be prevented");
+        assert_eq!(
+            event.command.as_deref(),
+            Some("https://linear.app/acme/issue/ABC-123/x")
+        );
     }
 
     #[test]
