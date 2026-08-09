@@ -278,3 +278,100 @@ Evidencia: `crates/keel-cli/src/gate.rs` (`emit_prompt_enrichment`,
 `UserPromptSubmit`→`prompt.submitted`), `crates/keel-host/src/launch.rs`
 (wire del hook `UserPromptSubmit` + `WebFetch` en PreToolUse),
 `test/tests/gate_hook.rs` (`a_prompt_submitted_rule_injects_its_tool_output…`).
+
+## D-014 Enrutado declarativo de capacidades (match derivado + nativo)
+
+Extension de D-013 (decidida con el dueno, que delego el diseno pidiendo "lo
+robusto, confiable y escalable"). D-013 entrega contexto en el prompt, pero
+QUE skills/agentes son relevantes se decidia por bolsa-de-palabras en un tool
+del workspace (`keel_catalog.py`): intencion INFERIDA, fuera del artefacto
+compilado. Eso tiene tres defectos estructurales: (1) no escala — con N
+capacidades las palabras colisionan y empatan (p.ej. cinco skills de "review
+pr"); (2) no es SDK — la logica vive suelta en el workspace, cada quien la
+parchea; (3) no es auditable — no se puede decir POR QUE enruto a esa skill,
+descalificante para un runtime de gobernanza.
+
+Decision: el enrutado es DECLARATIVO, DERIVADO y NATIVO.
+
+- Declarativo + derivado: cada capacidad declara cuando aplica en un bloque
+  `match` (junto a la capacidad, una sola fuente de verdad), y el compilador
+  ADEMAS deriva terminos de su `id` + `description`/`objective`. Asi una skill
+  enruta con cero autoria (automatico, escala) y el autor refina solo si hace
+  falta. `match` es siempre opcional.
+- Modelo tipado: `match{ terms, context, autoload }`. `terms` = alias
+  explicitos (peso alto; la palanca que desambigua hermanas, p.ej.
+  `coderabbit`). `context` = tipo de objeto estructurado (`github_pr`,
+  `linear_ticket`, …; peso maximo, resuelto de senales estructuradas del
+  prompt, no de palabras difusas). `derived` (solo compilado) = terminos
+  automaticos de id+description (peso bajo). Especificidad rompe empates.
+- Autoload opt-in: por defecto se EXPONE la capacidad (advisory, respeta "no
+  restringir al modelo"); una skill puede marcar `autoload` para inyectarse
+  sola en match de alta confianza. Automatico donde el autor lo decide, no
+  global.
+- Nativo en Rust: schema → DSL (`MatchSpec`) → compilador (`compile_match`,
+  derivacion determinista) → snapshot (`CompiledMatch`, hasheado como config
+  gobernada) → router (`crate::routing`: tokenizer + `CONTEXT_CUES` + scoring,
+  compartidos con el compilador para que compile-time y run-time no diverjan) →
+  `gate` que en `prompt.submitted` puntua todas las skills/agents y entrega el
+  shortlist rankeado como `additionalContext`, con el trigger de cada una en el
+  banner ("skill relevante: X — trigger: coderabbit"). Reemplaza el tool Python.
+  El scoring: contexto estructurado (3) > termino explicito (2) > derivado (1);
+  el label del trigger prefiere el termino autorado (el desambiguador). Una skill
+  `autoload` con match fuerte se inyecta entera.
+
+Descartadas: embeddings/semantica (potente pero no-determinista y no-auditable
+— rompe gobernanza); reglas-router aparte (`detect`→`load.skills`) como via
+GENERAL (el router crece desacoplado de las skills; se reserva para lo que se
+quiera FORZAR).
+
+Convencion de autoria (para que otro agente en otra PC autore igual): el `id`
+lleva el prefijo `keel_` (procedencia, ignorado por el enrutado via stopword)
+MAS la palabra clave contextual (`keel_review_pr_coderabbit`, no solo
+`keel_review_pr`); la `description` es una linea con buena semantica. Nombre +
+descripcion SON la senal de enrutado automatico. El estandar completo se
+documenta en `docs/AUTORIA.md` (PR-C).
+
+Evidencia: `crates/keel-dsl/src/lib.rs` (`MatchSpec` en `SkillSpec`/`AgentSpec`),
+`schemas/{skill,agent}.schema.json` (bloque `match`),
+`crates/keel-engine/src/snapshot.rs` (`CompiledMatch`),
+`crates/keel-engine/src/compile.rs` (`compile_match`),
+`crates/keel-engine/src/routing.rs` (`derive_terms`, `DERIVE_STOPWORDS`,
+`CONTEXT_CUES`, `detect_contexts`, `score`, `route`),
+`crates/keel-cli/src/gate.rs` (`emit_prompt_enrichment`, `routed_catalog_block`),
+`crates/keel-engine/tests-unit/{compile,routing}.rs` (derivacion + scoring +
+desambiguacion).
+
+## D-015 La capa Package como bundle de tecnologia
+
+El invariante 3 manda que "los componentes reutilizables viven en packages
+versionados", pero packaging estaba DEFERRED: la carpeta `packages/` existia como
+scaffold y NO se componia (no estaba en `LayerId::CHAIN`), asi que meter
+contenido ahi era inerte — nunca llegaba al modelo. Con la necesidad concreta de
+agrupar tecnologia (Flutter, Rust: sus rules, skills, blueprints, librerias) y
+entregarla al LLM, se un-deferra la parte de COMPOSICION (no la de versionado
+cross-workspace, que sigue diferida).
+
+Decision: `packages/<tech>/` es una capa de composicion real.
+
+- Posicion: entre Platform y Project en la cadena (el `Ord` derivado de
+  `LayerId` ES el orden). Un paquete es mas general que el proyecto especifico
+  (el proyecto puede endurecer una regla del paquete, no debilitar una `locked`),
+  y mas especifico que las capas base.
+- Se selecciona SIEMPRE (como global), sin selector de dependencias por
+  proyecto. Lo que lo hace seguro es que cada componente declara DONDE aplica:
+  una rule con `scope: { languages: [dart] }` no dispara en un repo Rust; un
+  skill/agente con `match` (D-014) solo aflora en un prompt relevante. Asi la
+  relevancia la da el componente, no una lista de dependencias — que es
+  justamente la parte (versionado/pinning, seccion 8.5) que queda diferida.
+- Reutilizacion, no copia (invariante 2): el contenido de una tecnologia vive
+  una vez y compone para todo proyecto, en vez de duplicarse por proyecto.
+
+Convencion: `packages/flutter/`, `packages/rust/`, cada uno con la convencion
+usual `rules/ skills/ agents/ knowledge/ tools/`. Versionado por componente via
+`metadata.version` hasta que llegue el pinning cross-workspace.
+
+Evidencia: `crates/keel-engine/src/workspace.rs` (`LayerId::Package` en el enum,
+`CHAIN`, `dir()`), `crates/keel-engine/src/resolution.rs` (`Package => true`),
+`crates/keel-cli/src/{commands.rs,init.rs}` (label + README),
+`crates/keel-engine/tests-unit/workspace.rs`
+(`packages_compose_as_a_technology_layer...`).

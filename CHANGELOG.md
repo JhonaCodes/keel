@@ -5,6 +5,42 @@ whole project history (that lives in `git log`). Versions here track
 `Cargo.toml`'s workspace `version`, which is independent of the "spec
 version" used by `docs/RACC_reference_architecture_v0_9_1.md`.
 
+## 0.15.0
+
+- **`Package` composition layer — technology bundles (D-015, invariant 3)**:
+  `packages/<tech>/` (e.g. `packages/flutter/`, `packages/rust/`) is now a real
+  composition layer, added to `LayerId::CHAIN` between Platform and Project and
+  selected for every project in resolution. A technology's reusable
+  rules/skills/agents/knowledge compose once and reach the model instead of
+  being copied per project (invariant 2); applicability is decided by each
+  component's own `scope` (a dart-scoped Flutter rule never fires on a Rust repo)
+  and `match` (D-014), so no per-project dependency selector is needed. Versioned
+  cross-workspace pinning (section 8.5) stays deferred; a package is versioned
+  per component via `metadata.version`. Empty `packages/` stays inert
+  (backward compatible).
+- **Declarative capability routing — SDK foundation (D-014)**: skills and agents
+  gain an optional `match` block (`terms`, `context`, `autoload`) declaring WHEN
+  they apply to a prompt, and the compiler DERIVES routing terms from each
+  capability's `id` + `description`/`objective` — so a capability routes with
+  zero authoring while an author can refine for precision (the lever that
+  disambiguates siblings, e.g. `coderabbit` among several review skills).
+  Resolved into the hashed snapshot as `CompiledMatch` (`terms` + `derived` +
+  `context` + `autoload`); structured cues like `pr`→`github_pr` are inferred
+  deterministically. The `keel_` provenance prefix and structural tokens
+  (`skill`/`agent`/`workflow`) are dropped from derived terms; domain words
+  (`review`, `pr`, `commit`) are kept. Backward compatible (absent `match` →
+  derived-only). Recompile + relock after upgrading.
+- **Native routing at the prompt (D-014 runtime half)**: a new `keel_engine::
+  routing` module scores every compiled skill/agent against the prompt —
+  structured context (a PR/ticket URL or cue word, weight 3) > explicit term
+  (2) > derived term (1), ties broken by specificity — and `keel gate` now
+  emits the ranked shortlist as `additionalContext` on `prompt.submitted`,
+  replacing the workspace bag-of-words catalog with deterministic, auditable
+  code. Each surfaced capability carries its trigger (`term:coderabbit`), shown
+  in the operator banner; an `autoload` skill with a strong match has its
+  compact content injected. The tokenizer and context cues are shared with the
+  compiler so compile-time derivation and run-time matching never drift.
+
 ## 0.14.1
 
 - **Visible enrichment banner**: when keel delivers context on a prompt (D-013),

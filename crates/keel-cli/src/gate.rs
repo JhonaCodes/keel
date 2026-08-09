@@ -116,7 +116,12 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
     // with its id) instead of fetching it itself. Deterministic, by code, not a
     // model choice. Emitted as the client's `additionalContext`; never blocks.
     if event.kind == EventKind::PromptSubmitted {
-        return Ok(emit_prompt_enrichment(&evals));
+        return Ok(emit_prompt_enrichment(
+            &evals,
+            &snapshot,
+            event.content.as_deref(),
+            &files.root,
+        ));
     }
 
     for p in &packets {
@@ -133,14 +138,27 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
     }
 }
 
-/// Collects the tool output of every `prompt.submitted` evaluation and emits it
-/// to the client as `additionalContext` — the governed, deterministic way keel
-/// hands the model context on a prompt (D-013). A rule's `findings` carry a
-/// tool's structured output (e.g. a decomposed ticket); `detail` carries its
-/// report line. Nothing to inject → no output. Never blocks the prompt.
-fn emit_prompt_enrichment(evals: &[keel_engine::runtime::Evaluation]) -> ExitCode {
+/// Hands the model context on a prompt (D-013/D-014), by code, deterministically.
+/// Two contributions, combined into one `additionalContext`:
+///
+/// 1. Rule enrichment (D-013): the tool output of every `prompt.submitted`
+///    evaluation — the task already deserialized (a decomposed ticket, a PR).
+/// 2. Declarative routing (D-014): the ranked shortlist of governed
+///    skills/agents whose `match` fits the prompt, so the model is TOLD which
+///    capabilities relate (and their trigger) instead of guessing; an
+///    `autoload` skill with a strong match has its content injected outright.
+///
+/// Nothing to inject → no output. Never blocks the prompt.
+fn emit_prompt_enrichment(
+    evals: &[keel_engine::runtime::Evaluation],
+    snapshot: &Snapshot,
+    prompt: Option<&str>,
+    root: &Path,
+) -> ExitCode {
     let mut blocks: Vec<String> = Vec::new();
-    let mut sources: Vec<&str> = Vec::new();
+    let mut sources: Vec<String> = Vec::new();
+
+    // 1) Rule enrichment (D-013).
     for eval in evals {
         let before = blocks.len();
         for finding in &eval.findings {
@@ -149,23 +167,33 @@ fn emit_prompt_enrichment(evals: &[keel_engine::runtime::Evaluation]) -> ExitCod
             }
         }
         if blocks.len() > before {
-            sources.push(&eval.rule_id);
+            sources.push(eval.rule_id.clone());
         }
     }
+
+    // 2) Declarative routing (D-014).
+    if let Some(prompt) = prompt {
+        let (skills, agents) = keel_engine::routing::route(snapshot, prompt, 6);
+        if let Some(block) = routed_catalog_block(snapshot, &skills, &agents, root) {
+            blocks.push(block);
+            for s in &skills {
+                sources.push(format!("{}·{}", s.id, s.trigger));
+            }
+        }
+    }
+
     if blocks.is_empty() {
         return ExitCode::SUCCESS;
     }
     let context = blocks.join("\n\n");
-    // Visible, elegant confirmation to the OPERATOR of what keel delivered to
-    // the model (which rules contributed context). `systemMessage` shows in the
-    // client transcript; stderr is the fallback channel.
+    // Visible, elegant confirmation to the OPERATOR of what keel delivered and
+    // WHY (which rules + which capabilities, with their trigger). `systemMessage`
+    // shows in the client transcript; stderr is the fallback channel.
     let banner = format!(
         "keel ✦ contexto entregado al modelo: {}",
         sources.join(", ")
     );
     eprintln!("[{banner}]");
-    // Claude Code UserPromptSubmit contract: `additionalContext` reaches the
-    // model; `systemMessage` reaches the operator's screen.
     let out = serde_json::json!({
         "systemMessage": banner,
         "hookSpecificOutput": {
@@ -175,6 +203,62 @@ fn emit_prompt_enrichment(evals: &[keel_engine::runtime::Evaluation]) -> ExitCod
     });
     println!("{out}");
     ExitCode::SUCCESS
+}
+
+/// Renders the routed skills/agents into one context block: a token-thrifty
+/// catalog (id + description + trigger) the model can pull from, plus the full
+/// content of any `autoload` skill (read from its compact file — a strong match
+/// earns a push, not just a mention). `None` when nothing routed.
+fn routed_catalog_block(
+    snapshot: &Snapshot,
+    skills: &[keel_engine::routing::Routed],
+    agents: &[keel_engine::routing::Routed],
+    root: &Path,
+) -> Option<String> {
+    if skills.is_empty() && agents.is_empty() {
+        return None;
+    }
+    let mut lines = vec![
+        "Keel tiene capacidades gobernadas relacionadas a tu tarea (no hace falta que las busques):"
+            .to_string(),
+    ];
+    if !skills.is_empty() {
+        lines.push("\nSkills (cargá con keel.skills.load <id>):".to_string());
+        for s in skills {
+            let desc = snapshot
+                .skills
+                .get(&s.id)
+                .and_then(|c| c.description.as_deref())
+                .unwrap_or("");
+            let sep = if desc.is_empty() { "" } else { ": " };
+            lines.push(format!("- {} [{}]{sep}{desc}", s.id, s.trigger));
+        }
+    }
+    if !agents.is_empty() {
+        lines.push("\nAgentes (invocá con keel.agent.invoke agent=<id>):".to_string());
+        for a in agents {
+            let obj = snapshot
+                .agents
+                .get(&a.id)
+                .and_then(|c| c.objective.as_deref())
+                .unwrap_or("");
+            let sep = if obj.is_empty() { "" } else { ": " };
+            lines.push(format!("- {} [{}]{sep}{obj}", a.id, a.trigger));
+        }
+    }
+    // Autoload: inject the compact content of strongly-matched opt-in skills.
+    for s in skills.iter().filter(|s| s.autoload) {
+        if let Some(compact) = snapshot.skills.get(&s.id).map(|c| &c.compact)
+            && let Ok(content) = std::fs::read_to_string(root.join(compact))
+        {
+            lines.push(format!("\n── skill cargada: {} ──\n{content}", s.id));
+        }
+    }
+    lines.push(
+        "\nEl listado completo está disponible con keel.skills.list en cualquier momento."
+            .to_string(),
+    );
+    Some(lines.join("\n"))
 }
 
 /// Parses the payload into a keel event and whether a block on it can PREVENT

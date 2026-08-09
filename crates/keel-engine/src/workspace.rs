@@ -260,10 +260,18 @@ pub fn load_components(dir: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
 
 /// The authority layers of the composition chain (spec section 7.2), highest
 /// authority FIRST. The derived `Ord` IS the composition order: composition
-/// runs global → organization → platform → project → team → profile, and a
-/// lower-authority layer may only ADD restriction (section 7.4), never weaken a
-/// higher one. The `task/session` layer of section 7.2 is runtime-only
+/// runs global → organization → platform → package → project → team → profile,
+/// and a lower-authority layer may only ADD restriction (section 7.4), never
+/// weaken a higher one. The `task/session` layer of section 7.2 is runtime-only
 /// (append-only, non-authoritative, section 7.5) and has no directory.
+///
+/// `Package` (invariant 3: reusable components live in packages) is a technology
+/// bundle — `packages/flutter/`, `packages/rust/` — composed BELOW the base
+/// layers and ABOVE the specific project, so a project can tighten a package's
+/// rules but not weaken a `locked` one. It composes always; per-component
+/// `scope`/`match` (languages, D-014) decide where its rules and skills apply,
+/// so no per-project dependency selector is needed yet (versioning/pinning of
+/// section 8.5 stays deferred).
 ///
 /// Do NOT reorder these variants: the ordering is load-bearing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -271,6 +279,7 @@ pub enum LayerId {
     Global,
     Organization,
     Platform,
+    Package,
     Project,
     Team,
     Profile,
@@ -278,10 +287,11 @@ pub enum LayerId {
 
 impl LayerId {
     /// The composition chain, highest authority first.
-    pub const CHAIN: [LayerId; 6] = [
+    pub const CHAIN: [LayerId; 7] = [
         LayerId::Global,
         LayerId::Organization,
         LayerId::Platform,
+        LayerId::Package,
         LayerId::Project,
         LayerId::Team,
         LayerId::Profile,
@@ -289,12 +299,13 @@ impl LayerId {
 
     /// The workspace subdirectory that holds this layer (section 8.5). `global/`
     /// carries its components directly; the rest namespace instances under a
-    /// plural directory (`organizations/<org>/`, `projects/<proj>/`, ...).
+    /// plural directory (`organizations/<org>/`, `packages/<tech>/`, ...).
     pub fn dir(self) -> &'static str {
         match self {
             LayerId::Global => "global",
             LayerId::Organization => "organizations",
             LayerId::Platform => "platforms",
+            LayerId::Package => "packages",
             LayerId::Project => "projects",
             LayerId::Team => "teams",
             LayerId::Profile => "profiles",

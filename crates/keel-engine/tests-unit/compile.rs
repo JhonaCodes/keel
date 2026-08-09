@@ -294,3 +294,73 @@ spec: { description: "Gate de verificacion antes de cerrar", compact: global/ski
         None
     );
 }
+
+// ── Declarative routing derivation (D-014) ──────────────────────────────────
+
+#[test]
+fn compile_match_infers_context_cue_from_derived_terms() {
+    // No authored match: a `pr` term deterministically implies the github_pr
+    // structured object type (CONTEXT_CUES), the highest-weight signal.
+    let m = compile_match(None, "keel_review_pr", Some("review a pull request"));
+    assert!(m.context.contains(&"github_pr".to_string()));
+    assert!(
+        m.terms.is_empty(),
+        "no authored terms → explicit terms empty"
+    );
+    assert!(!m.autoload);
+}
+
+#[test]
+fn compile_match_preserves_authored_terms_context_and_autoload() {
+    let authored = keel_dsl::MatchSpec {
+        terms: vec!["coderabbit".to_string()],
+        context: vec!["github_pr".to_string()],
+        autoload: true,
+    };
+    let m = compile_match(Some(&authored), "keel_review_pr", Some("review a PR"));
+    assert_eq!(m.terms, vec!["coderabbit".to_string()]);
+    assert!(m.autoload);
+    // Authored github_pr is not duplicated by the derived `pr` cue.
+    assert_eq!(
+        m.context.iter().filter(|c| *c == "github_pr").count(),
+        1,
+        "an authored context must not be duplicated by a derived cue"
+    );
+}
+
+#[test]
+fn sibling_review_skills_disambiguate_by_explicit_terms() {
+    // The exact concern: two review-pr skills. Only the CodeRabbit one declares
+    // `coderabbit`, so only its compiled match carries that high-weight term —
+    // the deterministic lever the native router ranks on.
+    let yaml = r#"
+apiVersion: keel/v1alpha1
+kind: Skill
+metadata: { id: keel_review_pr_coderabbit, version: 0.1.0 }
+spec:
+  description: "Resolve CodeRabbit review comments on a PR"
+  match: { terms: [coderabbit], context: [github_pr] }
+  compact: global/skills/keel_review_pr_coderabbit_keel.md
+---
+apiVersion: keel/v1alpha1
+kind: Skill
+metadata: { id: keel_review_pr_team, version: 0.1.0 }
+spec:
+  description: "Team review of a PR"
+  compact: global/skills/keel_review_pr_team_keel.md
+"#;
+    let snap = compile(&files_from_yaml(yaml), "t".into())
+        .unwrap()
+        .snapshot;
+    let cr = &snap.skills.get("keel_review_pr_coderabbit").unwrap().match_;
+    let team = &snap.skills.get("keel_review_pr_team").unwrap().match_;
+    assert_eq!(cr.terms, vec!["coderabbit".to_string()]);
+    assert!(
+        team.terms.is_empty(),
+        "the team skill declares no explicit term, so it cannot win a coderabbit prompt"
+    );
+    // Both still carry the github_pr context (declared / derived), so both
+    // remain candidates for a PR prompt — disambiguation is by the extra term.
+    assert!(cr.context.contains(&"github_pr".to_string()));
+    assert!(team.context.contains(&"github_pr".to_string()));
+}

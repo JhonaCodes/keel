@@ -15,6 +15,7 @@ fn snapshot_with_skill(root: &Path) -> Snapshot {
         CompiledSkill {
             id: "access-patterns".into(),
             description: None,
+            match_: Default::default(),
             version: "0.1.0".into(),
             compact: "skills/compact.md".into(),
             full: Some("skills/full.md".into()),

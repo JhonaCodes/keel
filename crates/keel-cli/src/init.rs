@@ -345,10 +345,23 @@ pub const PROFILE_TMPL: &str = r#"# Profile template — rename to <your-name>/p
 #   preferences: { implementationStrategy: tdd, verbosity: compact }
 "#;
 
-pub const PACKAGES_README: &str = r#"# packages/  [DEFERRED — invariant 3]
+pub const PACKAGES_README: &str = r#"# packages/  — reusable technology bundles (invariant 3)
 
-Versioned, reusable components shared across workspaces (section 8.5). Packaging
-is not implemented yet; components live inline in their layers for now.
+A package groups the components of one TECHNOLOGY so they are reused instead of
+copied (invariant 2): `packages/flutter/`, `packages/rust/`, each with the usual
+`rules/ skills/ agents/ knowledge/ tools/` convention.
+
+Packages COMPOSE for every project (between the base layers and the specific
+project). What makes that safe without a per-project dependency list is that
+each component declares WHERE it applies:
+
+- a rule scopes to its language/paths (`scope: { languages: [dart] }`), so a
+  Flutter rule never fires on a Rust repo;
+- a skill/agent declares `match` (terms/context, D-014), so it only surfaces on
+  a relevant prompt.
+
+Versioned pinning across workspaces (section 8.5) is still deferred; today a
+package is versioned per component via `metadata.version`.
 "#;
 
 pub const GOVERNED_RESOURCE_README: &str = r#"# Keel-owned resources

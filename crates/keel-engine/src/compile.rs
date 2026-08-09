@@ -29,8 +29,9 @@
 use crate::composition::{AppliedException, ComposeLayer, ExceptionInput, Inheritance, compose};
 use crate::snapshot::{
     CompiledAgent, CompiledBranch, CompiledComponent, CompiledContainment, CompiledEnforcement,
-    CompiledPrecondition, CompiledRequirement, CompiledRule, CompiledScope, CompiledSkill,
-    CompiledToolCall, CompiledToolRef, CompiledWhen, ExternalToolDef, OutputKind, Snapshot,
+    CompiledMatch, CompiledPrecondition, CompiledRequirement, CompiledRule, CompiledScope,
+    CompiledSkill, CompiledToolCall, CompiledToolRef, CompiledWhen, ExternalToolDef, OutputKind,
+    Snapshot,
 };
 use crate::tools::{BUILTIN_DETECTORS, BUILTIN_PRECONDITIONS};
 use crate::workspace::WorkspaceFiles;
@@ -191,6 +192,11 @@ pub fn compile_layered(
                         .clone()
                         .unwrap_or_else(|| "unversioned".to_string()),
                     description: skill.spec.description.clone(),
+                    match_: compile_match(
+                        skill.spec.match_.as_ref(),
+                        &skill.metadata.id,
+                        skill.spec.description.as_deref(),
+                    ),
                     compact: skill.spec.compact.clone(),
                     full: skill.spec.full.clone(),
                     examples: skill
@@ -237,6 +243,11 @@ pub fn compile_layered(
                     role: a.spec.role.clone(),
                     executor: executor_id,
                     objective: a.spec.objective.clone(),
+                    match_: compile_match(
+                        a.spec.match_.as_ref(),
+                        &a.metadata.id,
+                        a.spec.objective.as_deref(),
+                    ),
                     output_schema: a.spec.output_schema.clone(),
                     timeout_ms: a.spec.budget.as_ref().and_then(|b| b.timeout_ms),
                     max_tokens: a.spec.budget.as_ref().and_then(|b| b.max_tokens),
@@ -764,6 +775,40 @@ fn to_compiled_ref(r: &ToolRef) -> CompiledToolRef {
     match r {
         ToolRef::Builtin(id) => CompiledToolRef::Builtin(id.clone()),
         ToolRef::External(id) => CompiledToolRef::External(id.clone()),
+    }
+}
+
+// ── Declarative routing derivation (D-014) ──────────────────────────────────
+//
+// Routing intent is DECLARED next to the capability (`match`) or DERIVED by the
+// compiler from its id + description, so a capability routes with zero authoring
+// while an author can always refine. The tokenizer and context cues live in
+// `crate::routing` — the SAME code the runtime router uses — so compile-time
+// derivation and run-time matching can never drift.
+
+/// Builds the resolved `CompiledMatch` from the authored `match` (if any) and
+/// the terms derived from `id` + description/objective. Explicit terms/context
+/// are preserved verbatim; a derived context cue is added only when the authored
+/// `context` did not already declare it.
+fn compile_match(
+    authored: Option<&keel_dsl::MatchSpec>,
+    id: &str,
+    blurb: Option<&str>,
+) -> CompiledMatch {
+    let derived = crate::routing::derive_terms(&[id, blurb.unwrap_or("")]);
+    let mut context: Vec<String> = authored.map(|m| m.context.clone()).unwrap_or_default();
+    for term in &derived {
+        if let Some(ctx) = crate::routing::context_for_term(term)
+            && !context.iter().any(|c| c == ctx)
+        {
+            context.push(ctx.to_string());
+        }
+    }
+    CompiledMatch {
+        terms: authored.map(|m| m.terms.clone()).unwrap_or_default(),
+        derived,
+        context,
+        autoload: authored.map(|m| m.autoload).unwrap_or(false),
     }
 }
 

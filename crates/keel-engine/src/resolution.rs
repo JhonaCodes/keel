@@ -10,6 +10,10 @@
 //!
 //! - `global/` always applies (the user/base layer);
 //! - the `organizations/<org>/` named by the binding;
+//! - every `packages/<tech>/` (invariant 3: reusable technology bundles) — they
+//!   compose for every project, and each component's own `scope`/`match` decides
+//!   where it actually applies (a Flutter package's dart-scoped rules never
+//!   touch a Rust repo), so no per-project selector is needed yet;
 //! - the `projects/<name>/` the binding points at (a flat single-project
 //!   workspace's degenerate Project layer matches too).
 //!
@@ -103,6 +107,11 @@ pub fn resolve(
             LayerId::Global => true,
             LayerId::Organization => layer.name.as_deref() == Some(org.as_str()),
             LayerId::Project => project_layer_matches(layer, &project_name),
+            // Technology packages (invariant 3) compose for every project; their
+            // per-component `scope`/`match` decide applicability (a Flutter
+            // package's dart-scoped rules never touch a Rust repo), so no
+            // per-project selector is needed. Versioned pinning stays deferred.
+            LayerId::Package => true,
             // No documented standalone selector — deferred, not silently taken.
             LayerId::Platform | LayerId::Team | LayerId::Profile => false,
         };

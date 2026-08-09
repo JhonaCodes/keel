@@ -49,12 +49,48 @@ fn write_rule(dir: &Path, file: &str, id: &str) {
 #[test]
 fn layer_order_is_the_fixed_composition_chain() {
     // section 7.2: global is the highest authority, profile the lowest.
+    // Package (invariant 3) sits below the base layers and above the project.
     assert!(LayerId::Global < LayerId::Organization);
     assert!(LayerId::Organization < LayerId::Platform);
-    assert!(LayerId::Platform < LayerId::Project);
+    assert!(LayerId::Platform < LayerId::Package);
+    assert!(LayerId::Package < LayerId::Project);
     assert!(LayerId::Project < LayerId::Team);
     assert!(LayerId::Team < LayerId::Profile);
-    assert_eq!(LayerId::CHAIN.len(), 6);
+    assert_eq!(LayerId::CHAIN.len(), 7);
+}
+
+#[test]
+fn packages_compose_as_a_technology_layer_between_platform_and_project() {
+    // invariant 3: a `packages/<tech>/` bundle loads like any namespaced layer
+    // and composes below the project — the SDK wiring that lets technology
+    // content (Flutter, Rust) actually reach the model, not sit inert.
+    let ws = tmp_ws();
+    write_rule(&ws.0.join("global"), "g", "global.no-drop");
+    write_rule(
+        &ws.0.join("packages").join("flutter"),
+        "f",
+        "flutter.widget-classes",
+    );
+    write_rule(&ws.0.join("projects").join("demo"), "p", "demo.local");
+
+    let layered = load_layered(&ws.0).expect("layered load");
+    let ids: Vec<LayerId> = layered.layers.iter().map(|l| l.id).collect();
+    assert_eq!(
+        ids,
+        vec![LayerId::Global, LayerId::Package, LayerId::Project],
+        "package composes between global/base and the project"
+    );
+    let pkg = layered
+        .layers
+        .iter()
+        .find(|l| l.id == LayerId::Package)
+        .expect("package layer present");
+    assert_eq!(
+        pkg.name.as_deref(),
+        Some("flutter"),
+        "namespaced by technology"
+    );
+    assert_eq!(pkg.files.rules[0].metadata.id, "flutter.widget-classes");
 }
 
 #[test]
