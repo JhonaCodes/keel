@@ -10,6 +10,7 @@
 //!
 //! - `global/` always applies (the user/base layer);
 //! - the `organizations/<org>/` named by the binding;
+//! - every `platforms/<tech>/` explicitly named by the binding;
 //! - every `packages/<tech>/` (invariant 3: reusable technology bundles) — they
 //!   compose for every project, and each component's own `scope`/`match` decides
 //!   where it actually applies (a Flutter package's dart-scoped rules never
@@ -17,10 +18,9 @@
 //! - the `projects/<name>/` the binding points at (a flat single-project
 //!   workspace's degenerate Project layer matches too).
 //!
-//! `platforms/`, `teams/` and `profiles/` selection has no documented
-//! standalone selector (they are org-scale refinements that may only ADD
-//! restriction, never weaken a `locked` rule); they are NOT silently included.
-//! Their selection arrives with the org-scale install story.
+//! `teams/` and `profiles/` selection has no documented standalone selector
+//! (they are org-scale refinements that may only ADD restriction, never weaken
+//! a `locked` rule); they are NOT silently included.
 //!
 //! Identity is also VERIFIED here (section 7.1 / section 13.3): if the resolved
 //! organization ships a `repositories.yaml`, the repo's own git identity is
@@ -106,6 +106,10 @@ pub fn resolve(
         let selected = match layer.id {
             LayerId::Global => true,
             LayerId::Organization => layer.name.as_deref() == Some(org.as_str()),
+            LayerId::Platform => layer
+                .name
+                .as_deref()
+                .is_some_and(|name| binding.platforms.iter().any(|p| p == name)),
             LayerId::Project => project_layer_matches(layer, &project_name),
             // Technology packages (invariant 3) compose for every project; their
             // per-component `scope`/`match` decide applicability (a Flutter
@@ -113,7 +117,7 @@ pub fn resolve(
             // per-project selector is needed. Versioned pinning stays deferred.
             LayerId::Package => true,
             // No documented standalone selector — deferred, not silently taken.
-            LayerId::Platform | LayerId::Team | LayerId::Profile => false,
+            LayerId::Team | LayerId::Profile => false,
         };
         if selected {
             layer_indices.push(i);

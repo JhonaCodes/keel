@@ -42,7 +42,7 @@ into one immutable snapshot.
 ```
 global/          rules that apply to EVERY project            [ACTIVE]
 organizations/   per-organization config + policies           [repositories.yaml ACTIVE; components org-scale/deferred]
-platforms/       per-technology defaults (e.g. flutter/)       [scaffold — no selector yet]
+platforms/       per-technology defaults (e.g. flutter/)       selected by .keel/project.yaml
 projects/        project-specific rules                        [ACTIVE]
 teams/           authorized team variants                      [scaffold — no selector yet]
 profiles/        personal preferences (cannot weaken locked)   [PARSED — not composed yet]
@@ -230,12 +230,20 @@ placeholder — authoring real component YAML here is rejected loudly by
 rules in `global/rules/` and `projects/<name>/rules/`.
 "#;
 
-pub const PLATFORMS_README: &str = r#"# platforms/  [scaffold — no selector yet]
+pub const PLATFORMS_README: &str = r#"# platforms/
 
-Per-technology defaults (e.g. `flutter/`, `rust/`), section 8.5. A platform layer
-would carry rules shared by all projects of a technology. There is no standalone
-selector for it yet (the binding carries only project + workspace), so platform
-layers are not composed in this version. Put shared rules in `global/` for now.
+Per-technology defaults (e.g. `flutter/`, `rust/`, `react-native`), section 8.5.
+A repository selects platform layers explicitly in `.keel/project.yaml`:
+
+```yaml
+project: project:local/app
+workspace: org:local
+platforms: [flutter]
+```
+
+Only listed platform directories compose into the resolved snapshot. Keep
+technology-specific rules, skills, tools, agents, and blueprints here instead of
+putting them in `global/`.
 "#;
 
 pub const PROJECTS_README: &str = r#"# projects/  [ACTIVE]

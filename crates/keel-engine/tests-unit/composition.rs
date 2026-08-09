@@ -420,6 +420,7 @@ spec: { on: [file.edited], enforcement: { valid: { decision: allow } } }
     let binding = ProjectBinding {
         project: "project:demo/app".into(),
         workspace: "org:local".into(),
+        platforms: Vec::new(),
     };
     let lock = Lock::generate(
         &binding,

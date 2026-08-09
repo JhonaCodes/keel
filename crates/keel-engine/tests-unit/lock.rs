@@ -18,6 +18,7 @@ fn binding() -> ProjectBinding {
     ProjectBinding {
         project: "project:acme/app".into(),
         workspace: "org:local".into(),
+        platforms: Vec::new(),
     }
 }
 
@@ -53,8 +54,19 @@ fn verify_rejects_binding_drift() {
     let other = ProjectBinding {
         project: "project:other/repo".into(),
         workspace: "org:local".into(),
+        platforms: Vec::new(),
     };
     let err = lock.verify(&other, &s, "0.1.0").unwrap_err();
+    assert!(err.contains("binding drift"), "{err}");
+}
+
+#[test]
+fn verify_rejects_platform_binding_drift() {
+    let s = empty_snapshot();
+    let mut with_flutter = binding();
+    with_flutter.platforms = vec!["flutter".into()];
+    let lock = Lock::generate(&with_flutter, &s, "0.1.0", BTreeMap::new());
+    let err = lock.verify(&binding(), &s, "0.1.0").unwrap_err();
     assert!(err.contains("binding drift"), "{err}");
 }
 

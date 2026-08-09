@@ -341,40 +341,43 @@ Evidencia: `crates/keel-dsl/src/lib.rs` (`MatchSpec` en `SkillSpec`/`AgentSpec`)
 `crates/keel-engine/tests-unit/{compile,routing}.rs` (derivacion + scoring +
 desambiguacion).
 
-## D-015 La capa Package como bundle de tecnologia
+## D-015 La capa Platform como bundle de tecnologia
 
 El invariante 3 manda que "los componentes reutilizables viven en packages
-versionados", pero packaging estaba DEFERRED: la carpeta `packages/` existia como
-scaffold y NO se componia (no estaba en `LayerId::CHAIN`), asi que meter
-contenido ahi era inerte — nunca llegaba al modelo. Con la necesidad concreta de
-agrupar tecnologia (Flutter, Rust: sus rules, skills, blueprints, librerias) y
-entregarla al LLM, se un-deferra la parte de COMPOSICION (no la de versionado
-cross-workspace, que sigue diferida).
+versionados". En el uso real, la necesidad concreta es agrupar tecnologia
+(Flutter, Rust, React, React Native, Web u otras: rules, skills, blueprints,
+librerias) y seleccionarla por repositorio sin meterla en `global/`.
 
-Decision: `packages/<tech>/` es una capa de composicion real.
+Decision: `platforms/<tech>/` es una capa de composicion real seleccionada por
+`.keel/project.yaml` (`platforms: [flutter, rust]`). `packages/` puede seguir
+existiendo para bundles que compongan siempre, pero no es la ruta principal para
+reglas/skills/blueprints tecnologicos.
 
-- Posicion: entre Platform y Project en la cadena (el `Ord` derivado de
-  `LayerId` ES el orden). Un paquete es mas general que el proyecto especifico
-  (el proyecto puede endurecer una regla del paquete, no debilitar una `locked`),
-  y mas especifico que las capas base.
-- Se selecciona SIEMPRE (como global), sin selector de dependencias por
-  proyecto. Lo que lo hace seguro es que cada componente declara DONDE aplica:
-  una rule con `scope: { languages: [dart] }` no dispara en un repo Rust; un
-  skill/agente con `match` (D-014) solo aflora en un prompt relevante. Asi la
-  relevancia la da el componente, no una lista de dependencias — que es
-  justamente la parte (versionado/pinning, seccion 8.5) que queda diferida.
+- Posicion: entre Organization y Package en la cadena (el `Ord` derivado de
+  `LayerId` ES el orden). La plataforma es mas general que un paquete/proyecto
+  especifico; el proyecto puede endurecer una regla de plataforma, no debilitar
+  una `locked`.
+- Se selecciona explicitamente por binding de repositorio. Lo que lo hace
+  seguro dentro de la plataforma sigue siendo que cada componente declara DONDE
+  aplica: una rule con `scope: { languages: [dart] }` no dispara fuera de Dart;
+  un skill/agente/blueprint con `match` (D-014) solo aflora en un prompt
+  relevante.
 - Reutilizacion, no copia (invariante 2): el contenido de una tecnologia vive
   una vez y compone para todo proyecto, en vez de duplicarse por proyecto.
 
-Convencion: `packages/flutter/`, `packages/rust/`, cada uno con la convencion
-usual `rules/ skills/ agents/ knowledge/ tools/`. Versionado por componente via
-`metadata.version` hasta que llegue el pinning cross-workspace.
+Convencion: `platforms/flutter/`, `platforms/rust/`, `platforms/react-native/`,
+cada uno con la convencion usual `rules/ skills/ agents/ knowledge/ tools/
+blueprints/`. Versionado por componente via `metadata.version` hasta que llegue
+el pinning cross-workspace.
 
-Evidencia: `crates/keel-engine/src/workspace.rs` (`LayerId::Package` en el enum,
-`CHAIN`, `dir()`), `crates/keel-engine/src/resolution.rs` (`Package => true`),
+Evidencia: `crates/keel-engine/src/workspace.rs` (`LayerId::Platform` en el
+enum, `CHAIN`, `dir()`), `crates/keel-engine/src/resolution.rs`
+(`Platform` seleccionado desde `ProjectBinding.platforms`),
 `crates/keel-cli/src/{commands.rs,init.rs}` (label + README),
 `crates/keel-engine/tests-unit/workspace.rs`
-(`packages_compose_as_a_technology_layer...`).
+(`layer_order_is_the_fixed_composition_chain`) y
+`crates/keel-engine/tests-unit/resolution.rs`
+(`declared_platform_is_included_in_composition_order`).
 
 ## D-016 Entrega OPORTUNA de contexto (el recurso correcto en el momento correcto)
 

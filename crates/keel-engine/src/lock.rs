@@ -48,6 +48,10 @@ pub struct ProjectBinding {
     pub project: String,
     /// Workspace reference that owns the definitions, e.g. `org:local`.
     pub workspace: String,
+    /// Technology platform layers to include, e.g. `flutter`, `rust`, `react`.
+    /// Empty means no platform layer is selected.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub platforms: Vec<String>,
 }
 
 impl ProjectBinding {
@@ -104,6 +108,8 @@ pub struct LockComponents {
 pub struct Lock {
     pub project: String,
     pub workspace: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub platforms: Vec<String>,
     #[serde(rename = "snapshotHash")]
     pub snapshot_hash: String,
     #[serde(rename = "keelVersion")]
@@ -167,6 +173,7 @@ impl Lock {
         Lock {
             project: binding.project.clone(),
             workspace: binding.workspace.clone(),
+            platforms: binding.platforms.clone(),
             snapshot_hash: snapshot.hash.to_string(),
             keel_version: keel_version.to_string(),
             components: LockComponents {
@@ -227,8 +234,11 @@ impl Lock {
                 self.snapshot_hash, fresh.snapshot_hash
             ));
         }
-        if fresh.project != self.project || fresh.workspace != self.workspace {
-            return Err("binding drift: project/workspace differ from the lock".into());
+        if fresh.project != self.project
+            || fresh.workspace != self.workspace
+            || fresh.platforms != self.platforms
+        {
+            return Err("binding drift: project/workspace/platforms differ from the lock".into());
         }
         if fresh.components != self.components {
             return Err("component drift: the resolved components differ from the lock".into());
