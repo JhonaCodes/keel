@@ -36,8 +36,9 @@ pub fn default_workspace() -> Option<PathBuf> {
 }
 
 /// Records `workspace` as the default (canonicalized to an absolute path so it
-/// resolves from any cwd). Overwrites the previous default; the last `init` or
-/// `use` wins.
+/// resolves from any cwd). Overwrites the previous default — `keel use` always
+/// wins; `keel init` defers to an existing valid default (see `governed::init`)
+/// so a scratch workspace cannot silently steal it.
 pub fn set_default_workspace(workspace: &Path) -> Result<()> {
     let path = config_path().context("cannot locate ~/.keel (HOME unset)")?;
     if let Some(parent) = path.parent() {

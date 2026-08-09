@@ -35,6 +35,19 @@ impl Workspace {
         }
         command.args(args).output().expect("spawn keel")
     }
+
+    /// Like `run`, but with an isolated `HOME` so the global default-workspace
+    /// config (`~/.keel/config.json`) is written under `home`, not the
+    /// developer's real one.
+    fn run_with_home(&self, args: &[&str], home: &Path) -> Output {
+        let mut command = Command::new(keel_bin());
+        command.env_clear();
+        if let Ok(path) = std::env::var("PATH") {
+            command.env("PATH", path);
+        }
+        command.env("HOME", home);
+        command.args(args).output().expect("spawn keel")
+    }
 }
 
 impl Drop for Workspace {
@@ -119,6 +132,66 @@ fn the_removed_api_subcommands_are_gone() {
             argv[0]
         );
     }
+}
+
+/// A scratch `keel init` must NOT steal an already-registered default
+/// workspace: the FIRST init registers it, a SECOND init leaves it alone, and
+/// only `keel use` switches it explicitly. (Regression: a test `keel init` on a
+/// temp dir once clobbered the operator's default, and deleting the temp dir
+/// then broke every `keel <cli>` with "no workspace found".)
+#[test]
+fn init_does_not_steal_an_existing_default_workspace() {
+    let home = Workspace::new();
+    fs::create_dir_all(home.path()).unwrap();
+
+    let first = Workspace::new();
+    let second = Workspace::new();
+    let first_root = first.path().to_str().unwrap();
+    let second_root = second.path().to_str().unwrap();
+    let config = home.path().join(".keel/config.json");
+
+    // First init (no default yet) registers `first`.
+    assert!(
+        first
+            .run_with_home(&["init", first_root, "--json"], home.path())
+            .status
+            .success()
+    );
+    let after_first = fs::read_to_string(&config).expect("config written by first init");
+    assert!(
+        after_first.contains(&first.path().canonicalize().unwrap().display().to_string()),
+        "first init should register itself as the default: {after_first}"
+    );
+
+    // Second init (a valid default already exists) must NOT clobber it.
+    assert!(
+        second
+            .run_with_home(&["init", second_root, "--json"], home.path())
+            .status
+            .success()
+    );
+    let after_second = fs::read_to_string(&config).unwrap();
+    assert!(
+        after_second.contains(&first.path().canonicalize().unwrap().display().to_string()),
+        "a second init must leave the existing default alone: {after_second}"
+    );
+    assert!(
+        !after_second.contains(&second.path().canonicalize().unwrap().display().to_string()),
+        "the scratch second init must not become the default: {after_second}"
+    );
+
+    // `keel use` is the explicit way to switch.
+    assert!(
+        second
+            .run_with_home(&["use", second_root], home.path())
+            .status
+            .success()
+    );
+    let after_use = fs::read_to_string(&config).unwrap();
+    assert!(
+        after_use.contains(&second.path().canonicalize().unwrap().display().to_string()),
+        "keel use must switch the default explicitly: {after_use}"
+    );
 }
 
 #[test]
