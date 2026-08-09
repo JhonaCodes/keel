@@ -5,7 +5,7 @@ whole project history (that lives in `git log`). Versions here track
 `Cargo.toml`'s workspace `version`, which is independent of the "spec
 version" used by `docs/RACC_reference_architecture_v0_9_1.md`.
 
-## Unreleased
+## 0.12.0
 
 - **Workspace `.env` for secrets**: `keel launch`/`mcp`/`gate` load a gitignored
   `<workspace>/.env` into keel's environment before resolving `${VAR}`, so
