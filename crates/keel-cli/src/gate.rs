@@ -110,6 +110,15 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
         worst = worst.max(eval.effective_decision);
     }
 
+    // Prompt enrichment (D-013): on the operator's prompt, keel DELIVERS the
+    // tool output of every `prompt.submitted` rule to the model as context — the
+    // model receives the task already deserialized (e.g. a ticket decomposed
+    // with its id) instead of fetching it itself. Deterministic, by code, not a
+    // model choice. Emitted as the client's `additionalContext`; never blocks.
+    if event.kind == EventKind::PromptSubmitted {
+        return Ok(emit_prompt_enrichment(&evals));
+    }
+
     for p in &packets {
         eprintln!("{p}\n");
     }
@@ -122,6 +131,35 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
     } else {
         Ok(ExitCode::SUCCESS)
     }
+}
+
+/// Collects the tool output of every `prompt.submitted` evaluation and emits it
+/// to the client as `additionalContext` — the governed, deterministic way keel
+/// hands the model context on a prompt (D-013). A rule's `findings` carry a
+/// tool's structured output (e.g. a decomposed ticket); `detail` carries its
+/// report line. Nothing to inject → no output. Never blocks the prompt.
+fn emit_prompt_enrichment(evals: &[keel_engine::runtime::Evaluation]) -> ExitCode {
+    let mut blocks: Vec<String> = Vec::new();
+    for eval in evals {
+        for finding in &eval.findings {
+            if !finding.message.trim().is_empty() {
+                blocks.push(finding.message.clone());
+            }
+        }
+    }
+    if blocks.is_empty() {
+        return ExitCode::SUCCESS;
+    }
+    let context = blocks.join("\n\n");
+    // Claude Code UserPromptSubmit contract: stdout JSON injects context.
+    let out = serde_json::json!({
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": context,
+        }
+    });
+    println!("{out}");
+    ExitCode::SUCCESS
 }
 
 /// Parses the payload into a keel event and whether a block on it can PREVENT
@@ -241,6 +279,16 @@ fn parse_claude_code_hook(input: &str) -> Option<(Event, bool)> {
             }
         }
         "Stop" => Some((mk(EventKind::CompletionRequested), true)),
+        "UserPromptSubmit" => {
+            // The operator's prompt, BEFORE the model reasons. keel evaluates
+            // `prompt.submitted` rules and DELIVERS their tool output / skills
+            // to the model as context (enrichment), so the model receives the
+            // task already deserialized instead of fetching it itself. Not a
+            // block — the prompt proceeds, enriched.
+            let mut ev = mk(EventKind::PromptSubmitted);
+            ev.content = v.get("prompt").and_then(|p| p.as_str()).map(str::to_string);
+            Some((ev, false))
+        }
         _ => None,
     }
 }
@@ -368,6 +416,24 @@ mod tests {
         let (event, _) = parse_claude_code_hook(&payload).expect("parsed");
         assert_eq!(event.kind, EventKind::TestCompleted);
         assert!(!event.content.as_deref().unwrap_or("").contains("FAILED"));
+    }
+
+    #[test]
+    fn a_user_prompt_becomes_a_non_blocking_prompt_submitted_carrying_the_text() {
+        let payload = serde_json::json!({
+            "hook_event_name": "UserPromptSubmit",
+            "session_id": "s1",
+            "prompt": "explain https://linear.app/acme/issue/ABC-123/x"
+        })
+        .to_string();
+
+        let (event, preventable) = parse_claude_code_hook(&payload).expect("parsed");
+        assert_eq!(event.kind, EventKind::PromptSubmitted);
+        assert!(!preventable, "a prompt is enriched, never blocked");
+        assert_eq!(
+            event.content.as_deref(),
+            Some("explain https://linear.app/acme/issue/ABC-123/x")
+        );
     }
 
     #[test]

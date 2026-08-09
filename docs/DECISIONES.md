@@ -247,3 +247,34 @@ Evidencia: `crates/keel-cli/src/gate.rs`, `crates/keel-host/src/launch.rs`
 (wire del hook), `crates/keel-engine/src/adapter.rs` (`HookInjection`),
 `crates/keel-host/src/sandbox.rs` (blindaje `.keel-state`),
 `test/tests/gate_hook.rs`.
+
+## D-013 Entrega deterministica de contexto en el prompt (enriquecimiento)
+
+Extension de doctrina (decidida con el dueno). Hasta D-012, keel NO inyectaba
+en el stream del modelo: la conveniencia era pull (el modelo pide skills por
+MCP, D-012.b) y la direccion cognitiva le hablaba al OPERADOR, no al modelo
+(D-012.d). D-013 agrega una via COMPLEMENTARIA: keel puede ENTREGAR contexto al
+modelo de forma DETERMINISTA y por CODIGO, en el momento del prompt.
+
+Mecanismo: keel cablea el hook `UserPromptSubmit` (junto a PreToolUse/Stop,
+D-012.e). `keel gate` mapea el prompt a un evento `prompt.submitted` y evalua
+sus reglas; la salida de sus tools (los `findings`) se entrega al modelo como
+`additionalContext` del cliente. Asi el modelo RECIBE la tarea ya
+deserializada (p.ej. un ticket de Linear descompuesto, con su id, para que el
+PR referencie el ticket) en vez de tener que ir a buscarla — ahorra tokens y
+elimina la decision del modelo de "usar o no la tool". Es generico: cualquier
+regla `on: [prompt.submitted]` con un tool sirve (Linear, Jira, GitHub, …), sin
+tocar el binario.
+
+Limites y separacion: es enriquecimiento, NUNCA bloqueo (un prompt no se
+previene; se enriquece). No reemplaza P1 (los anillos duros siguen
+independientes) ni la convergencia MCP (P2 sigue siendo el canal pull); es una
+entrega push, gobernada y deterministica, distinta de la sugerencia no
+intrusiva del supervisor (P3, que sigue hablando solo al operador). El
+contenido lo produce una tool autorada (evidencia de keel, no palabra del
+modelo, D-003).
+
+Evidencia: `crates/keel-cli/src/gate.rs` (`emit_prompt_enrichment`,
+`UserPromptSubmit`→`prompt.submitted`), `crates/keel-host/src/launch.rs`
+(wire del hook `UserPromptSubmit` + `WebFetch` en PreToolUse),
+`test/tests/gate_hook.rs` (`a_prompt_submitted_rule_injects_its_tool_output…`).
