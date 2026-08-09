@@ -77,7 +77,7 @@ fn outer_ring_block_is_not_flagged() {
 #[test]
 fn completion_block_is_flagged_in_v1() {
     let s = snap(vec![block_rule("r", vec![EventKind::CompletionRequested])]);
-    let v = preflight(&s, &AdapterManifest::for_client("codex").unwrap());
+    let v = preflight(&s, &AdapterManifest::for_client("generic").unwrap());
     assert_eq!(v.len(), 1, "completion.requested is not blockable in v1");
 }
 
@@ -93,8 +93,66 @@ fn unknown_client_has_no_manifest_and_generic_has_no_base_command() {
 }
 
 #[test]
+fn opencode_is_a_known_governed_launch_client_with_env_mcp() {
+    let opencode = AdapterManifest::for_client("opencode").unwrap();
+    assert_eq!(opencode.command, vec!["opencode"]);
+    assert!(opencode.shim_commands.iter().any(|c| c == "git"));
+    let mcp = opencode.mcp.unwrap();
+    assert_eq!(
+        mcp.method,
+        McpMethod::EnvConfigVar {
+            var: "OPENCODE_CONFIG_CONTENT".into()
+        }
+    );
+    let hook = opencode.hook.unwrap();
+    assert_eq!(hook.dialect, "native");
+    assert_eq!(
+        hook.method,
+        HookMethod::ConfigDirEnv {
+            var: "OPENCODE_CONFIG_DIR".into()
+        }
+    );
+    assert!(hook.blockable.contains(&EventKind::FileEdited));
+    assert!(!hook.blockable.contains(&EventKind::CompletionRequested));
+}
+
+#[test]
 fn known_clients_declare_how_to_inject_the_keel_mcp_endpoint() {
     // Convergence wiring is DATA per client, not code.
     assert!(AdapterManifest::for_client("claude").unwrap().mcp.is_some());
     assert!(AdapterManifest::for_client("codex").unwrap().mcp.is_some());
+    assert!(
+        AdapterManifest::for_client("opencode")
+            .unwrap()
+            .mcp
+            .is_some()
+    );
+}
+
+#[test]
+fn codex_is_a_known_governed_launch_client_with_hooks() {
+    let codex = AdapterManifest::for_client("codex").unwrap();
+    assert_eq!(codex.command, vec!["codex"]);
+    let hook = codex.hook.unwrap();
+    assert_eq!(hook.dialect, "codex");
+    assert_eq!(
+        hook.method,
+        HookMethod::ConfigOverrideFlags {
+            flag: "-c".into(),
+            trust_bypass_flag: Some("--dangerously-bypass-hook-trust".into())
+        }
+    );
+    assert!(hook.blockable.contains(&EventKind::FileEdited));
+    assert!(hook.blockable.contains(&EventKind::CompletionRequested));
+}
+
+#[test]
+fn opencode_does_not_claim_completion_hook_prevention() {
+    let s = snap(vec![block_rule("r", vec![EventKind::CompletionRequested])]);
+    let v = preflight(&s, &AdapterManifest::for_client("opencode").unwrap());
+    assert_eq!(
+        v.len(),
+        1,
+        "OpenCode tool hooks do not make Stop/completion blockable"
+    );
 }

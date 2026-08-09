@@ -21,7 +21,7 @@ use std::process::ExitCode;
 const RUNTIME_DB: &str = "runtime.sqlite";
 
 pub struct LaunchOptions {
-    /// Launch adapter id (`claude`, `codex`, `generic`).
+    /// Launch adapter id (`claude`, `codex`, `opencode`, `generic`).
     pub client: String,
     /// Explicit workspace; otherwise `KEEL_WORKSPACE`, then walk-up from cwd.
     pub workspace: Option<PathBuf>,
@@ -133,7 +133,15 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
     // model discovers/loads its governed skills through keel, and announce it.
     // Ephemeral, per-session config; if the child ignores or deletes it, the
     // hard rings are unaffected (P1 never depends on P2).
-    let argv = wire_convergence(argv, &manifest, &host_dir, &root, &session_id, &skill_ids)?;
+    let argv = wire_convergence(
+        argv,
+        &mut env,
+        &manifest,
+        &host_dir,
+        &root,
+        &session_id,
+        &skill_ids,
+    )?;
 
     // The hard ring: wrap argv in the OS sandbox when the snapshot declares a
     // containment AND a provider can honor it. Any downgrade is announced.
@@ -201,6 +209,7 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
 /// regardless.
 fn wire_convergence(
     mut argv: Vec<String>,
+    env: &mut BTreeMap<String, String>,
     manifest: &AdapterManifest,
     host_dir: &std::path::Path,
     root: &std::path::Path,
@@ -243,6 +252,27 @@ fn wire_convergence(
                 argv.push(format!("mcp_servers.keel.command=\"{keel_bin}\""));
                 argv.push(flag.clone());
                 argv.push(format!("mcp_servers.keel.args={args_toml}"));
+            }
+            McpMethod::EnvConfigVar { var } => {
+                // OpenCode-style: runtime config JSON from an environment variable.
+                let config = serde_json::json!({
+                    "$schema": "https://opencode.ai/config.json",
+                    "mcp": {
+                        "keel": {
+                            "type": "local",
+                            "command": [
+                                keel_bin.clone(),
+                                "mcp",
+                                "--workspace",
+                                root_str.clone(),
+                                "--session",
+                                session_id
+                            ],
+                            "enabled": true
+                        }
+                    }
+                });
+                env.insert(var.clone(), serde_json::to_string(&config)?);
             }
         }
 
@@ -319,6 +349,40 @@ fn wire_convergence(
                 argv.push(flag.clone());
                 argv.push(path.display().to_string());
             }
+            HookMethod::ConfigOverrideFlags {
+                flag,
+                trust_bypass_flag,
+            } => {
+                let script = write_codex_gate_script(host_dir, &keel_bin, &root_str, session_id)?;
+                let hook_command = shell_quote(&script.display().to_string());
+                let hook = format!(
+                    "{{hooks=[{{type=\"command\",command={},statusMessage=\"Keel gate\"}}]}}",
+                    toml_string(&hook_command)
+                );
+                argv.push(flag.clone());
+                argv.push("features.hooks=true".into());
+                for event in [
+                    "SessionStart",
+                    "UserPromptSubmit",
+                    "PreToolUse",
+                    "PostToolUse",
+                    "Stop",
+                ] {
+                    argv.push(flag.clone());
+                    argv.push(format!("hooks.{event}=[{hook}]"));
+                }
+                if let Some(trust_bypass_flag) = trust_bypass_flag {
+                    argv.push(trust_bypass_flag.clone());
+                }
+            }
+            HookMethod::ConfigDirEnv { var } => {
+                let config_dir = host_dir.join("opencode");
+                let plugins_dir = config_dir.join("plugins");
+                std::fs::create_dir_all(&plugins_dir)?;
+                let plugin = opencode_gate_plugin(&keel_bin, &root_str, session_id);
+                std::fs::write(plugins_dir.join("keel-gate.js"), plugin)?;
+                env.insert(var.clone(), config_dir.display().to_string());
+            }
         }
     }
 
@@ -383,6 +447,123 @@ fn short_id(session_id: &str) -> String {
     tail.chars().rev().collect()
 }
 
+fn write_codex_gate_script(
+    host_dir: &std::path::Path,
+    keel_bin: &str,
+    root: &str,
+    session_id: &str,
+) -> Result<std::path::PathBuf> {
+    let path = host_dir.join("codex-gate.sh");
+    let script = format!(
+        "#!/bin/sh\nexec {} gate --client codex --workspace {} --session {}\n",
+        shell_quote(keel_bin),
+        shell_quote(root),
+        shell_quote(session_id),
+    );
+    std::fs::write(&path, script)?;
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700))?;
+    Ok(path)
+}
+
+fn toml_string(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
+    format!("\"{escaped}\"")
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+fn opencode_gate_plugin(keel_bin: &str, root: &str, session_id: &str) -> String {
+    let keel_bin = serde_json::to_string(keel_bin).expect("string serializes");
+    let root = serde_json::to_string(root).expect("string serializes");
+    let session_id = serde_json::to_string(session_id).expect("string serializes");
+    format!(
+        r#"import {{ spawnSync }} from "node:child_process";
+
+const KEEL_BIN = {keel_bin};
+const KEEL_WORKSPACE = {root};
+const KEEL_SESSION = {session_id};
+
+function str(value) {{
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}}
+
+function eventForTool(input, output) {{
+  const tool = input?.tool || "";
+  const args = output?.args || {{}};
+  const event = {{
+    kind: "tool.requested",
+    session_id: KEEL_SESSION,
+    content: tool,
+    env: {{}},
+    files: [],
+    loaded_skills: [],
+    recorded_evidence: [],
+  }};
+
+  if (tool === "bash") {{
+    event.kind = "command.requested";
+    event.command = str(args.command);
+    return event;
+  }}
+
+  if (tool === "edit" || tool === "write") {{
+    event.kind = "file.edited";
+    event.file = str(args.filePath) || str(args.path);
+    event.content = str(args.content) || str(args.newString) || str(args.new_string);
+    return event;
+  }}
+
+  if (tool === "apply_patch") {{
+    event.kind = "file.edited";
+    event.content = str(args.patchText) || str(args.patch);
+    return event;
+  }}
+
+  if (tool === "webfetch") {{
+    event.kind = "command.requested";
+    event.command = str(args.url);
+    return event;
+  }}
+
+  event.content = `${{tool}} ${{JSON.stringify(args).slice(0, 500)}}`;
+  return event;
+}}
+
+function runGate(event) {{
+  const child = spawnSync(
+    KEEL_BIN,
+    ["gate", "--client", "native", "--workspace", KEEL_WORKSPACE, "--session", KEEL_SESSION],
+    {{
+      input: JSON.stringify(event),
+      encoding: "utf8",
+    }},
+  );
+  if (child.stderr) process.stderr.write(child.stderr);
+  if (child.stdout) process.stderr.write(child.stdout);
+  if (child.status === 2) {{
+    throw new Error("keel blocked this OpenCode tool call");
+  }}
+  if (child.status !== 0) {{
+    process.stderr.write(`[keel] opencode hook failed with exit ${{child.status}}\n`);
+  }}
+}}
+
+export const KeelGate = async () => {{
+  return {{
+    "tool.execute.before": async (input, output) => {{
+      runGate(eventForTool(input, output));
+    }},
+  }};
+}};
+"#
+    )
+}
+
 /// Workspace resolution: `--workspace` > `KEEL_WORKSPACE` > walk-up from cwd >
 /// the operator's registered default (`~/.keel/config.json`, set by `keel
 /// init`/`keel use`). Only then an error — so `keel <cli>` works from anywhere
@@ -410,4 +591,90 @@ fn resolve_workspace(explicit: Option<PathBuf>) -> Result<PathBuf> {
         "no keel workspace found — pass --workspace, set KEEL_WORKSPACE, run inside \
          a workspace, or register one with `keel init` / `keel use <path>`"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn opencode_convergence_writes_mcp_config_to_env() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let host_dir = root.join("host");
+        std::fs::create_dir_all(&host_dir).unwrap();
+
+        let manifest = AdapterManifest::for_client("opencode").unwrap();
+        let mut env = BTreeMap::new();
+        let argv = wire_convergence(
+            manifest.command.clone(),
+            &mut env,
+            &manifest,
+            &host_dir,
+            root,
+            "session-test",
+            &["keel_verification".into()],
+        )
+        .unwrap();
+
+        assert_eq!(argv, vec!["opencode"]);
+        let config = env
+            .get("OPENCODE_CONFIG_CONTENT")
+            .expect("opencode config env is written");
+        let config: serde_json::Value = serde_json::from_str(config).unwrap();
+        assert_eq!(config["mcp"]["keel"]["type"], "local");
+        assert_eq!(config["mcp"]["keel"]["enabled"], true);
+        assert_eq!(config["mcp"]["keel"]["command"][1], "mcp");
+        assert_eq!(
+            config["mcp"]["keel"]["command"][3],
+            root.display().to_string()
+        );
+        assert_eq!(config["mcp"]["keel"]["command"][5], "session-test");
+
+        let config_dir = env
+            .get("OPENCODE_CONFIG_DIR")
+            .expect("opencode config dir env is written");
+        let plugin = std::fs::read_to_string(
+            std::path::Path::new(config_dir)
+                .join("plugins")
+                .join("keel-gate.js"),
+        )
+        .unwrap();
+        assert!(plugin.contains("\"tool.execute.before\""));
+        assert!(plugin.contains("\"gate\", \"--client\", \"native\""));
+    }
+
+    #[test]
+    fn codex_convergence_writes_mcp_and_hooks_to_config_overrides() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let host_dir = root.join("host");
+        std::fs::create_dir_all(&host_dir).unwrap();
+
+        let manifest = AdapterManifest::for_client("codex").unwrap();
+        let mut env = BTreeMap::new();
+        let argv = wire_convergence(
+            manifest.command.clone(),
+            &mut env,
+            &manifest,
+            &host_dir,
+            root,
+            "session-test",
+            &["keel_verification".into()],
+        )
+        .unwrap();
+
+        assert!(
+            argv.iter()
+                .any(|a| a.starts_with("mcp_servers.keel.command="))
+        );
+        assert!(argv.iter().any(|a| a == "features.hooks=true"));
+        assert!(argv.iter().any(|a| a.starts_with("hooks.PreToolUse=[")));
+        assert!(argv.iter().any(|a| a.starts_with("hooks.Stop=[")));
+        assert!(argv.contains(&"--dangerously-bypass-hook-trust".to_string()));
+        let script = host_dir.join("codex-gate.sh");
+        assert!(script.exists());
+        let script = std::fs::read_to_string(script).unwrap();
+        assert!(script.contains("gate --client codex"));
+    }
 }

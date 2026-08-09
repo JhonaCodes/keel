@@ -23,19 +23,20 @@ Installs `keel` and `keel-shim` (they travel together).
 ```bash
 keel init ~/keel-workspace --json
 keel doctor --workspace ~/keel-workspace --governed --json
-keel claude          # init already registered ~/keel-workspace as the default — or: keel codex
+keel claude          # init already registered ~/keel-workspace as the default — or: keel codex / keel opencode
 ```
 
 `init` creates the workspace, binding, snapshot, lock, and SQLite store. It does not
 create or modify provider configuration: keel governs the CLI's ENVIRONMENT, not
 its API.
 
-`keel claude [args...]` / `keel codex [args...]` is a pure passthrough shorthand
-for `keel launch --client <name> -- [args...]` — it does NOT parse `--workspace`
-(or any other `launch` flag) itself; anything after `claude`/`codex` is forwarded
-as-is to the real client binary. To target a workspace other than the current
-directory or the one `keel init`/`keel use` last registered as default, use the
-full form: `keel launch --client claude --workspace ~/keel-workspace -- <args>`.
+`keel claude [args...]` / `keel codex [args...]` / `keel opencode [args...]` is
+a pure passthrough shorthand for `keel launch --client <name> -- [args...]` — it
+does NOT parse `--workspace` (or any other `launch` flag) itself; anything after
+the client name is forwarded as-is to the real client binary. To target a
+workspace other than the current directory or the one `keel init`/`keel use` last
+registered as default, use the full form:
+`keel launch --client claude --workspace ~/keel-workspace -- <args>`.
 
 `init` ships with zero rules on purpose — nothing is enforced until you author
 some. For a working, non-trivial workspace with real rules and passing tests

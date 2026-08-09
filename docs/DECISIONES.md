@@ -240,8 +240,11 @@ Por que esto NO reintroduce el error viejo (hook editable = unica defensa):
 - Con el puente, `skill.loaded` puede gatear `file.edited` → keel FUERZA un
   skill incluso ante una escritura interna del modelo.
 
-Especifico por cliente via `AdapterManifest.hook` (claude: `--settings` con un
-PreToolUse que llama a `keel gate --client claude-code`). Codex: pendiente.
+Especifico por cliente via `AdapterManifest.hook`: Claude usa `--settings` con
+un PreToolUse que llama a `keel gate --client claude-code`; Codex usa overrides
+`-c hooks.*` de sesion que llaman a `keel gate --client codex`; OpenCode usa un
+plugin efimero en `OPENCODE_CONFIG_DIR` que llama a `keel gate --client native`
+desde `tool.execute.before`.
 
 Evidencia: `crates/keel-cli/src/gate.rs`, `crates/keel-host/src/launch.rs`
 (wire del hook), `crates/keel-engine/src/adapter.rs` (`HookInjection`),

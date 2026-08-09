@@ -309,10 +309,19 @@ kind: ModelExecutor
 metadata: { id: auditor-cli, version: 1.0.0 }
 spec:
   config:
-    command: [codex, exec, --json]   # or [claude, -p], or your own script
+    command: [codex, exec, -]        # or [opencode, run], [claude, -p], or your own script
     env:                              # optional: extra env for the child
       HOME: "${HOME}"                 # ${VAR} inherits from keel's environment
 ```
+
+Interactive launch convergence is separate from `ModelExecutor`: `keel claude`,
+`keel codex`, and `keel opencode` wire the compiled workspace into the child CLI
+through each client's native config mechanism. Workflow content stays in the
+generated workspace; Keel only provides the generic runtime routing layer.
+
+Client hooks, when available, are also wired by Keel as transport into
+`keel gate`. They must not duplicate rule logic or become a second governance
+system.
 
 - **`config.env` (optional):** the child runs with `env_clear` + `PATH` only, so
   it inherits NO ambient secrets. Most real CLIs still need a couple of vars to

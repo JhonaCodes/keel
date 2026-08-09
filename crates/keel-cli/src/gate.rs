@@ -36,6 +36,8 @@ pub enum Client {
     Native,
     /// stdin carries a Claude Code hook payload (PreToolUse/PostToolUse/Stop).
     ClaudeCode,
+    /// stdin carries a Codex hook payload (PreToolUse/PostToolUse/Stop).
+    Codex,
 }
 
 /// Reads one hook payload from stdin, evaluates it, and returns the exit code
@@ -373,6 +375,7 @@ fn parse(client: Client, input: &str) -> Option<(Event, bool)> {
     match client {
         Client::Native => serde_json::from_str::<Event>(input).ok().map(|e| (e, true)),
         Client::ClaudeCode => parse_claude_code_hook(input),
+        Client::Codex => parse_codex_hook(input),
     }
 }
 
@@ -518,6 +521,115 @@ fn parse_claude_code_hook(input: &str) -> Option<(Event, bool)> {
             // a block.
             Some((mk(EventKind::SessionStarted), false))
         }
+        _ => None,
+    }
+}
+
+/// Translates a Codex hook payload into a keel event + preventability.
+/// Codex's hook protocol is Claude-style, but canonical edit hooks arrive as
+/// `tool_name: "apply_patch"` with the patch in `tool_input.command`.
+fn parse_codex_hook(input: &str) -> Option<(Event, bool)> {
+    let v: serde_json::Value = serde_json::from_str(input).ok()?;
+    let hook = v.get("hook_event_name")?.as_str()?;
+    let session_id = v
+        .get("session_id")
+        .and_then(|s| s.as_str())
+        .map(str::to_string);
+
+    let mk = |kind: EventKind| Event {
+        kind,
+        session_id: session_id.clone(),
+        file: None,
+        language: None,
+        content: None,
+        line: None,
+        command: None,
+        env: Default::default(),
+        files: vec![],
+        loaded_skills: vec![],
+        recorded_evidence: vec![],
+    };
+
+    let pre = hook == "PreToolUse";
+    match hook {
+        "PreToolUse" | "PostToolUse" => {
+            let tool = v.get("tool_name")?.as_str()?;
+            let ti = v.get("tool_input")?;
+            match tool {
+                "Bash" => {
+                    let command = ti
+                        .get("command")
+                        .and_then(|c| c.as_str())
+                        .map(str::to_string);
+                    if !pre && command.as_deref().is_some_and(is_test_runner) {
+                        let mut ev = mk(EventKind::TestCompleted);
+                        ev.content = Some(test_outcome_content(&v));
+                        ev.command = command;
+                        return Some((ev, false));
+                    }
+                    let kind = if pre {
+                        EventKind::CommandRequested
+                    } else {
+                        EventKind::CommandCompleted
+                    };
+                    let mut ev = mk(kind);
+                    ev.command = command;
+                    Some((ev, pre))
+                }
+                "apply_patch" | "Edit" | "Write" => {
+                    let mut ev = mk(EventKind::FileEdited);
+                    ev.content = ti
+                        .get("command")
+                        .and_then(|c| c.as_str())
+                        .map(str::to_string)
+                        .or_else(|| {
+                            ti.get("patchText")
+                                .and_then(|c| c.as_str())
+                                .map(str::to_string)
+                        })
+                        .or_else(|| {
+                            ti.get("content")
+                                .and_then(|c| c.as_str())
+                                .map(str::to_string)
+                        });
+                    ev.file = ti
+                        .get("file_path")
+                        .or_else(|| ti.get("filePath"))
+                        .or_else(|| ti.get("path"))
+                        .and_then(|f| f.as_str())
+                        .map(str::to_string);
+                    Some((ev, pre))
+                }
+                "WebFetch" | "webfetch" => {
+                    let kind = if pre {
+                        EventKind::CommandRequested
+                    } else {
+                        EventKind::CommandCompleted
+                    };
+                    let mut ev = mk(kind);
+                    ev.command = ti.get("url").and_then(|u| u.as_str()).map(str::to_string);
+                    Some((ev, pre))
+                }
+                other => {
+                    if !pre {
+                        return None;
+                    }
+                    let mut ev = mk(EventKind::ToolRequested);
+                    ev.command = Some(other.to_string());
+                    let input = ti.to_string();
+                    let input: String = input.chars().take(500).collect();
+                    ev.content = Some(format!("{other} {input}"));
+                    Some((ev, true))
+                }
+            }
+        }
+        "Stop" => Some((mk(EventKind::CompletionRequested), true)),
+        "UserPromptSubmit" => {
+            let mut ev = mk(EventKind::PromptSubmitted);
+            ev.content = v.get("prompt").and_then(|p| p.as_str()).map(str::to_string);
+            Some((ev, false))
+        }
+        "SessionStart" => Some((mk(EventKind::SessionStarted), false)),
         _ => None,
     }
 }
@@ -756,5 +868,35 @@ mod tests {
         let (event, preventable) = parse_claude_code_hook(&payload).expect("parsed");
         assert_eq!(event.kind, EventKind::SessionStarted);
         assert!(!preventable, "session start delivers context, never blocks");
+    }
+
+    #[test]
+    fn codex_apply_patch_becomes_preventable_file_edited() {
+        let payload = serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "session_id": "s1",
+            "tool_name": "apply_patch",
+            "tool_input": { "command": "*** Update File: src/lib.rs\n+fn f() {}\n" }
+        })
+        .to_string();
+
+        let (event, preventable) = parse_codex_hook(&payload).expect("parsed");
+        assert_eq!(event.kind, EventKind::FileEdited);
+        assert!(preventable);
+        assert!(event.content.unwrap().contains("src/lib.rs"));
+    }
+
+    #[test]
+    fn codex_stop_becomes_preventable_completion_requested() {
+        let payload = serde_json::json!({
+            "hook_event_name": "Stop",
+            "session_id": "s1",
+            "last_assistant_message": "done"
+        })
+        .to_string();
+
+        let (event, preventable) = parse_codex_hook(&payload).expect("parsed");
+        assert_eq!(event.kind, EventKind::CompletionRequested);
+        assert!(preventable);
     }
 }
