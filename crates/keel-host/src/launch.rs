@@ -349,6 +349,14 @@ fn wire_convergence(
                 argv.push(flag.clone());
                 argv.push(path.display().to_string());
             }
+            HookMethod::ConfigDirEnv { var } => {
+                let config_dir = host_dir.join("opencode");
+                let plugins_dir = config_dir.join("plugins");
+                std::fs::create_dir_all(&plugins_dir)?;
+                let plugin = opencode_gate_plugin(&keel_bin, &root_str, session_id);
+                std::fs::write(plugins_dir.join("keel-gate.js"), plugin)?;
+                env.insert(var.clone(), config_dir.display().to_string());
+            }
         }
     }
 
@@ -413,6 +421,93 @@ fn short_id(session_id: &str) -> String {
     tail.chars().rev().collect()
 }
 
+fn opencode_gate_plugin(keel_bin: &str, root: &str, session_id: &str) -> String {
+    let keel_bin = serde_json::to_string(keel_bin).expect("string serializes");
+    let root = serde_json::to_string(root).expect("string serializes");
+    let session_id = serde_json::to_string(session_id).expect("string serializes");
+    format!(
+        r#"import {{ spawnSync }} from "node:child_process";
+
+const KEEL_BIN = {keel_bin};
+const KEEL_WORKSPACE = {root};
+const KEEL_SESSION = {session_id};
+
+function str(value) {{
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}}
+
+function eventForTool(input, output) {{
+  const tool = input?.tool || "";
+  const args = output?.args || {{}};
+  const event = {{
+    kind: "tool.requested",
+    session_id: KEEL_SESSION,
+    content: tool,
+    env: {{}},
+    files: [],
+    loaded_skills: [],
+    recorded_evidence: [],
+  }};
+
+  if (tool === "bash") {{
+    event.kind = "command.requested";
+    event.command = str(args.command);
+    return event;
+  }}
+
+  if (tool === "edit" || tool === "write") {{
+    event.kind = "file.edited";
+    event.file = str(args.filePath) || str(args.path);
+    event.content = str(args.content) || str(args.newString) || str(args.new_string);
+    return event;
+  }}
+
+  if (tool === "apply_patch") {{
+    event.kind = "file.edited";
+    event.content = str(args.patchText) || str(args.patch);
+    return event;
+  }}
+
+  if (tool === "webfetch") {{
+    event.kind = "command.requested";
+    event.command = str(args.url);
+    return event;
+  }}
+
+  event.content = `${{tool}} ${{JSON.stringify(args).slice(0, 500)}}`;
+  return event;
+}}
+
+function runGate(event) {{
+  const child = spawnSync(
+    KEEL_BIN,
+    ["gate", "--client", "native", "--workspace", KEEL_WORKSPACE, "--session", KEEL_SESSION],
+    {{
+      input: JSON.stringify(event),
+      encoding: "utf8",
+    }},
+  );
+  if (child.stderr) process.stderr.write(child.stderr);
+  if (child.stdout) process.stderr.write(child.stdout);
+  if (child.status === 2) {{
+    throw new Error("keel blocked this OpenCode tool call");
+  }}
+  if (child.status !== 0) {{
+    process.stderr.write(`[keel] opencode hook failed with exit ${{child.status}}\n`);
+  }}
+}}
+
+export const KeelGate = async () => {{
+  return {{
+    "tool.execute.before": async (input, output) => {{
+      runGate(eventForTool(input, output));
+    }},
+  }};
+}};
+"#
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -450,6 +545,18 @@ mod tests {
             root.display().to_string()
         );
         assert_eq!(config["mcp"]["keel"]["command"][5], "session-test");
+
+        let config_dir = env
+            .get("OPENCODE_CONFIG_DIR")
+            .expect("opencode config dir env is written");
+        let plugin = std::fs::read_to_string(
+            std::path::Path::new(config_dir)
+                .join("plugins")
+                .join("keel-gate.js"),
+        )
+        .unwrap();
+        assert!(plugin.contains("\"tool.execute.before\""));
+        assert!(plugin.contains("\"gate\", \"--client\", \"native\""));
     }
 }
 

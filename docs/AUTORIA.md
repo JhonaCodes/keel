@@ -319,6 +319,10 @@ Interactive launch convergence is separate from `ModelExecutor`: `keel claude`,
 through each client's native config mechanism. Workflow content stays in the
 generated workspace; Keel only provides the generic runtime routing layer.
 
+Client hooks, when available, are also wired by Keel as transport into
+`keel gate`. They must not duplicate rule logic or become a second governance
+system.
+
 - **`config.env` (optional):** the child runs with `env_clear` + `PATH` only, so
   it inherits NO ambient secrets. Most real CLIs still need a couple of vars to
   run — e.g. `claude -p` / `codex` need `HOME` to find their auth config. Declare

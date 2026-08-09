@@ -58,6 +58,8 @@ pub struct HookInjection {
     /// How the hook settings file reaches the client, e.g. Claude Code's
     /// `--settings <file>`.
     pub method: HookMethod,
+    /// Events this hook can block before the client executes them.
+    pub blockable: Vec<EventKind>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,6 +67,9 @@ pub enum HookMethod {
     /// A flag pointing at a written settings JSON that declares the hook,
     /// e.g. `--settings <file>`.
     SettingsFileFlag { flag: String },
+    /// A config directory written to an environment variable, e.g. OpenCode's
+    /// `OPENCODE_CONFIG_DIR`, containing an ephemeral plugin.
+    ConfigDirEnv { var: String },
 }
 
 /// How to wire keel's `keel mcp` server into a specific client CLI, and how to
@@ -114,13 +119,12 @@ impl AdapterManifest {
         mcp: Option<McpInjection>,
         hook: Option<HookInjection>,
     ) -> Self {
-        // With a hook wired, keel ALSO sees the client's internal file edits, so
-        // `file.edited` becomes truly blockable (PreToolUse is pre-action).
         let mut blockable: BTreeSet<EventKind> =
             [EventKind::CommandRequested].into_iter().collect();
-        if hook.is_some() {
-            blockable.insert(EventKind::FileEdited);
-            blockable.insert(EventKind::CompletionRequested);
+        if let Some(hook) = &hook {
+            for kind in &hook.blockable {
+                blockable.insert(*kind);
+            }
         }
         AdapterManifest {
             id: id.into(),
@@ -155,6 +159,7 @@ impl AdapterManifest {
                     method: HookMethod::SettingsFileFlag {
                         flag: "--settings".into(),
                     },
+                    blockable: vec![EventKind::FileEdited, EventKind::CompletionRequested],
                 }),
             )),
             "codex" => Some(Self::containment(
@@ -178,7 +183,13 @@ impl AdapterManifest {
                     },
                     announce: Announce::PtyLine,
                 }),
-                None,
+                Some(HookInjection {
+                    dialect: "native".into(),
+                    method: HookMethod::ConfigDirEnv {
+                        var: "OPENCODE_CONFIG_DIR".into(),
+                    },
+                    blockable: vec![EventKind::FileEdited, EventKind::ToolRequested],
+                }),
             )),
             // generic: no assumptions about the CLI's flags — convergence is
             // opt-in (the operator wires MCP), the hard rings still apply.

@@ -104,7 +104,16 @@ fn opencode_is_a_known_governed_launch_client_with_env_mcp() {
             var: "OPENCODE_CONFIG_CONTENT".into()
         }
     );
-    assert!(opencode.hook.is_none());
+    let hook = opencode.hook.unwrap();
+    assert_eq!(hook.dialect, "native");
+    assert_eq!(
+        hook.method,
+        HookMethod::ConfigDirEnv {
+            var: "OPENCODE_CONFIG_DIR".into()
+        }
+    );
+    assert!(hook.blockable.contains(&EventKind::FileEdited));
+    assert!(!hook.blockable.contains(&EventKind::CompletionRequested));
 }
 
 #[test]
@@ -117,5 +126,16 @@ fn known_clients_declare_how_to_inject_the_keel_mcp_endpoint() {
             .unwrap()
             .mcp
             .is_some()
+    );
+}
+
+#[test]
+fn opencode_does_not_claim_completion_hook_prevention() {
+    let s = snap(vec![block_rule("r", vec![EventKind::CompletionRequested])]);
+    let v = preflight(&s, &AdapterManifest::for_client("opencode").unwrap());
+    assert_eq!(
+        v.len(),
+        1,
+        "OpenCode tool hooks do not make Stop/completion blockable"
     );
 }
