@@ -40,6 +40,11 @@ const MAX_CONCURRENT_AGENTS: u32 = 4;
 /// responses to stdout; diagnostics go to stderr (stdout is the protocol
 /// channel and must stay clean).
 pub fn serve(root: &Path, session_id: &str) -> Result<()> {
+    // Load `<workspace>/.env` so `${VAR}` in a ModelExecutor's `config.env`
+    // resolves from it when an agent is invoked (this is the process that runs
+    // `executor_env`). Standalone-safe: works even when `keel mcp` is run by
+    // hand rather than inherited from `keel launch`.
+    crate::dotenv::load_workspace_env(root);
     let files = WorkspaceFiles::empty(root.to_path_buf());
     let snapshot = Snapshot::load(&files.snapshot_path())
         .context("no published snapshot — run `keel compile` first")?;

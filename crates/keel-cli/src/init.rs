@@ -15,6 +15,21 @@ spec:
   description: Keel workspace — layered composition (section 7 / section 8.5)
 ";
 
+/// Scaffolded `.env` (gitignored). Keel loads it into its environment at
+/// `keel launch`/`mcp`/`gate`, so `${VAR}` in a `ModelExecutor.config.env` (and
+/// tool scripts, which inherit the environment) resolve from here. Created for
+/// you; you fill in the keys by hand. Never committed (it is in `.gitignore`).
+pub const ENV_TEMPLATE: &str = "\
+# Keel workspace secrets — gitignored, loaded into keel's environment.
+# Reference these as ${NAME} in a ModelExecutor's config.env, e.g.:
+#   spec: { config: { command: [claude, -p], env: { HOME: \"${HOME}\", ANTHROPIC_API_KEY: \"${ANTHROPIC_API_KEY}\" } } }
+# A variable already exported in your shell wins over this file.
+# Fill in your own keys below (this file is never committed).
+
+# ANTHROPIC_API_KEY=
+# OPENAI_API_KEY=
+";
+
 pub const WORKSPACE_README: &str = r#"# Keel workspace
 
 This is a **Keel workspace**: the versioned source of your rules and their

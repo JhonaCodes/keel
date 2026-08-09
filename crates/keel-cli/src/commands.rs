@@ -59,7 +59,8 @@ pub fn init(path: &Path) -> Result<ExitCode> {
     let files: &[(&str, &str)] = &[
         ("README.md", init::WORKSPACE_README),
         ("workspace.yaml", init::WORKSPACE_YAML),
-        (".gitignore", ".keel-state/\n"),
+        (".gitignore", ".keel-state/\n.env\n"),
+        (".env", init::ENV_TEMPLATE),
         ("global/README.md", init::GLOBAL_README),
         ("global/rules/README.md", init::GLOBAL_RULES_README),
         ("global/rules/rule.yaml.example", init::GLOBAL_RULE),
