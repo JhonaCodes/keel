@@ -87,6 +87,9 @@ pub enum McpMethod {
     /// An inline `-c key=value` config override, e.g. Codex's
     /// `-c mcp_servers.keel.command=...`.
     ConfigOverrideFlag { flag: String },
+    /// A JSON config blob written into an environment variable, e.g.
+    /// OpenCode's `OPENCODE_CONFIG_CONTENT`.
+    EnvConfigVar { var: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -169,10 +172,12 @@ impl AdapterManifest {
             "opencode" => Some(Self::containment(
                 "opencode",
                 vec!["opencode".into()],
-                // OpenCode is governed by keel's parent runtime today. Do not
-                // claim per-session MCP injection until the CLI exposes a stable
-                // argv-scoped config override like Codex or Claude.
-                None,
+                Some(McpInjection {
+                    method: McpMethod::EnvConfigVar {
+                        var: "OPENCODE_CONFIG_CONTENT".into(),
+                    },
+                    announce: Announce::PtyLine,
+                }),
                 None,
             )),
             // generic: no assumptions about the CLI's flags — convergence is

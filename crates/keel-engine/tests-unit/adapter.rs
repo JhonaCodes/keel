@@ -93,11 +93,17 @@ fn unknown_client_has_no_manifest_and_generic_has_no_base_command() {
 }
 
 #[test]
-fn opencode_is_a_known_governed_launch_client_without_false_mcp_claims() {
+fn opencode_is_a_known_governed_launch_client_with_env_mcp() {
     let opencode = AdapterManifest::for_client("opencode").unwrap();
     assert_eq!(opencode.command, vec!["opencode"]);
     assert!(opencode.shim_commands.iter().any(|c| c == "git"));
-    assert!(opencode.mcp.is_none());
+    let mcp = opencode.mcp.unwrap();
+    assert_eq!(
+        mcp.method,
+        McpMethod::EnvConfigVar {
+            var: "OPENCODE_CONFIG_CONTENT".into()
+        }
+    );
     assert!(opencode.hook.is_none());
 }
 
@@ -110,6 +116,6 @@ fn known_clients_declare_how_to_inject_the_keel_mcp_endpoint() {
         AdapterManifest::for_client("opencode")
             .unwrap()
             .mcp
-            .is_none()
+            .is_some()
     );
 }

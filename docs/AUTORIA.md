@@ -314,6 +314,11 @@ spec:
       HOME: "${HOME}"                 # ${VAR} inherits from keel's environment
 ```
 
+Interactive launch convergence is separate from `ModelExecutor`: `keel claude`,
+`keel codex`, and `keel opencode` wire the compiled workspace into the child CLI
+through each client's native config mechanism. Workflow content stays in the
+generated workspace; Keel only provides the generic runtime routing layer.
+
 - **`config.env` (optional):** the child runs with `env_clear` + `PATH` only, so
   it inherits NO ambient secrets. Most real CLIs still need a couple of vars to
   run — e.g. `claude -p` / `codex` need `HOME` to find their auth config. Declare

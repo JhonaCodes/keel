@@ -133,7 +133,15 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
     // model discovers/loads its governed skills through keel, and announce it.
     // Ephemeral, per-session config; if the child ignores or deletes it, the
     // hard rings are unaffected (P1 never depends on P2).
-    let argv = wire_convergence(argv, &manifest, &host_dir, &root, &session_id, &skill_ids)?;
+    let argv = wire_convergence(
+        argv,
+        &mut env,
+        &manifest,
+        &host_dir,
+        &root,
+        &session_id,
+        &skill_ids,
+    )?;
 
     // The hard ring: wrap argv in the OS sandbox when the snapshot declares a
     // containment AND a provider can honor it. Any downgrade is announced.
@@ -201,6 +209,7 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
 /// regardless.
 fn wire_convergence(
     mut argv: Vec<String>,
+    env: &mut BTreeMap<String, String>,
     manifest: &AdapterManifest,
     host_dir: &std::path::Path,
     root: &std::path::Path,
@@ -243,6 +252,27 @@ fn wire_convergence(
                 argv.push(format!("mcp_servers.keel.command=\"{keel_bin}\""));
                 argv.push(flag.clone());
                 argv.push(format!("mcp_servers.keel.args={args_toml}"));
+            }
+            McpMethod::EnvConfigVar { var } => {
+                // OpenCode-style: runtime config JSON from an environment variable.
+                let config = serde_json::json!({
+                    "$schema": "https://opencode.ai/config.json",
+                    "mcp": {
+                        "keel": {
+                            "type": "local",
+                            "command": [
+                                keel_bin.clone(),
+                                "mcp",
+                                "--workspace",
+                                root_str.clone(),
+                                "--session",
+                                session_id
+                            ],
+                            "enabled": true
+                        }
+                    }
+                });
+                env.insert(var.clone(), serde_json::to_string(&config)?);
             }
         }
 
@@ -381,6 +411,46 @@ fn level_label(level: sandbox::Level) -> &'static str {
 fn short_id(session_id: &str) -> String {
     let tail: String = session_id.chars().rev().take(12).collect();
     tail.chars().rev().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn opencode_convergence_writes_mcp_config_to_env() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let host_dir = root.join("host");
+        std::fs::create_dir_all(&host_dir).unwrap();
+
+        let manifest = AdapterManifest::for_client("opencode").unwrap();
+        let mut env = BTreeMap::new();
+        let argv = wire_convergence(
+            manifest.command.clone(),
+            &mut env,
+            &manifest,
+            &host_dir,
+            root,
+            "session-test",
+            &["keel_verification".into()],
+        )
+        .unwrap();
+
+        assert_eq!(argv, vec!["opencode"]);
+        let config = env
+            .get("OPENCODE_CONFIG_CONTENT")
+            .expect("opencode config env is written");
+        let config: serde_json::Value = serde_json::from_str(config).unwrap();
+        assert_eq!(config["mcp"]["keel"]["type"], "local");
+        assert_eq!(config["mcp"]["keel"]["enabled"], true);
+        assert_eq!(config["mcp"]["keel"]["command"][1], "mcp");
+        assert_eq!(
+            config["mcp"]["keel"]["command"][3],
+            root.display().to_string()
+        );
+        assert_eq!(config["mcp"]["keel"]["command"][5], "session-test");
+    }
 }
 
 /// Workspace resolution: `--workspace` > `KEEL_WORKSPACE` > walk-up from cwd >

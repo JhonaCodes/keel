@@ -58,6 +58,11 @@ unmodified) within the environment Keel creates. A governed command (rm, git,
 if a rule denies it, **the command never becomes a process** (exit 2 +
 ContextPacket on stderr); if not, the real binary executes.
 
+For known clients, Keel also injects its local MCP endpoint at launch so the
+model discovers skills, agents, rules and workflows from the compiled workspace:
+Claude through an MCP config file, Codex through config overrides, and OpenCode
+through `OPENCODE_CONFIG_CONTENT`.
+
 Options:
 
 ```text
