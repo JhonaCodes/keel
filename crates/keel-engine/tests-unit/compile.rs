@@ -267,3 +267,30 @@ fn a_skill_content_file_must_end_in_keel_md() {
     let ok = files_from_yaml(SKILL_KEEL_NAME);
     assert!(compile(&ok, "t".into()).is_ok());
 }
+
+/// The optional `description` (for the exposed catalog, D-013) flows through to
+/// the compiled skill in the snapshot.
+#[test]
+fn a_skill_description_reaches_the_snapshot() {
+    let with_desc = files_from_yaml(
+        r#"
+apiVersion: keel/v1alpha1
+kind: Skill
+metadata: { id: verify, version: 0.1.0 }
+spec: { description: "Gate de verificacion antes de cerrar", compact: global/skills/verify_keel.md }
+"#,
+    );
+    let snap = compile(&with_desc, "t".into()).unwrap().snapshot;
+    assert_eq!(
+        snap.skills.get("verify").unwrap().description.as_deref(),
+        Some("Gate de verificacion antes de cerrar")
+    );
+
+    // Absent description → None (backward compatible).
+    let without = files_from_yaml(SKILL_KEEL_NAME);
+    let snap2 = compile(&without, "t".into()).unwrap().snapshot;
+    assert_eq!(
+        snap2.skills.get("access-patterns").unwrap().description,
+        None
+    );
+}

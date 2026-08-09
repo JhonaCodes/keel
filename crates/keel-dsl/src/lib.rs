@@ -291,6 +291,11 @@ pub struct SkillDoc {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SkillSpec {
+    /// One-line description of what the skill does, so keel can EXPOSE a
+    /// catalog to the model (D-013) — "we have these skills; here is what each
+    /// is for" — without the model reading every skill's content. Optional.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     /// Workspace-relative path to the compact variant.
     pub compact: String,
     /// Workspace-relative path to the full variant (optional).

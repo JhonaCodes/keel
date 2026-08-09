@@ -26,6 +26,10 @@
       "required": ["compact"],
       "additionalProperties": false,
       "properties": {
+        "description": {
+          "type": "string",
+          "description": "One-line description of what the skill does, for the exposed catalog (D-013)."
+        },
         "compact": {
           "type": "string",
           "description": "Workspace-relative path to the compact variant (delivered on first activation)."

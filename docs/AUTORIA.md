@@ -185,6 +185,7 @@ apiVersion: keel/v1alpha1
 kind: Skill
 metadata: { id: access-patterns, version: 0.1.0 }
 spec:
+  description: Access patterns — prefer the query builder over raw SQL   # optional: for the catalog
   compact: global/skills/access-patterns_keel.md   # short variant (first delivery)
   full: global/skills/access-patterns-full_keel.md # optional: full variant (scales on oscillation)
   examples:                                        # optional: pairs for packet exemplar
@@ -197,6 +198,10 @@ spec:
   wherever content is read.
 - The `.md` is free text; Keel delivers it as-is to context.
 - A rule can request it: `enforcement.invalid.load.skills: ["skill:access-patterns"]`.
+- **`description` (optional):** a one-line summary that flows into the compiled
+  snapshot, so a `prompt.submitted` enrichment tool can EXPOSE a catalog to the
+  model (D-013) — "we have these skills; here is what each is for; consult them
+  when relevant" — without the model reading every skill's content.
 
 ---
 
