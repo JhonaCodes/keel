@@ -127,6 +127,34 @@ SURFACES a suggestion to the operator in the transcript. It does NOT write to th
 model's stream: Keel helps without interfering with its reasoning. `--no-suggest`
 silences it.
 
+## Secrets — a gitignored `<workspace>/.env`
+
+Governed executors and provider configs reference secrets with `${VAR}`.
+Keel loads a `.env` at the workspace root into its environment before
+resolving them (in `keel launch`/`mcp`/`gate`), so you keep keys out of your
+shell profile:
+
+```bash
+# <workspace>/.env  (add `.env` to the workspace .gitignore — never commit it)
+ANTHROPIC_API_KEY=sk-...
+CONFLUENCE_API_TOKEN=...
+```
+
+```yaml
+# a ModelExecutor references it — the child gets ONLY what it declares
+spec:
+  config:
+    command: [claude, -p]
+    env:
+      HOME: "${HOME}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+```
+
+A variable already exported in the shell wins over the file (the `.env`
+never clobbers a real export). The `.env` is loaded into keel's own process,
+not handed wholesale to the child: a `CliModelExecutor` still runs with
+`env_clear` + `PATH` + only the vars its `config.env` names.
+
 ## Versioned Memory (Knowledge)
 
 A `kind: Knowledge` component grows across sessions without ever showing up

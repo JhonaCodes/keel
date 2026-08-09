@@ -264,6 +264,13 @@ spec:
   environment (same convention as MCP provider configs); any other value is
   literal; a `${NAME}` that is unset resolves to empty. Without this, an executor
   whose CLI needs `HOME` fails to authenticate.
+- **Where `${VAR}` comes from — a gitignored `<workspace>/.env`:** keel loads a
+  `.env` at the workspace root into its environment before resolving `${VAR}`
+  (in `keel launch`/`mcp`/`gate`). So put secrets like `ANTHROPIC_API_KEY=…` in
+  `<workspace>/.env` (add `.env` to the workspace `.gitignore`), reference them
+  with `${ANTHROPIC_API_KEY}` in `config.env`, and each executor gets only the
+  vars it declares — the `.env` is never handed wholesale to the child. A
+  variable already exported in the shell takes precedence over the file.
 
 ---
 

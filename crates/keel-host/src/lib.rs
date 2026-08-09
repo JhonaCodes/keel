@@ -20,6 +20,7 @@
 
 pub mod broker;
 pub mod config;
+pub mod dotenv;
 pub mod launch;
 pub mod mcp;
 pub mod pty;
