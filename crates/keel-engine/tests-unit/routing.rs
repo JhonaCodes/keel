@@ -114,7 +114,7 @@ fn route_ranks_the_explicit_term_skill_first_and_marks_autoload() {
     }
     let snap = Snapshot::build(vec![], BTreeMap::new(), skills, "t".into()).unwrap();
 
-    let (routed, _agents) = route(&snap, "revisá este PR para coderabbit", 8);
+    let routed = route(&snap, "revisá este PR para coderabbit", 8).skills;
     assert_eq!(
         routed[0].id, "keel_review_pr_coderabbit",
         "explicit term wins"
@@ -146,9 +146,48 @@ fn route_returns_nothing_when_no_capability_matches() {
     skills.insert(s.id.clone(), s);
     let snap = Snapshot::build(vec![], BTreeMap::new(), skills, "t".into()).unwrap();
 
-    let (routed, agents) = route(&snap, "explain how ownership works in rust", 8);
-    assert!(
-        routed.is_empty() && agents.is_empty(),
-        "no match → empty, no noise"
+    let r = route(&snap, "explain how ownership works in rust", 8);
+    assert!(r.is_empty(), "no match → empty, no noise");
+}
+
+#[test]
+fn route_surfaces_governed_components_like_blueprints() {
+    // D-016: not only skills/agents — a blueprint (or knowledge/workflow) is
+    // surfaced at the right moment too.
+    use crate::snapshot::CompiledComponent;
+    let mut components = BTreeMap::new();
+    components.insert(
+        "blueprint:flutter_code_rules".to_string(),
+        CompiledComponent {
+            kind: "blueprint".into(),
+            id: "flutter_code_rules".into(),
+            version: "0.1.0".into(),
+            description: Some("Flutter coding rules: widget classes, Result pattern".into()),
+            match_: CompiledMatch {
+                terms: vec!["flutter".into()],
+                derived: derive_terms(&["flutter_code_rules", "Flutter coding rules"]),
+                context: vec![],
+                autoload: false,
+            },
+            content: None,
+            inline: None,
+            requirements: vec![],
+            capabilities: vec![],
+            config: None,
+        },
     );
+    let snap = Snapshot::build_with_components(
+        vec![],
+        BTreeMap::new(),
+        BTreeMap::new(),
+        BTreeMap::new(),
+        components,
+        "t".into(),
+    )
+    .unwrap();
+
+    let r = route(&snap, "estoy escribiendo un widget en flutter", 8);
+    assert_eq!(r.components.len(), 1, "the flutter blueprint is surfaced");
+    assert_eq!(r.components[0].id, "blueprint:flutter_code_rules");
+    assert!(r.components[0].trigger.contains("flutter"));
 }

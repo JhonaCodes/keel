@@ -523,6 +523,17 @@ pub struct CompiledComponent {
     pub kind: String,
     pub id: String,
     pub version: String,
+    /// One-line description for the exposed catalog (D-014).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Resolved routing signal (D-014/D-016): authored `match` + derived terms,
+    /// so a blueprint/knowledge/workflow can be surfaced at the right moment.
+    #[serde(
+        default,
+        rename = "match",
+        skip_serializing_if = "CompiledMatch::is_empty"
+    )]
+    pub match_: CompiledMatch,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

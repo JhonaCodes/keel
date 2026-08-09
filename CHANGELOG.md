@@ -5,6 +5,31 @@ whole project history (that lives in `git log`). Versions here track
 `Cargo.toml`'s workspace `version`, which is independent of the "spec
 version" used by `docs/RACC_reference_architecture_v0_9_1.md`.
 
+## 0.16.0
+
+- **Opportune context delivery — deliver the right resource at the right moment
+  (D-016)**: keel no longer delivers context only on the prompt or a block. It now
+  hands the model the relevant governed resources AT EACH MOMENT — "you're about
+  to touch this, keel has these" — via the hook `additionalContext` channel,
+  never blocking and never overriding the client's permission flow:
+  - `keel gate` delivers on `file.edited` / `command.requested` / `tool.requested`
+    (PreToolUse), on the prompt (UserPromptSubmit, unchanged), and at
+    `SessionStart` — one shared assembler (`build_delivery_context`) + one emitter
+    (`emit_delivery`) tagged per channel; a trivial moment surfaces nothing.
+  - **Catch-all matcher**: the generated Claude Code `settings.json` now matches
+    every tool (`""`), so keel SEES each tool the model is about to use. Bash /
+    Edit / Write / WebFetch map to their governance events; anything else (a
+    native MCP tool, a read, a search) becomes the new `tool.requested`
+    event — observe-only, never a hard block by itself. `SessionStart` is wired.
+  - **Routing over all component kinds (D-016 extends D-014)**: `match` /
+    `CompiledMatch` and `routing::route` now cover governed components
+    (blueprints, knowledge, workflows…), not just skills and agents — so a
+    blueprint is surfaced at the right moment too. `route` returns a
+    `RouteResult { skills, agents, components }`.
+  - Reuses the existing `deliver_skills` thrift (don't re-send what's loaded);
+    an `autoload` skill still gets its content injected. Backward compatible.
+    Recompile + relock after upgrading.
+
 ## 0.15.0
 
 - **`Package` composition layer — technology bundles (D-015, invariant 3)**:

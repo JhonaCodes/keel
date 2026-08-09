@@ -301,6 +301,12 @@ pub fn compile_layered(
                         .version
                         .clone()
                         .unwrap_or_else(|| "unversioned".to_string()),
+                    description: component.spec.description.clone(),
+                    match_: compile_match(
+                        component.spec.match_.as_ref(),
+                        &component.metadata.id,
+                        component.spec.description.as_deref(),
+                    ),
                     content: component.spec.content.clone(),
                     inline: component.spec.inline.clone(),
                     requirements,

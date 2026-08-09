@@ -156,6 +156,8 @@ noequals
                 kind: "ModelExecutor".into(),
                 id: "agent-cli".into(),
                 version: "0".into(),
+                description: None,
+                match_: Default::default(),
                 content: None,
                 inline: None,
                 requirements: vec![],

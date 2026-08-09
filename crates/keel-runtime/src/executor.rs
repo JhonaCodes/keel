@@ -347,6 +347,8 @@ mod executor_env_tests {
                 kind: "ModelExecutor".into(),
                 id: "x".into(),
                 version: "0".into(),
+                description: None,
+                match_: Default::default(),
                 content: None,
                 inline: None,
                 requirements: vec![],

@@ -242,7 +242,18 @@ machine authoring for a Keel workspace must follow it.
 Scoring (for intuition): structured context (3) > explicit term (2) > derived
 term (1); ties break by specificity (more declared conditions win). An agent
 declares the same `match` block; agents are exposed as suggestions, never
-auto-invoked.
+auto-invoked. **Governed components** (Blueprint, Knowledge, Workflow…) take the
+same `description` + `match`, so a blueprint is surfaced at the right moment too.
+
+**Opportune delivery (D-016).** keel surfaces the relevant resources not only on
+the prompt but at each MOMENT — a file edit, a command, any tool, session start —
+via the hook's `additionalContext`, without blocking. Two levers author it:
+- `match` (above) drives WHAT is relevant to a moment (routed by the file
+  content / command / prompt text).
+- a rule with `enforcement.always.load.skills` on an event delivers a skill
+  deterministically at that moment ("cognitive activation"): e.g. a rule
+  `on:[file.edited]` scoped to `**/*.dart` that always loads `keel_code_rules`
+  puts the Flutter rules in context every time the model edits Dart.
 
 ---
 

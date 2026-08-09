@@ -282,6 +282,87 @@ spec:
     );
 }
 
+/// Opportune delivery (D-016): editing a Dart file is a MOMENT — keel surfaces
+/// the relevant governed skill as `additionalContext` on the PreToolUse edit,
+/// WITHOUT blocking (exit 0, no permissionDecision). "You're about to touch a
+/// widget → keel has these."
+#[test]
+fn a_file_edit_surfaces_the_relevant_skill_without_blocking() {
+    let ws = Workspace::new();
+    let root = ws.path().to_str().unwrap().to_string();
+    assert!(ws.run(&["init", &root, "--json"]).status.success());
+
+    let skills = ws.path().join("global/skills");
+    fs::create_dir_all(&skills).unwrap();
+    fs::write(
+        skills.join("keel_flutter_widgets_keel.md"),
+        "Use widget CLASSES, never widget-returning functions.",
+    )
+    .unwrap();
+    fs::write(
+        skills.join("keel_flutter_widgets.yaml"),
+        r#"apiVersion: keel/v1alpha1
+kind: Skill
+metadata: { id: keel_flutter_widgets, version: 0.1.0 }
+spec:
+  description: Flutter widget class rules
+  match: { terms: [widget] }
+  compact: global/skills/keel_flutter_widgets_keel.md
+"#,
+    )
+    .unwrap();
+    assert!(ws.run(&["compile", "--workspace", &root]).status.success());
+
+    // A PreToolUse Edit of a .dart file whose content mentions a widget.
+    let payload = r#"{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Edit","tool_input":{"file_path":"lib/home.dart","new_string":"class Home extends StatelessWidget { Widget build(c) => Container(); }"}}"#;
+    let out = ws.run_stdin(
+        &[
+            "gate",
+            "--client",
+            "claude-code",
+            "--workspace",
+            &root,
+            "--session",
+            "s1",
+        ],
+        payload,
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "opportune delivery never blocks the edit"
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("additionalContext") && stdout.contains("keel_flutter_widgets"),
+        "the relevant skill must be surfaced at the edit moment: {stdout}"
+    );
+    assert!(
+        stdout.contains("PreToolUse") && !stdout.contains("permissionDecision"),
+        "delivery uses the PreToolUse channel and never overrides the permission flow: {stdout}"
+    );
+
+    // Editing an unrelated file (no matching term) surfaces nothing — no noise.
+    let plain = r#"{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Edit","tool_input":{"file_path":"README.txt","new_string":"hello there"}}"#;
+    let out2 = ws.run_stdin(
+        &[
+            "gate",
+            "--client",
+            "claude-code",
+            "--workspace",
+            &root,
+            "--session",
+            "s1",
+        ],
+        plain,
+    );
+    assert_eq!(out2.status.code(), Some(0));
+    assert!(
+        !String::from_utf8_lossy(&out2.stdout).contains("additionalContext"),
+        "a trivial edit surfaces nothing"
+    );
+}
+
 #[test]
 fn the_hook_bridge_blocks_an_internal_write_via_pretooluse() {
     let ws = Workspace::new();

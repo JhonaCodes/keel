@@ -45,6 +45,13 @@ pub enum EventKind {
     CommandRequested,
     #[serde(rename = "command.completed")]
     CommandCompleted,
+    /// Bridge-layer extension (NOT one of the 17): the model is ABOUT to call a
+    /// client tool the bridge does not map to a specific governance event (a
+    /// native MCP tool, a read, a search). Carried so keel can SEE every intended
+    /// tool call and DELIVER relevant context at that moment (D-016); it governs
+    /// no action by default (observe), so it is not inner-ring.
+    #[serde(rename = "tool.requested")]
+    ToolRequested,
     #[serde(rename = "dependency.changed")]
     DependencyChanged,
     #[serde(rename = "transition.requested")]

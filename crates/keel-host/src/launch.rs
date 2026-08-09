@@ -288,16 +288,25 @@ fn wire_convergence(
                 );
                 let settings = serde_json::json!({
                     "hooks": {
-                        // WebFetch too: reading a URL is a governed action (a rule
-                        // can force a tool instead of a direct read).
+                        // Catch-all matcher (""): keel SEES every tool the model is
+                        // about to use — Bash/Edit/Write/WebFetch map to their
+                        // governance events; anything else (a native MCP tool, a
+                        // read, a search) becomes `tool.requested` so keel can
+                        // DELIVER relevant context at that moment (D-016). It only
+                        // BLOCKS the specific pre-action events; the rest is
+                        // observe + opportune delivery, never a block.
                         "PreToolUse": [{
-                            "matcher": "Bash|Edit|Write|MultiEdit|WebFetch",
+                            "matcher": "",
                             "hooks": [{ "type": "command", "command": command }]
                         }],
                         // UserPromptSubmit: keel enriches the prompt with the
                         // output of `prompt.submitted` rules (D-013), so the model
                         // receives the task already deserialized.
                         "UserPromptSubmit": [{
+                            "hooks": [{ "type": "command", "command": command }]
+                        }],
+                        // SessionStart: deliver base context/rules up front (D-016).
+                        "SessionStart": [{
                             "hooks": [{ "type": "command", "command": command }]
                         }],
                         "Stop": [{
