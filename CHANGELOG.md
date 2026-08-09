@@ -7,6 +7,15 @@ version" used by `docs/RACC_reference_architecture_v0_9_1.md`.
 
 ## Unreleased
 
+- **Workspace `.env` for secrets**: `keel launch`/`mcp`/`gate` load a gitignored
+  `<workspace>/.env` into keel's environment before resolving `${VAR}`, so
+  secrets (API keys, `HOME`) can live in the workspace instead of the shell
+  profile. `KEY=VALUE` lines (with `#` comments, optional `export `, quoted
+  values); a variable already exported in the shell is never overwritten. The
+  file is loaded into keel's process only — a `CliModelExecutor` still runs
+  `env_clear` + `PATH` + only the vars its `config.env` declares, so the whole
+  secret set is never handed to a child.
+
 - **Evidence auto-capture** (`keel gate`, client-hook bridge): when a Bash
   command that is a known test runner (`cargo test`, `flutter test`, `pytest`,
   `npm test`, …) completes, keel synthesizes a `test.completed` event whose

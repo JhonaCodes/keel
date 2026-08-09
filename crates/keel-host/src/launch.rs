@@ -53,6 +53,11 @@ pub enum ContainmentMode {
 
 pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
     let root = resolve_workspace(opts.workspace.clone())?;
+    // Secrets: a gitignored `<workspace>/.env` is loaded into keel's environment
+    // so `${VAR}` in executor/provider configs resolves from it. The child
+    // inherits this env (pty::run does not env_clear), so the launched client
+    // and its `keel mcp` subprocess see it too. A shell export still wins.
+    crate::dotenv::load_workspace_env(&root);
     let files = WorkspaceFiles::empty(root.clone());
     let snapshot = Snapshot::load(&files.snapshot_path())
         .context("no published snapshot — run `keel compile` first")?;
