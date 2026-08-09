@@ -14,7 +14,10 @@ version" used by `docs/RACC_reference_architecture_v0_9_1.md`.
   values); a variable already exported in the shell is never overwritten. The
   file is loaded into keel's process only — a `CliModelExecutor` still runs
   `env_clear` + `PATH` + only the vars its `config.env` declares, so the whole
-  secret set is never handed to a child.
+  secret set is never handed to a child. Tool scripts inherit keel's
+  environment (no `env_clear` in the tool runner), so they read the same
+  secrets. `keel init` scaffolds a gitignored `.env` template (you fill in the
+  keys by hand) and adds `.env` to the workspace `.gitignore`.
 
 - **Evidence auto-capture** (`keel gate`, client-hook bridge): when a Bash
   command that is a known test runner (`cargo test`, `flutter test`, `pytest`,
