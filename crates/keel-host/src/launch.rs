@@ -564,6 +564,35 @@ export const KeelGate = async () => {{
     )
 }
 
+/// Workspace resolution: `--workspace` > `KEEL_WORKSPACE` > walk-up from cwd >
+/// the operator's registered default (`~/.keel/config.json`, set by `keel
+/// init`/`keel use`). Only then an error — so `keel <cli>` works from anywhere
+/// after an init.
+fn resolve_workspace(explicit: Option<PathBuf>) -> Result<PathBuf> {
+    if let Some(path) = explicit {
+        return Ok(path);
+    }
+    if let Ok(env_ws) = std::env::var("KEEL_WORKSPACE") {
+        return Ok(PathBuf::from(env_ws));
+    }
+    let mut dir = std::env::current_dir()?;
+    loop {
+        if dir.join("workspace.yaml").exists() {
+            return Ok(dir);
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+    if let Some(default) = crate::config::default_workspace() {
+        return Ok(default);
+    }
+    bail!(
+        "no keel workspace found — pass --workspace, set KEEL_WORKSPACE, run inside \
+         a workspace, or register one with `keel init` / `keel use <path>`"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -648,33 +677,4 @@ mod tests {
         let script = std::fs::read_to_string(script).unwrap();
         assert!(script.contains("gate --client codex"));
     }
-}
-
-/// Workspace resolution: `--workspace` > `KEEL_WORKSPACE` > walk-up from cwd >
-/// the operator's registered default (`~/.keel/config.json`, set by `keel
-/// init`/`keel use`). Only then an error — so `keel <cli>` works from anywhere
-/// after an init.
-fn resolve_workspace(explicit: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(path) = explicit {
-        return Ok(path);
-    }
-    if let Ok(env_ws) = std::env::var("KEEL_WORKSPACE") {
-        return Ok(PathBuf::from(env_ws));
-    }
-    let mut dir = std::env::current_dir()?;
-    loop {
-        if dir.join("workspace.yaml").exists() {
-            return Ok(dir);
-        }
-        if !dir.pop() {
-            break;
-        }
-    }
-    if let Some(default) = crate::config::default_workspace() {
-        return Ok(default);
-    }
-    bail!(
-        "no keel workspace found — pass --workspace, set KEEL_WORKSPACE, run inside \
-         a workspace, or register one with `keel init` / `keel use <path>`"
-    )
 }
