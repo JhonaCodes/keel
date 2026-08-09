@@ -31,10 +31,21 @@ pub fn init(root: &Path, json_output: bool) -> Result<ExitCode> {
     RuntimeStore::open(&state_dir(root).join(RUNTIME_DB))?;
 
     // Register it as the operator's default so `keel <cli>` finds it from
-    // anywhere without --workspace. Best-effort: a config write failure must
-    // not fail the init (the workspace is already good).
-    if let Err(e) = keel_host::config::set_default_workspace(root) {
-        eprintln!("[keel] note: could not register default workspace: {e}");
+    // anywhere without --workspace — but ONLY if there is no valid default yet.
+    // A scratch/test `keel init` must never silently steal an established
+    // default (deleting that scratch dir later would then break every session);
+    // switching the default is an explicit act: `keel use <path>`. Best-effort:
+    // a config write failure must not fail the init (the workspace is good).
+    if keel_host::config::default_workspace().is_none() {
+        if let Err(e) = keel_host::config::set_default_workspace(root) {
+            eprintln!("[keel] note: could not register default workspace: {e}");
+        }
+    } else {
+        eprintln!(
+            "[keel] note: a default workspace is already registered; \
+             run `keel use {}` to make this one the default",
+            root.display()
+        );
     }
 
     emit(

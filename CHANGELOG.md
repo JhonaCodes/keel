@@ -5,6 +5,14 @@ whole project history (that lives in `git log`). Versions here track
 `Cargo.toml`'s workspace `version`, which is independent of the "spec
 version" used by `docs/RACC_reference_architecture_v0_9_1.md`.
 
+## 0.12.1
+
+- **`keel init` no longer steals an established default workspace**: init
+  registers the default only when there is no valid one yet; a scratch/test
+  `keel init` on another path leaves the operator's default untouched (deleting
+  that scratch dir would otherwise break every `keel <cli>` with "no workspace
+  found"). Switching the default stays explicit via `keel use <path>`.
+
 ## 0.12.0
 
 - **Workspace `.env` for secrets**: `keel launch`/`mcp`/`gate` load a gitignored
