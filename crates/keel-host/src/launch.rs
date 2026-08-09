@@ -288,8 +288,16 @@ fn wire_convergence(
                 );
                 let settings = serde_json::json!({
                     "hooks": {
+                        // WebFetch too: reading a URL is a governed action (a rule
+                        // can force a tool instead of a direct read).
                         "PreToolUse": [{
-                            "matcher": "Bash|Edit|Write|MultiEdit",
+                            "matcher": "Bash|Edit|Write|MultiEdit|WebFetch",
+                            "hooks": [{ "type": "command", "command": command }]
+                        }],
+                        // UserPromptSubmit: keel enriches the prompt with the
+                        // output of `prompt.submitted` rules (D-013), so the model
+                        // receives the task already deserialized.
+                        "UserPromptSubmit": [{
                             "hooks": [{ "type": "command", "command": command }]
                         }],
                         "Stop": [{

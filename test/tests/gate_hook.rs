@@ -179,6 +179,100 @@ fn a_failing_test_run_captured_by_keel_unblocks_a_write_the_same_session() {
     );
 }
 
+/// Prompt enrichment (D-013): a `prompt.submitted` rule whose tool emits a
+/// finding has that finding DELIVERED to the model as `additionalContext` —
+/// deterministically, by code, on the operator's prompt. The model receives the
+/// task already deserialized; it chose nothing.
+#[test]
+fn a_prompt_submitted_rule_injects_its_tool_output_as_additional_context() {
+    let ws = Workspace::new();
+    let root = ws.path().to_str().unwrap().to_string();
+    assert!(ws.run(&["init", &root, "--json"]).status.success());
+
+    // A tool that, seeing a linear.app URL in the prompt, returns the decomposed
+    // ticket as a finding (here: a fixed marker so the test is hermetic).
+    let tools = ws.path().join("global/tools");
+    fs::create_dir_all(&tools).unwrap();
+    fs::write(
+        tools.join("enrich.py"),
+        r#"import sys, json
+event = json.load(sys.stdin)
+content = (event.get("content") or "")
+if "linear.app" in content:
+    print(json.dumps({"verdict": "valid", "findings": [{"message": "TICKET ABC-123: unify form labels"}]}))
+else:
+    print(json.dumps({"verdict": "valid", "findings": []}))
+"#,
+    )
+    .unwrap();
+    let rules = ws.path().join("global/rules");
+    fs::create_dir_all(&rules).unwrap();
+    fs::write(
+        rules.join("enrich.yaml"),
+        r#"apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: global.enrich-linear, author: test, adrRef: adr:ADR-013, reviewAfter: P6M }
+spec:
+  on: [prompt.submitted]
+  validate: { using: "tool:enrich" }
+  enforcement:
+    valid: { decision: allow }
+"#,
+    )
+    .unwrap();
+    fs::write(
+        ws.path().join("global/tools/enrich.tool.yaml"),
+        "apiVersion: keel/v1alpha1\nkind: Tool\nmetadata: { id: enrich, version: 0.1.0 }\nspec:\n  command: [python3, global/tools/enrich.py]\n  output: verdict-json\n",
+    )
+    .unwrap();
+    assert!(ws.run(&["compile", "--workspace", &root]).status.success());
+
+    let payload = r#"{"hook_event_name":"UserPromptSubmit","session_id":"s1","prompt":"explain https://linear.app/acme/issue/ABC-123/x"}"#;
+    let out = ws.run_stdin(
+        &[
+            "gate",
+            "--client",
+            "claude-code",
+            "--workspace",
+            &root,
+            "--session",
+            "s1",
+        ],
+        payload,
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "enrichment never blocks a prompt"
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("additionalContext") && stdout.contains("TICKET ABC-123"),
+        "the tool output must be delivered to the model as additionalContext: {stdout}"
+    );
+
+    // A prompt WITHOUT a linear URL yields no injected context (no finding).
+    let plain =
+        r#"{"hook_event_name":"UserPromptSubmit","session_id":"s1","prompt":"just say hi"}"#;
+    let out2 = ws.run_stdin(
+        &[
+            "gate",
+            "--client",
+            "claude-code",
+            "--workspace",
+            &root,
+            "--session",
+            "s1",
+        ],
+        plain,
+    );
+    assert_eq!(out2.status.code(), Some(0));
+    assert!(
+        !String::from_utf8_lossy(&out2.stdout).contains("additionalContext"),
+        "nothing to inject → no context output"
+    );
+}
+
 #[test]
 fn the_hook_bridge_blocks_an_internal_write_via_pretooluse() {
     let ws = Workspace::new();

@@ -5,6 +5,23 @@ whole project history (that lives in `git log`). Versions here track
 `Cargo.toml`'s workspace `version`, which is independent of the "spec
 version" used by `docs/RACC_reference_architecture_v0_9_1.md`.
 
+## 0.13.0
+
+- **Prompt enrichment — keel DELIVERS context on the prompt (D-013)**: keel now
+  wires the `UserPromptSubmit` hook and maps the prompt to a `prompt.submitted`
+  event. A rule `on: [prompt.submitted]` runs a tool whose output (`findings`)
+  is delivered to the model as `additionalContext` — so the model RECEIVES the
+  task already deserialized (e.g. a decomposed Linear/GitHub ticket with its id,
+  for the PR to reference) instead of fetching it itself. Deterministic, by
+  code, non-restrictive (never blocks a prompt); generic (any source: a tool per
+  Linear/Jira/GitHub/skill-catalog). This extends doctrine from pull-only
+  (skills via MCP) to also a governed push of context — see DECISIONES.md D-013.
+- **`keel gate` governs `WebFetch`**: the client-hook bridge now maps a
+  `WebFetch` tool call to a preventable `command.requested` event carrying the
+  URL as `command`, so a rule can gate URL reads (e.g. force a governed tool
+  instead of reading a Linear/Jira/GitHub URL directly). Previously the bridge
+  saw only Bash/Edit/Write, so a direct `WebFetch` bypassed all rules.
+
 ## 0.12.1
 
 - **`keel init` no longer steals an established default workspace**: init
