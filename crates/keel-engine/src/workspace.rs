@@ -265,13 +265,10 @@ pub fn load_components(dir: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
 /// weaken a higher one. The `task/session` layer of section 7.2 is runtime-only
 /// (append-only, non-authoritative, section 7.5) and has no directory.
 ///
-/// `Package` (invariant 3: reusable components live in packages) is a technology
-/// bundle — `packages/flutter/`, `packages/rust/` — composed BELOW the base
-/// layers and ABOVE the specific project, so a project can tighten a package's
-/// rules but not weaken a `locked` one. It composes always; per-component
-/// `scope`/`match` (languages, D-014) decide where its rules and skills apply,
-/// so no per-project dependency selector is needed yet (versioning/pinning of
-/// section 8.5 stays deferred).
+/// `Platform` is a selected technology bundle — `platforms/flutter/`,
+/// `platforms/rust/`, `platforms/react-native/` — composed below organization
+/// and above package/project layers. `Package` remains a reusable bundle that
+/// composes always; use component `scope`/`match` to keep it precise.
 ///
 /// Do NOT reorder these variants: the ordering is load-bearing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

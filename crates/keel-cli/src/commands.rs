@@ -172,6 +172,7 @@ pub fn init(path: &Path) -> Result<ExitCode> {
     ProjectBinding {
         project: "project:local/app".to_string(),
         workspace: "org:local".to_string(),
+        platforms: Vec::new(),
     }
     .write(path)?;
 
@@ -600,9 +601,44 @@ fn review_window_expired(first_ts: &str, review_after: &str, now: jiff::Timestam
 // ─────────────────────────── test ───────────────────────────
 
 pub fn test(root: &Path) -> Result<ExitCode> {
-    let files = workspace::load(root)?;
-    let outcome = compiler::compile(&files, now_ts())?;
-    let reports = testkit::run_tests(&outcome.snapshot, &files.tests, &files.root);
+    use keel_engine::lock::ProjectBinding;
+    use keel_engine::workspace::{Layer, load_layered};
+
+    let layered = load_layered(root)?;
+    let binding = ProjectBinding::load(root).ok();
+    let selected: Vec<&Layer> = match &binding {
+        Some(b) => {
+            let chain = keel_engine::resolution::resolve(&layered, b, None)?;
+            chain
+                .layer_indices
+                .iter()
+                .map(|&i| &layered.layers[i])
+                .collect()
+        }
+        None => {
+            if layered.layers.len() == 1 {
+                layered.layers.iter().collect()
+            } else {
+                bail!(
+                    "layered workspace has {} layers but no binding — run `keel bind` to select the project chain",
+                    layered.layers.len()
+                );
+            }
+        }
+    };
+    let chain: Vec<compiler::CompileLayer> = selected
+        .iter()
+        .map(|l| compiler::CompileLayer {
+            label: layer_label(l),
+            files: &l.files,
+        })
+        .collect();
+    let outcome = compiler::compile_layered(&chain, now_ts())?;
+    let tests: Vec<_> = selected
+        .iter()
+        .flat_map(|l| l.files.tests.iter().cloned())
+        .collect();
+    let reports = testkit::run_tests(&outcome.snapshot, &tests, root);
 
     if reports.is_empty() {
         println!(
@@ -794,6 +830,7 @@ pub(crate) fn bind(root: &Path, project: Option<String>, org: Option<String>) ->
     let binding = ProjectBinding {
         project: project.clone(),
         workspace: workspace.clone(),
+        platforms: Vec::new(),
     };
     binding.write(root)?;
     println!("bound {project} → {workspace}");

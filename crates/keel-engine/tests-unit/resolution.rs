@@ -56,6 +56,15 @@ fn binding(project: &str, workspace: &str) -> ProjectBinding {
     ProjectBinding {
         project: project.to_string(),
         workspace: workspace.to_string(),
+        platforms: Vec::new(),
+    }
+}
+
+fn binding_with_platforms(project: &str, workspace: &str, platforms: &[&str]) -> ProjectBinding {
+    ProjectBinding {
+        project: project.to_string(),
+        workspace: workspace.to_string(),
+        platforms: platforms.iter().map(|p| p.to_string()).collect(),
     }
 }
 
@@ -187,6 +196,41 @@ fn platform_team_profile_are_not_silently_included() {
     // Only global (no matching org/project instance exists); the undocumented
     // selectors are deferred, so nothing from platform/team/profile leaks in.
     assert_eq!(ids, vec![LayerId::Global]);
+}
+
+#[test]
+fn declared_platform_is_included_in_composition_order() {
+    let ws = tmp_ws();
+    write_rule(&ws.0.join("global"), "g.rule");
+    write_rule(&ws.0.join("organizations").join("local"), "org.rule");
+    write_rule(&ws.0.join("platforms").join("flutter"), "flutter.rule");
+    write_rule(&ws.0.join("platforms").join("rust"), "rust.rule");
+    write_rule(&ws.0.join("packages").join("common"), "pkg.rule");
+    write_rule(&ws.0.join("projects").join("app"), "app.rule");
+
+    let layered = load_layered(&ws.0).unwrap();
+    let chain = resolve(
+        &layered,
+        &binding_with_platforms("project:local/app", "org:local", &["flutter"]),
+        None,
+    )
+    .unwrap();
+
+    let picked: Vec<(LayerId, Option<String>)> = chain
+        .layers(&layered)
+        .map(|l| (l.id, l.name.clone()))
+        .collect();
+    assert_eq!(
+        picked,
+        vec![
+            (LayerId::Global, None),
+            (LayerId::Organization, Some("local".to_string())),
+            (LayerId::Platform, Some("flutter".to_string())),
+            (LayerId::Package, Some("common".to_string())),
+            (LayerId::Project, Some("app".to_string())),
+        ],
+        "declared platforms compose between organization and package"
+    );
 }
 
 #[test]

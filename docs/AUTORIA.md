@@ -413,28 +413,38 @@ spec:
 
 ---
 
-## Where technology content goes — the `packages/` layer (D-015)
+## Where technology content goes — the `platforms/` layer
 
-Reusable content for ONE technology lives in a package (invariant 3: reusable
-components live in packages, not copied per project — invariant 2):
+Reusable content for ONE technology lives in a selected platform layer
+(invariant 3: reusable components are not copied per project — invariant 2):
 
 ```text
-packages/
+platforms/
 ├── flutter/            # namespaced by technology
 │   ├── rules/          # e.g. widget-classes, no-DI-in-VMs (scope: languages:[dart])
 │   ├── skills/         # e.g. keel_flutter_adaptive_ui  (match: terms:[flutter,adaptive])
+│   ├── blueprints/
 │   ├── knowledge/
 │   └── tools/
 └── rust/
+    ├── blueprints/
     ├── rules/          # scope: languages:[rust]
     └── skills/
 ```
 
-- A `packages/<tech>/` bundle COMPOSES for every project (between the base
-  layers and the project). What keeps a Flutter package off a Rust repo is each
-  component's own declaration: a rule scopes to `languages: [dart]`, a skill
-  declares `match`. So author those — an unscoped rule in a package would fire
-  everywhere.
+- A `platforms/<tech>/` bundle composes only when the repository binding lists
+  it in `.keel/project.yaml`:
+
+  ```yaml
+  project: project:local/app
+  workspace: org:local
+  platforms: [flutter, rust]
+  ```
+
+- What keeps individual components precise is still each component's own
+  declaration: a rule scopes to `languages: [dart]`, a skill/blueprint declares
+  `match`. So author those — an unscoped rule in a selected platform can still
+  fire broadly inside that platform.
 - Same `rules/ skills/ agents/ knowledge/ tools/` convention as any layer.
 - Versioned per component via `metadata.version`; cross-workspace pinning is not
   implemented yet.
