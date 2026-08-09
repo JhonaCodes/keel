@@ -5,6 +5,14 @@ whole project history (that lives in `git log`). Versions here track
 `Cargo.toml`'s workspace `version`, which is independent of the "spec
 version" used by `docs/RACC_reference_architecture_v0_9_1.md`.
 
+## 0.14.1
+
+- **Visible enrichment banner**: when keel delivers context on a prompt (D-013),
+  it now surfaces a concise line to the operator — `keel ✦ contexto entregado al
+  modelo: <rules>` — via the client `systemMessage` and stderr, so it is clear
+  on screen that keel injected context (and which rules produced it), not just
+  in the model's hidden context.
+
 ## 0.14.0
 
 - **`Skill.description`**: an optional one-line description on a `Skill` that

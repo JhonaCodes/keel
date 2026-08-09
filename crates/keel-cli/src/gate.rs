@@ -140,19 +140,34 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
 /// report line. Nothing to inject → no output. Never blocks the prompt.
 fn emit_prompt_enrichment(evals: &[keel_engine::runtime::Evaluation]) -> ExitCode {
     let mut blocks: Vec<String> = Vec::new();
+    let mut sources: Vec<&str> = Vec::new();
     for eval in evals {
+        let before = blocks.len();
         for finding in &eval.findings {
             if !finding.message.trim().is_empty() {
                 blocks.push(finding.message.clone());
             }
+        }
+        if blocks.len() > before {
+            sources.push(&eval.rule_id);
         }
     }
     if blocks.is_empty() {
         return ExitCode::SUCCESS;
     }
     let context = blocks.join("\n\n");
-    // Claude Code UserPromptSubmit contract: stdout JSON injects context.
+    // Visible, elegant confirmation to the OPERATOR of what keel delivered to
+    // the model (which rules contributed context). `systemMessage` shows in the
+    // client transcript; stderr is the fallback channel.
+    let banner = format!(
+        "keel ✦ contexto entregado al modelo: {}",
+        sources.join(", ")
+    );
+    eprintln!("[{banner}]");
+    // Claude Code UserPromptSubmit contract: `additionalContext` reaches the
+    // model; `systemMessage` reaches the operator's screen.
     let out = serde_json::json!({
+        "systemMessage": banner,
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
             "additionalContext": context,
