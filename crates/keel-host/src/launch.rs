@@ -21,7 +21,7 @@ use std::process::ExitCode;
 const RUNTIME_DB: &str = "runtime.sqlite";
 
 pub struct LaunchOptions {
-    /// Launch adapter id (`claude`, `codex`, `generic`).
+    /// Launch adapter id (`claude`, `codex`, `opencode`, `generic`).
     pub client: String,
     /// Explicit workspace; otherwise `KEEL_WORKSPACE`, then walk-up from cwd.
     pub workspace: Option<PathBuf>,

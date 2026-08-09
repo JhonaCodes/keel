@@ -187,7 +187,7 @@ pub fn init(path: &Path) -> Result<ExitCode> {
         "verify: keel doctor --workspace {} --governed",
         path.display()
     );
-    println!("launch: keel claude   (or: keel launch --client generic -- <cmd>)");
+    println!("launch: keel claude   (or: keel codex / keel opencode)");
     Ok(ExitCode::SUCCESS)
 }
 

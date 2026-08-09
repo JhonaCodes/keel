@@ -309,7 +309,7 @@ kind: ModelExecutor
 metadata: { id: auditor-cli, version: 1.0.0 }
 spec:
   config:
-    command: [codex, exec, --json]   # or [claude, -p], or your own script
+    command: [codex, exec, -]        # or [opencode, run], [claude, -p], or your own script
     env:                              # optional: extra env for the child
       HOME: "${HOME}"                 # ${VAR} inherits from keel's environment
 ```

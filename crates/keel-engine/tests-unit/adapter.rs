@@ -93,8 +93,23 @@ fn unknown_client_has_no_manifest_and_generic_has_no_base_command() {
 }
 
 #[test]
+fn opencode_is_a_known_governed_launch_client_without_false_mcp_claims() {
+    let opencode = AdapterManifest::for_client("opencode").unwrap();
+    assert_eq!(opencode.command, vec!["opencode"]);
+    assert!(opencode.shim_commands.iter().any(|c| c == "git"));
+    assert!(opencode.mcp.is_none());
+    assert!(opencode.hook.is_none());
+}
+
+#[test]
 fn known_clients_declare_how_to_inject_the_keel_mcp_endpoint() {
     // Convergence wiring is DATA per client, not code.
     assert!(AdapterManifest::for_client("claude").unwrap().mcp.is_some());
     assert!(AdapterManifest::for_client("codex").unwrap().mcp.is_some());
+    assert!(
+        AdapterManifest::for_client("opencode")
+            .unwrap()
+            .mcp
+            .is_none()
+    );
 }

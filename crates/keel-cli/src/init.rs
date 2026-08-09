@@ -64,7 +64,7 @@ bounded, audited way to relax a `locked` rule is an `Exception` (see
 
 ```
 keel doctor --workspace . --governed
-keel claude              # run a governed client CLI (or: keel launch --client generic -- <cmd>)
+keel claude              # run a governed client CLI (also: keel codex / keel opencode)
 ```
 
 The LLM (or you) authors the actual content — each folder's README + template is
@@ -394,7 +394,7 @@ spec:
   # A governed executor is a LOCAL CLI (D-012): keel runs `command`, writes the
   # prompt to its stdin and treats stdout as the response. Keel never speaks a
   # provider API. `cat` is a deterministic echo executor for wiring/tests;
-  # replace with e.g. `[codex, exec, --json]` or `[claude, -p]`.
+  # replace with e.g. `[codex, exec, -]`, `[opencode, run]`, or `[claude, -p]`.
   config:
     command: [cat]
 "#;

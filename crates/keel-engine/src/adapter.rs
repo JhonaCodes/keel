@@ -166,6 +166,15 @@ impl AdapterManifest {
                 // for now.
                 None,
             )),
+            "opencode" => Some(Self::containment(
+                "opencode",
+                vec!["opencode".into()],
+                // OpenCode is governed by keel's parent runtime today. Do not
+                // claim per-session MCP injection until the CLI exposes a stable
+                // argv-scoped config override like Codex or Claude.
+                None,
+                None,
+            )),
             // generic: no assumptions about the CLI's flags — convergence is
             // opt-in (the operator wires MCP), the hard rings still apply.
             "generic" => Some(Self::containment("generic", vec![], None, None)),

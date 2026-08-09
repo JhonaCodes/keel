@@ -67,11 +67,11 @@ enum Command {
     },
     /// Launches a client CLI as a governed CHILD of keel (parent runtime,
     /// spec section 5.3): PTY passthrough + command interposition — a blocked
-    /// command never exists as a process. `keel claude`/`keel codex` are
-    /// shorthands for known clients.
+    /// command never exists as a process. `keel claude`/`keel codex`/
+    /// `keel opencode` are shorthands for known clients.
     Launch {
-        /// Launch adapter: `claude`, `codex`, or `generic` (explicit command
-        /// after `--`).
+        /// Launch adapter: `claude`, `codex`, `opencode`, or `generic`
+        /// (explicit command after `--`).
         #[arg(long)]
         client: String,
         #[arg(long)]
@@ -127,8 +127,9 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// `keel claude [args...]` / `keel codex [args...]` — shorthand for
-    /// `keel launch --client <name> -- [args...]`.
+    /// `keel claude [args...]` / `keel codex [args...]` /
+    /// `keel opencode [args...]` — shorthand for `keel launch --client <name>
+    /// -- [args...]`.
     #[command(external_subcommand)]
     Client(Vec<String>),
     /// Evaluates events (JSONL via stdin or --events) in PASSIVE MODE and

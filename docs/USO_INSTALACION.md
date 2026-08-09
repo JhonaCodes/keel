@@ -30,8 +30,9 @@ keel doctor --workspace ~/keel-workspace --governed
 
 `init` scaffolds the composition layers (`global/`, `projects/<name>/`, ...),
 compiles the snapshot, fixes the lock, opens the store, and **registers the
-workspace as your default** (`~/.keel/config.json`), so `keel claude` works from
-anywhere without `--workspace`. `doctor --governed` verifies that the snapshot
+workspace as your default** (`~/.keel/config.json`), so `keel claude`, `keel
+codex`, and `keel opencode` work from anywhere without `--workspace`. `doctor
+--governed` verifies that the snapshot
 loads, the lock matches the published snapshot, and the store opens.
 
 **`--json` is not uniform across commands (verify before scripting against
@@ -47,7 +48,7 @@ to `workspace.yaml` > **the registered default** > error.
 ## Run a Governed CLI
 
 ```bash
-keel claude                 # or: keel codex
+keel claude                 # or: keel codex / keel opencode
 keel launch --client generic -- /bin/sh -c "<command>"   # any CLI
 ```
 
@@ -113,7 +114,7 @@ kind: ModelExecutor
 metadata: { id: auditor-cli, version: 1.0.0 }
 spec:
   config:
-    command: [codex, exec, --json]   # Keel runs this; prompt via stdin, stdout = response
+    command: [codex, exec, -]        # Keel runs this; prompt via stdin, stdout = response
 ```
 
 If the child ignores or deletes the MCP config, nothing breaks: convergence is
