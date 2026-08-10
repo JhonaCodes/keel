@@ -73,6 +73,12 @@ Resumen — el detalle completo vive en `STATUS.md`, no se duplica acá:
   en las 3 formas de cliente (Claude/Codex/OpenCode) — integrar un MCP de
   terceros (Linear, GitHub) ya no requiere instalación manual por cliente.
   Ver H-011 en "Cerrado/superado".
+- **Captura opcional de payload crudo del hook** (0.18.0+,
+  `crates/keel-cli/src/gate.rs`) — `KEEL_GATE_DEBUG_RAW=<path>` (off por
+  defecto) vuelca cada payload de hook recibido, verbatim, a JSONL antes de
+  parsearlo — mitigación del riesgo admitido tras H-009 (la forma real del
+  `tool_response` de un `Task` nunca se verificó contra una sesión viva; no
+  existía forma de capturarla). Ver H-021 en "Cerrado/superado".
 
 ## 3. Roadmap activo
 
@@ -220,6 +226,39 @@ Abierto, no perdido, no activo ahora mismo:
   una sesión `keel opencode` real, ese es el primer lugar a revisar.
   `cargo test --workspace --locked` (248 tests), `clippy -D warnings`,
   `fmt --check` verdes.
+- **H-021** (sin forma de verificar contra una sesión viva la forma real de
+  un payload de hook) → RESUELTO (2026-08-10). Contexto: H-009 sintetiza
+  `task.completed` a partir de `tool_response` de un `Task`, pero probando
+  3 formas plausibles (`string` / `{result|output|text}` /
+  `{content:[{text}]}`) autoconstruidas — nunca contra un payload real de una
+  sesión `keel claude` en vivo. Investigado antes de proponer nada: confirmé
+  por grep exhaustivo que `gate()` (`crates/keel-cli/src/gate.rs:50-53`) lee
+  `stdin` y lo pasa directo a `parse()` sin loguearlo en ningún lado; no hay
+  flag `--debug`, no hay `KEEL_DEBUG`; `keel observe` es un camino distinto
+  (consume `Event` JSONL ya normalizado, no el payload crudo del cliente).
+  Cero mecanismo de captura existía. Fix: `KEEL_GATE_DEBUG_RAW=<path>`
+  (variable de entorno, no flag CLI — el argv de `keel gate` lo genera
+  `wire_convergence` al lanzar la sesión; una env var se prende/apaga sin
+  re-cablear nada) — cuando está seteada, `gate()` appendea una línea JSONL
+  (`{ts, client, raw}`) con el payload crudo ANTES de parsear, best-effort
+  (un fallo de escritura nunca rompe al cliente, mismo criterio que la
+  escritura del ledger). Off por defecto: cero costo (un `std::env::var`
+  chequeado), nunca se escribe nada a disco sin pedirlo explícitamente (un
+  payload de hook puede llevar contenido sensible de prompt/tool). La lógica
+  de captura se extrajo a una función pura `capture_raw_for_debug(path:
+  Option<&str>, client, raw)` — NO lee `std::env::var` internamente — para
+  que sea testeable sin depender de estado global de entorno (evita el
+  problema clásico de tests en paralelo mutando la misma variable). 2 tests
+  nuevos en `gate.rs` (RED confirmado antes — la función no existía, error
+  de compilación — GREEN después): sin path no toca disco; con path,
+  appendea JSONL (no sobreescribe) con `raw`/`client` preservados verbatim.
+  Verificado además contra el binario real instalado: sin la variable, cero
+  archivo creado; con la variable, el archivo captura el payload exacto
+  recibido por stdin. `cargo test --workspace --locked` (223 tests),
+  `clippy -D warnings`, `fmt --check` verdes. Pendiente: el usuario todavía
+  no capturó un `PostToolUse Task` real con esta herramienta para confirmar
+  o corregir las 3 formas asumidas en `task_result_text` (H-009) — este fix
+  solo habilita esa verificación, no la reemplaza.
 - **H-010** (capa de fases TDD/SDD) → RECLASIFICADO, no es un ítem de motor
   (2026-08-10). Al redactar este documento se planteó como un `Phase` enum
   NUEVO a autorar en el motor (`crates/keel-engine`), derivado de eventos del
