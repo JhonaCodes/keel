@@ -67,6 +67,36 @@ spec:
     .unwrap();
 }
 
+/// Same as `author_skill` but with a real `full` variant, for the on-demand
+/// full-delivery test.
+fn author_skill_with_full(root: &Path) {
+    let skills = root.join("global/skills");
+    fs::create_dir_all(&skills).unwrap();
+    fs::write(
+        skills.join("access_keel.md"),
+        "USE the query builder, not raw SQL.",
+    )
+    .unwrap();
+    fs::write(
+        skills.join("access_full_keel.md"),
+        "FULL: every query-builder method, with examples and edge cases.",
+    )
+    .unwrap();
+    fs::write(
+        skills.join("access-patterns.yaml"),
+        r#"apiVersion: keel/v1alpha1
+kind: Skill
+metadata:
+  id: access-patterns
+  version: 0.1.0
+spec:
+  compact: skills/access_keel.md
+  full: skills/access_full_keel.md
+"#,
+    )
+    .unwrap();
+}
+
 #[test]
 fn a_toy_client_lists_and_loads_a_governed_skill_over_stdio() {
     let ws = Workspace::new();
@@ -131,6 +161,82 @@ fn a_toy_client_lists_and_loads_a_governed_skill_over_stdio() {
     );
 
     drop(stdin); // EOF → the server loop ends.
+    let _ = child.wait();
+}
+
+/// H-009's known gap, mitigated: before this, `full` was reachable only via
+/// P3 oscillation escalation — never wired to a live call site in
+/// production, so a skill's `full` content (e.g. keel_reactive_notifier's
+/// 27k-line reference) was effectively unreachable. `keel.skills.load` now
+/// accepts an explicit `full: true` and serves it directly, without needing
+/// to fake three oscillating findings first.
+#[test]
+fn keel_skills_load_serves_full_content_on_explicit_request() {
+    let ws = Workspace::new();
+    let root = ws.path().to_str().unwrap().to_string();
+
+    assert!(ws.run(&["init", &root, "--json"]).status.success());
+    author_skill_with_full(ws.path());
+    let compile = ws.run(&["compile", "--workspace", &root]);
+    assert!(
+        compile.status.success(),
+        "compile: {}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+
+    let mut child = Command::new(keel_bin())
+        .args(["mcp", "--workspace", &root, "--session", "session-full"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn keel mcp");
+
+    let mut stdin = child.stdin.take().unwrap();
+    let mut reader = BufReader::new(child.stdout.take().unwrap());
+
+    let rpc = |stdin: &mut dyn Write, reader: &mut dyn BufRead, req: Value| -> Value {
+        serde_json::to_writer(&mut *stdin, &req).unwrap();
+        stdin.write_all(b"\n").unwrap();
+        stdin.flush().unwrap();
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        serde_json::from_str(&line).unwrap()
+    };
+
+    let _init = rpc(
+        &mut stdin,
+        &mut reader,
+        json!({"jsonrpc":"2.0","id":0,"method":"initialize"}),
+    );
+
+    // Default (full omitted) → compact, unchanged behavior — regression.
+    let compact = rpc(
+        &mut stdin,
+        &mut reader,
+        json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+               "params":{"name":"keel.skills.load","arguments":{"id":"access-patterns"}}}),
+    );
+    let compact_text = compact["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        compact_text.contains("(compact)") && compact_text.contains("USE the query builder"),
+        "default request must still serve compact: {compact_text}"
+    );
+
+    // Explicit full=true → the full variant, not compact.
+    let full = rpc(
+        &mut stdin,
+        &mut reader,
+        json!({"jsonrpc":"2.0","id":2,"method":"tools/call",
+               "params":{"name":"keel.skills.load","arguments":{"id":"access-patterns","full":true}}}),
+    );
+    let full_text = full["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        full_text.contains("(full)") && full_text.contains("FULL: every query-builder method"),
+        "explicit full:true must serve the full variant, not compact: {full_text}"
+    );
+
+    drop(stdin);
     let _ = child.wait();
 }
 
