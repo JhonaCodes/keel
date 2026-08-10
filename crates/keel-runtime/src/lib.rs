@@ -8,6 +8,7 @@ mod broker;
 mod capability;
 mod executor;
 mod knowledge_chain;
+mod mcp_provider;
 mod phase;
 mod registry;
 mod scheduler;
@@ -20,6 +21,7 @@ pub use executor::{
 pub use knowledge_chain::{
     BrokenLink, ChainVerification, KnowledgeChain, KnowledgeChainError, KnowledgeEntry,
 };
+pub use mcp_provider::{McpProviderError, McpServerSpec, compiled_mcp_providers};
 pub use phase::{ArtifactKind, ArtifactReceipt, Phase, PhaseError, PhaseTransitionReceipt};
 pub use registry::{ComponentDescriptor, ComponentRegistry};
 pub use scheduler::{AgentScheduler, AgentTask, QueueState, SchedulerError};

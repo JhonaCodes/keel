@@ -301,13 +301,32 @@ pub fn executor_command(
     Ok(argv)
 }
 
+/// Resolves a `config.env` map into concrete name/value pairs for a child
+/// process. A value of the exact form `${NAME}` inherits `NAME` from keel's
+/// own environment — so `env: { HOME: "${HOME}" }` passes the operator's HOME
+/// through without inheriting the whole environment. Any other value is
+/// literal. A missing `${NAME}` resolves to empty (declared-but-unset is not
+/// an error). Shared by `executor_env` (`kind: ModelExecutor`) and
+/// `compiled_mcp_providers` (`kind: MCPProvider`, H-011) — the same `${VAR}`
+/// convention, one resolver.
+pub(crate) fn resolve_env_map(
+    map: &serde_json::Map<String, serde_json::Value>,
+) -> Vec<(String, String)> {
+    map.iter()
+        .filter_map(|(name, value)| {
+            let raw = value.as_str()?;
+            let resolved = match raw.strip_prefix("${").and_then(|r| r.strip_suffix('}')) {
+                Some(var) => std::env::var(var).unwrap_or_default(),
+                None => raw.to_string(),
+            };
+            Some((name.clone(), resolved))
+        })
+        .collect()
+}
+
 /// Resolves a `model-executor` component's `config.env` map into concrete
-/// name/value pairs for the child. A value of the exact form `${NAME}` inherits
-/// `NAME` from keel's own environment (the same `${VAR}` convention used by MCP
-/// provider configs) — so `env: { HOME: "${HOME}" }` passes the operator's HOME
-/// through without inheriting the whole environment. Any other value is literal.
-/// A missing `${NAME}` resolves to empty (declared-but-unset is not an error).
-/// Absent `config.env` yields an empty vec (the pre-existing PATH-only behavior).
+/// name/value pairs for the child (see `resolve_env_map`). Absent
+/// `config.env` yields an empty vec (the pre-existing PATH-only behavior).
 pub fn executor_env(
     components: &std::collections::BTreeMap<String, keel_engine::snapshot::CompiledComponent>,
     executor_id: &str,
@@ -321,16 +340,7 @@ pub fn executor_env(
     else {
         return Vec::new();
     };
-    map.iter()
-        .filter_map(|(name, value)| {
-            let raw = value.as_str()?;
-            let resolved = match raw.strip_prefix("${").and_then(|r| r.strip_suffix('}')) {
-                Some(var) => std::env::var(var).unwrap_or_default(),
-                None => raw.to_string(),
-            };
-            Some((name.clone(), resolved))
-        })
-        .collect()
+    resolve_env_map(map)
 }
 
 #[cfg(test)]

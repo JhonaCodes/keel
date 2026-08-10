@@ -66,31 +66,17 @@ Resumen — el detalle completo vive en `STATUS.md`, no se duplica acá:
   durable `task.completed`, consumible por `evidence.recorded` — habilita el
   patrón verify-before-close (gate de `Stop` que exige auditoría GO). Ver
   H-009 en "Cerrado/superado".
+- **`MCPProvider` real + `wire_convergence` multi-servidor** (0.18.0+,
+  `crates/keel-runtime/src/mcp_provider.rs` + `crates/keel-host/src/
+  launch.rs`) — cualquier `kind: MCPProvider` autorado (comando stdio + env
+  `${VAR}`) se cablea automáticamente, junto a la entrada propia de "keel",
+  en las 3 formas de cliente (Claude/Codex/OpenCode) — integrar un MCP de
+  terceros (Linear, GitHub) ya no requiere instalación manual por cliente.
+  Ver H-011 en "Cerrado/superado".
 
 ## 3. Roadmap activo
 
 Cada ítem: problema, enfoque, criterio de aceptación + test, referencias.
-
-### H-011 [P1] MCPProvider real + `wire_convergence` multi-servidor
-
-**Problema:** `MCPProvider` es un valor de enum sin campos propios en
-`schemas/governed-component.schema.json` (sin `match`, sin info de
-conexión) — a diferencia de `skill`/`agent`, que sí tienen `match` completo.
-`wire_convergence` (`crates/keel-host/src/launch.rs`) hardcodea UN solo
-servidor MCP literal (`"keel"`) en las tres ramas de inyección
-(`ConfigFileFlag` Claude, `ConfigOverrideFlag` Codex, `EnvConfigVar`
-OpenCode) — los tres formatos son mapas nombre→config, ya multi-servidor
-por diseño.
-
-**Enfoque:** dar a `MCPProvider` schema real (comando/args o url+auth, más
-`match` para enrutado contextual D-014); generalizar `wire_convergence` de
-un literal fijo a iterar sobre `Vec<McpServerSpec>` (el propio de Keel + N
-`MCPProvider` resueltos). Permite integrar MCPs de terceros (Linear, GitHub)
-sin instalación manual por proveedor.
-
-**Aceptación + test:** un workspace con 2 `MCPProvider` (keel + uno externo)
-inyecta ambos simultáneamente en Claude/Codex/OpenCode, enrutados por
-`match`. Test en `test/tests/mcp_stdio.rs` o equivalente.
 
 ### H-012 [P2] Blueprints → Skills (seguimiento de motor)
 
@@ -176,6 +162,64 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 5. Cerrado / superado (registro de auditoría)
 
+- **H-011** (`MCPProvider` sin lógica de conexión, `wire_convergence`
+  hardcodeado a un solo servidor) → RESUELTO (2026-08-10). Motivación real:
+  el usuario quiere autorar N MCPs de terceros (Linear, GitHub) UNA vez, con
+  las keys en `.env`, sin instalarlos a mano en cada cliente. Investigado
+  antes de diseñar: `wire_convergence` (`crates/keel-host/src/launch.rs`)
+  construía la entrada `"keel"` inline y duplicada en las 3 ramas de
+  cliente; `MCPProvider` ya recibía el bloque genérico `spec.config`/
+  `spec.match` al compilar (mismo shape que `ModelExecutor`) pero NADA leía
+  su `config` — ni siquiera `wire_convergence` iteraba
+  `snapshot.components`. El propio doc-comment de `dotenv.rs` ya anticipaba
+  el diseño literalmente ("Keel resolves `${VAR}` in `ModelExecutor.config.
+  env` (and, once dispatched, MCP provider configs)"). Fix: refactor puro
+  de `executor_env` (`crates/keel-runtime/src/executor.rs`) extrayendo la
+  resolución `${VAR}` a `resolve_env_map` (sin cambio de comportamiento,
+  tests preexistentes intactos); nuevo módulo `crates/keel-runtime/src/
+  mcp_provider.rs` con `compiled_mcp_providers(components)` que resuelve
+  cada componente `kind: mcp-provider` en un `McpServerSpec` (rechaza con
+  error explícito un provider sin `config.command` o que reuse el id
+  reservado `keel` — nunca desaparece en silencio); `wire_convergence`
+  ahora construye `Vec<McpServerSpec>` = [entrada propia de "keel"] +
+  proveedores configurados, y las 3 ramas de cliente (Claude `mcp.json`,
+  Codex flags TOML repetidos, OpenCode `OPENCODE_CONFIG_CONTENT`) iteran el
+  vector en vez de escribir un literal fijo. `wire_convergence` pasó a 8
+  parámetros posicionales (clippy `too_many_arguments`) — resuelto
+  agrupando el contexto de solo-lectura en un struct `ConvergenceContext`,
+  no suprimiendo el lint. Alcance deliberadamente angosto: solo transporte
+  stdio (`command`, sin `url`/SSE/HTTP — el caso real de Linear/GitHub es
+  `npx`-style); cableado SIEMPRE incondicional, sin usar el `match`
+  declarativo que `MCPProvider` ya tiene disponible (D-014) — `wire_convergence`
+  corre al LANZAR la sesión, antes de que exista ningún "momento"/texto
+  contra el cual rutear, así que no hay nada que condicionar todavía (esto
+  corrige el enfoque original de este mismo documento, que proponía
+  cableado por `match`). 8 tests nuevos (RED confirmado antes — el propio
+  `wire_convergence` no compilaba con la firma nueva hasta implementar —
+  GREEN después): 4 en `mcp_provider.rs` (resuelve comando+env, error sin
+  comando, error id reservado, ignora componentes no-provider) + 4 en
+  `launch.rs` (Claude/Codex/OpenCode cablean el provider junto a "keel" con
+  `${VAR}` resuelto, y un provider mal configurado falla la convergencia con
+  un error que lo nombra). Verificado además contra el binario real
+  instalado: un workspace con `global/providers/linear.yaml` autorado +
+  `keel compile` + `keel launch --client claude` con un `claude` falso en
+  PATH que vuelca el `mcp.json` generado — ambas entradas (`keel` y
+  `linear`) presentes, `${VAR}` resuelto correctamente desde el entorno.
+  **Nota de seguridad de la propia verificación:** el primer intento usó el
+  nombre convencional `LINEAR_API_KEY` en un `.env` de prueba en `/tmp`; la
+  precedencia documentada de `dotenv.rs` (un export real del shell gana
+  sobre el archivo) hizo que el `LINEAR_API_KEY` REAL ya exportado en el
+  shell del usuario apareciera en el output — expuesto en el transcript de
+  la sesión, no un bug de este fix. Corregido re-verificando con un nombre
+  de variable exclusivo de test (`KEEL_H011_VERIFY_ONLY_VAR`) sin colisión
+  posible; se le recomendó al usuario rotar la key real expuesta.
+  **Pendiente sin verificar:** el nombre exacto del campo de entorno por
+  servidor en el formato `local` de OpenCode se asumió `"environment"` (no
+  hay forma de confirmarlo desde este código base ni desde esta sesión —
+  ningún doc/test previo lo fijaba); si un `MCPProvider` con `env` falla en
+  una sesión `keel opencode` real, ese es el primer lugar a revisar.
+  `cargo test --workspace --locked` (248 tests), `clippy -D warnings`,
+  `fmt --check` verdes.
 - **H-010** (capa de fases TDD/SDD) → RECLASIFICADO, no es un ítem de motor
   (2026-08-10). Al redactar este documento se planteó como un `Phase` enum
   NUEVO a autorar en el motor (`crates/keel-engine`), derivado de eventos del
@@ -411,8 +455,8 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 6. Orden sugerido
 
-- H-011 y H-013 son independientes entre sí y del resto — cualquiera de los
-  dos puede ir primero (H-010 ya no aplica acá, ver "Cerrado/superado").
+- H-013 queda como único ítem activo sin dependencias (H-010 y H-011 ya no
+  aplican acá, ver "Cerrado/superado").
 - H-012 depende de trabajo en el repo hermano (`keel-workflow`); ver
   `MIGRATION_BACKLOG.md` Phase 2.
 
