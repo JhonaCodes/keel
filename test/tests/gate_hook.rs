@@ -538,3 +538,83 @@ fn a_completed_task_subagent_captured_by_keel_gates_stop_on_its_go_no_go_verdict
         String::from_utf8_lossy(&allowed.stderr)
     );
 }
+
+/// H-013 (cross-provider parity): the SAME content rule that blocks a Claude
+/// PreToolUse Write also blocks the equivalent Codex PreToolUse apply_patch —
+/// through the real `keel gate --client codex` binary, not just a
+/// `parse_codex_hook` struct assertion. This is the acceptance test
+/// H-013 asked for; investigation found the underlying mechanism (event
+/// synthesis, hook registration, `blockable`) already symmetric between
+/// Claude and Codex (H-018 gave Codex's PostToolUse registration to Claude,
+/// not the other way around) — this test is what was actually missing.
+#[test]
+fn the_hook_bridge_blocks_a_codex_apply_patch_via_pretooluse_same_as_claude() {
+    let ws = Workspace::new();
+    let root = ws.path().to_str().unwrap().to_string();
+    assert!(ws.run(&["init", &root, "--json"]).status.success());
+    author_no_edit_md(ws.path());
+    assert!(ws.run(&["compile", "--workspace", &root]).status.success());
+
+    // A Codex PreToolUse(apply_patch) payload targeting a .md file.
+    let payload = r#"{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"apply_patch","tool_input":{"file_path":"notes.md","command":"*** Update File: notes.md\n+hi\n"}}"#;
+    let out = ws.run_stdin(
+        &[
+            "gate",
+            "--client",
+            "codex",
+            "--workspace",
+            &root,
+            "--session",
+            "s1",
+        ],
+        payload,
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "PreToolUse apply_patch of a .md must be blocked (exit 2), same as Claude: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("BLOCKED (global.no-edit-md)"),
+        "the packet must reach the model via stderr"
+    );
+
+    // A .txt patch is allowed (exit 0) — same tool, different target.
+    let ok_payload = r#"{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"apply_patch","tool_input":{"file_path":"notes.txt","command":"*** Update File: notes.txt\n+hi\n"}}"#;
+    let ok = ws.run_stdin(
+        &[
+            "gate",
+            "--client",
+            "codex",
+            "--workspace",
+            &root,
+            "--session",
+            "s1",
+        ],
+        ok_payload,
+    );
+    assert_eq!(ok.status.code(), Some(0), "a .txt patch is allowed");
+
+    // PostToolUse (post-hoc) never blocks even for a .md — the tool already
+    // ran (invariant 8: no false exit-2) — and the dedup fix means it does
+    // not even synthesize a second file.edited event.
+    let post = r#"{"hook_event_name":"PostToolUse","session_id":"s1","tool_name":"apply_patch","tool_input":{"file_path":"notes.md","command":"*** Update File: notes.md\n+hi\n"}}"#;
+    let post_out = ws.run_stdin(
+        &[
+            "gate",
+            "--client",
+            "codex",
+            "--workspace",
+            &root,
+            "--session",
+            "s1",
+        ],
+        post,
+    );
+    assert_eq!(
+        post_out.status.code(),
+        Some(0),
+        "post-hoc feedback must not exit 2"
+    );
+}
