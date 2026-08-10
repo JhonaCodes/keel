@@ -89,17 +89,6 @@ Resumen — el detalle completo vive en `STATUS.md`, no se duplica acá:
 
 Cada ítem: problema, enfoque, criterio de aceptación + test, referencias.
 
-### H-013 [P2] Paridad Codex para el puente de hooks por contenido
-
-**Problema:** D-012.e — `pattern-guard`/`rn-guard` (y cualquier regla
-`file.edited`) disparan SOLO en Claude hoy; Codex no las ve.
-
-**Enfoque:** extender el puente de hook por cliente a Codex con la misma
-semántica de bloqueo.
-
-**Aceptación + test:** la misma regla de contenido bloquea en una sesión
-`keel codex` igual que en `keel claude`; test cross-provider.
-
 ### H-014 [P3] Aislamiento fuerte Linux (Landlock)
 
 **Problema:** hoy Linux degrada a shims (`--containment shims`); Landlock es
@@ -155,6 +144,31 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 5. Cerrado / superado (registro de auditoría)
 
+- **H-013** (paridad Codex para el puente de hooks por contenido) →
+  RECLASIFICADO, el problema descrito ya no existía (2026-08-10). El
+  enunciado original decía "`pattern-guard`/`rn-guard` disparan SOLO en
+  Claude hoy; Codex no las ve" — investigado antes de escribir código, y
+  resultó falso hoy: `parse_codex_hook` (`crates/keel-cli/src/gate.rs`) ya
+  sintetiza `file.edited` desde `apply_patch`/`Edit`/`Write` con la misma
+  semántica preventable que Claude; `wire_convergence`
+  (`crates/keel-host/src/launch.rs`) ya registra los mismos 5 eventos
+  (`PreToolUse`/`PostToolUse`/`UserPromptSubmit`/`SessionStart`/`Stop`) para
+  ambos clientes — de hecho Codex tenía `PostToolUse` registrado ANTES que
+  Claude (H-018 le dio paridad a Claude, no al revés); el campo `blockable`
+  de `AdapterManifest` (`crates/keel-engine/src/adapter.rs`) para Codex
+  (`[FileEdited, ToolRequested, CompletionRequested]`) es un SUPERSET del de
+  Claude, no una carencia. Lo único que realmente faltaba era el test de
+  aceptación en sí: `test/tests/gate_hook.rs` (el único suite black-box que
+  ejercita el binario `keel gate` real) solo usaba `--client claude-code` en
+  sus 9 casos — cero cobertura con `--client codex`. Fix: un test nuevo,
+  `the_hook_bridge_blocks_a_codex_apply_patch_via_pretooluse_same_as_claude`,
+  espejo exacto del test de Claude (`the_hook_bridge_blocks_an_internal_
+  write_via_pretooluse`) pero con un payload `apply_patch` de Codex — pasó
+  en VERDE la primera vez que corrió (no hubo fase RED: el mecanismo ya
+  funcionaba, lo que faltaba era la prueba, no el código). Confirma:
+  `PreToolUse apply_patch` de un `.md` bloquea (exit 2) igual que Claude;
+  un `.txt` se permite; `PostToolUse` nunca bloquea (post-hoc). `cargo test
+  --workspace --locked`, `clippy -D warnings`, `fmt --check` verdes.
 - **H-022** (`full` de un skill solo alcanzable por escalamiento de
   oscilación P3, nunca bajo demanda) → RESUELTO (2026-08-10). Contexto: tras
   migrar 375 blueprints a skills en `keel-workflow`, `keel_reactive_notifier`
@@ -566,8 +580,10 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 6. Orden sugerido
 
-- H-013 es el único ítem activo del roadmap (H-010, H-011 y H-012 ya no
-  aplican acá, ver "Cerrado/superado").
+- Sin ítems P1/P2 activos (H-010, H-011, H-012 y H-013 ya no aplican acá,
+  ver "Cerrado/superado"). Quedan H-014/H-006/H-007, los tres P3 y sin
+  bloqueos entre sí — cualquiera puede ir primero; H-014 necesita además
+  verificarse en una máquina Linux real.
 
 ## 7. Ver también
 
