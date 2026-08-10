@@ -36,7 +36,7 @@ Resumen — el detalle completo vive en `STATUS.md`, no se duplica acá:
 - **D-016, entrega oportuna** — matcher `PreToolUse` catch-all, contexto no
   bloqueante en `file.edited`/`command.requested`/`tool.requested`/
   `SessionStart` (`build_delivery_context`, `emit_delivery`), enrutado
-  extendido a `components` (blueprints/knowledge/workflows).
+  extendido a `components` (knowledge/workflows/...).
 - **Captura de evidencia RED/GREEN** (0.11.0/0.12.0) — un `Bash` de
   test-runner en `PostToolUse` se convierte en evento `test.completed` con el
   resultado real (`is_test_runner`/`test_outcome_content` en
@@ -83,24 +83,6 @@ Resumen — el detalle completo vive en `STATUS.md`, no se duplica acá:
 ## 3. Roadmap activo
 
 Cada ítem: problema, enfoque, criterio de aceptación + test, referencias.
-
-### H-012 [P2] Blueprints → Skills (seguimiento de motor)
-
-**Problema:** `kind: Blueprint` es, igual que `MCPProvider`, un enum bare en
-`governed-component.schema.json` — sin `match`, sin entrega compact/full
-progresiva, sin `keel.skills.load` bajo demanda. `STATUS.md` ya confirma que
-"no tienen lógica de evaluación dedicada más allá del almacenamiento
-genérico en el snapshot" — cero ventaja real sobre `Skill` hoy.
-
-**Enfoque:** la migración de contenido (375 componentes en
-`platforms/{dart,flutter,rust}/blueprints/`) vive en
-`keel-workflow/MIGRATION_BACKLOG.md`, no acá. Este ítem trackea el
-follow-up de motor: deprecar/retirar el kind `Blueprint` del schema una vez
-completada esa migración.
-
-**Aceptación + test:** con 0 componentes `kind: Blueprint` activos en
-`keel-workflow`, `governed-component.schema.json` marca `Blueprint` como
-deprecated (o se retira) y la documentación lo refleja.
 
 ### H-013 [P2] Paridad Codex para el puente de hooks por contenido
 
@@ -168,6 +150,49 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 5. Cerrado / superado (registro de auditoría)
 
+- **H-012** (`kind: Blueprint` sin lógica propia, cero ventaja sobre `Skill`)
+  → **ELIMINADO del todo** (2026-08-10, no deprecado). Este documento
+  originalmente planteaba "deprecar/retirar" una vez migrado el contenido —
+  el usuario pidió explícitamente eliminarlo directamente, sin paso
+  intermedio de deprecación, dado que 0 componentes `kind: Blueprint`
+  quedaban activos en `keel-workflow` (375 migrados a `Skill`, ver
+  `keel-workflow/MIGRATION_BACKLOG.md`). Investigado antes de tocar nada:
+  `Blueprint` nunca fue un tipo dedicado — compartía el shape genérico
+  `GovernedComponentDoc` igual que Knowledge/Workflow/Contract/Hook/
+  MCPProvider/ModelExecutor (`crates/keel-dsl/src/lib.rs`), validaba contra
+  el mismo validador compartido, y `Document::Blueprint` no se destructuraba
+  en `compile.rs` ni `snapshot.rs` — solo en `workspace.rs`. Eliminado sin
+  dejar rastro: enum del schema (`schemas/governed-component.schema.json`),
+  variante `Document::Blueprint` + sus 2 match arms (`keel-dsl/src/lib.rs`),
+  dispatch del validador (`keel-dsl/src/schema.rs`), tupla de directorio +
+  match arm en `load_components` (`keel-engine/src/workspace.rs`), y el
+  marcador `blueprints` de `FLAT_MARKER_SUBDIRS` (un segundo array separado,
+  encontrado por el propio compilador al no coincidir tamaños — no estaba en
+  el plan original). `Operation::BlueprintRead` (`keel-runtime/src/lib.rs`)
+  confirmado sin ningún caller antes de borrarlo (no se asumió). Efecto
+  colateral real encontrado: `keel init` todavía generaba un scaffold
+  `projects/app/blueprints/README.md` — un directorio funcional, no solo
+  texto — retirado también. Texto de aviso en `gate.rs` que mencionaba
+  `keel.blueprints` como si fuera un tool MCP real (no lo es — no existe en
+  `tools_list` de `mcp.rs`) corregido de paso, ya estaba roto antes de este
+  cambio. ~25 menciones de prosa/comentarios en 8 documentos (`STATUS.md`,
+  `PROYECTO.md`, `ARQUITECTURA_RUNTIME.md`, `AUTORIA.md`, `DECISIONES.md`,
+  `CONTRATOS_RUNTIME.md`, `README.md`, `USO_INSTALACION.md`) actualizadas
+  para no presentar `Blueprint` como kind vigente — `CHANGELOG.md` NO se
+  tocó (registro histórico fechado, describe lo que era cierto en su
+  momento). De paso, `STATUS.md` tenía DOS afirmaciones más ya obsoletas
+  encontradas en la misma sección (H-008 y H-011 ya resueltos, seguían
+  listados como brecha) — corregidas también. Test nuevo (RED confirmado
+  antes — `Blueprint` todavía compilaba — GREEN después):
+  `blueprint_kind_is_rejected_like_any_unsupported_kind`
+  (`keel-dsl/tests-unit/schema.rs`) confirma que `kind: Blueprint` falla
+  exactamente como cualquier kind inexistente (`DslError::UnsupportedKind`),
+  no un caso especial. 2 tests preexistentes que usaban el string
+  `"blueprint"` como kind genérico de muestra (no la variante eliminada)
+  renombrados a `"knowledge"` para no dejar rastro de la palabra en tests
+  que no prueban nada relacionado (`keel-engine/tests-unit/routing.rs`,
+  `keel-runtime/src/lib.rs`). `cargo test --workspace --locked`,
+  `clippy -D warnings`, `fmt --check` verdes.
 - **H-011** (`MCPProvider` sin lógica de conexión, `wire_convergence`
   hardcodeado a un solo servidor) → RESUELTO (2026-08-10). Motivación real:
   el usuario quiere autorar N MCPs de terceros (Linear, GitHub) UNA vez, con
@@ -494,10 +519,8 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 6. Orden sugerido
 
-- H-013 queda como único ítem activo sin dependencias (H-010 y H-011 ya no
+- H-013 es el único ítem activo del roadmap (H-010, H-011 y H-012 ya no
   aplican acá, ver "Cerrado/superado").
-- H-012 depende de trabajo en el repo hermano (`keel-workflow`); ver
-  `MIGRATION_BACKLOG.md` Phase 2.
 
 ## 7. Ver también
 

@@ -111,10 +111,6 @@ pub fn init(path: &Path) -> Result<ExitCode> {
             init::GOVERNED_RESOURCE_README,
         ),
         (
-            "projects/app/blueprints/README.md",
-            init::GOVERNED_RESOURCE_README,
-        ),
-        (
             "projects/app/workflows/README.md",
             init::GOVERNED_RESOURCE_README,
         ),
@@ -181,7 +177,7 @@ pub fn init(path: &Path) -> Result<ExitCode> {
         "the full section 8.5 layout, each folder with a README + a base template; bound to project:local/app"
     );
     println!(
-        "active: rules, skills, knowledge, blueprints, workflows, contracts, agents, hooks, providers, policies and executors"
+        "active: rules, skills, knowledge, workflows, contracts, agents, hooks, providers, policies and executors"
     );
     println!(
         "verify: keel doctor --workspace {} --governed",

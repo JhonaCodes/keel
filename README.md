@@ -70,12 +70,12 @@ another, with no API.
 ## Workspace
 
 Supports `rules`, `tools`, `skills`, `agents`, `containment`, `exceptions`,
-`blueprints`, `knowledge`, `workflows`, `contracts`, `hooks`, `policies`, and
+`knowledge`, `workflows`, `contracts`, `hooks`, `policies`, and
 `executors` (local CLI commands). Components are validated, hashed, and
 compiled into an immutable snapshot; the lock fixes them (`keel lock
 --verify` detects drift). `rules`, `tools`, `skills`, `agents`, `containment`,
-`exceptions`, and `knowledge` are enforced/consumed today; `blueprints`,
-`workflows`, `contracts`, `hooks`, and `policies` are validated and hashed
+`exceptions`, and `knowledge` are enforced/consumed today; `workflows`,
+`contracts`, `hooks`, and `policies` are validated and hashed
 but not yet evaluated beyond generic storage (see `STATUS.md`).
 
 ## Development

@@ -42,7 +42,6 @@ pub enum Operation {
     ComponentList,
     SkillRead,
     KnowledgeRead,
-    BlueprintRead,
     PlanSubmit,
     ActionRequest,
     AgentInvoke,
@@ -58,7 +57,6 @@ impl Operation {
             Self::ComponentList => "component.list",
             Self::SkillRead => "skill.read",
             Self::KnowledgeRead => "knowledge.read",
-            Self::BlueprintRead => "blueprint.read",
             Self::PlanSubmit => "plan.submit",
             Self::ActionRequest => "action.request",
             Self::AgentInvoke => "agent.invoke",
@@ -810,13 +808,13 @@ mod tests {
         let mut host = RuntimeHost::from_snapshot("session-2", &snapshot, root.path()).unwrap();
         host.require_skill("architecture.review");
         let mut request = SkillReadRequest::compact("architecture.review", "investigation");
-        request.reason = Some("blueprint requirement".to_string());
+        request.reason = Some("reference requirement".to_string());
         let receipt = host.read_skill(request).unwrap();
 
         assert_eq!(receipt.version, "1.2.0");
         assert_eq!(receipt.content, "Keel-owned guidance");
         assert_eq!(receipt.session_id, "session-2");
-        assert_eq!(receipt.reason.as_deref(), Some("blueprint requirement"));
+        assert_eq!(receipt.reason.as_deref(), Some("reference requirement"));
         assert!(!receipt.read_at.is_empty());
     }
 
@@ -856,12 +854,12 @@ mod tests {
         let mut host = RuntimeHost::new("session-4", "sha256:snapshot");
         host.register_skill(SkillDefinition::new("skill-a", "1.0.0", "a", None));
         host.registry.register(ComponentDescriptor {
-            kind: "blueprint".to_string(),
-            id: "blueprint-a".to_string(),
+            kind: "knowledge".to_string(),
+            id: "knowledge-a".to_string(),
             version: Some("1.0.0".to_string()),
         });
 
-        assert!(host.registry.contains("blueprint", "blueprint-a"));
+        assert!(host.registry.contains("knowledge", "knowledge-a"));
         assert_eq!(host.component_list().len(), 2);
     }
 

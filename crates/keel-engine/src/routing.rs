@@ -151,7 +151,7 @@ pub fn score(
 }
 
 /// The ranked, relevant capabilities for one moment: skills, agents and other
-/// governed components (blueprints, knowledge, workflows…). Everything the gate
+/// governed components (knowledge, workflows…). Everything the gate
 /// turns into `additionalContext` — "you're about to touch X, keel has these".
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RouteResult {
