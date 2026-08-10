@@ -71,34 +71,6 @@ Resumen — el detalle completo vive en `STATUS.md`, no se duplica acá:
 
 Cada ítem: problema, enfoque, criterio de aceptación + test, referencias.
 
-### H-010 [P1] Capa de fases TDD/SDD
-
-**Problema:** jflow gobierna hoy con una máquina de fases real
-(analysis→red→green→refactor→audit→verify→done + selección de workflow
-simple/tdd/sdd) que Keel no tiene. La evidencia (H-009 resuelto) es
-necesaria pero NO suficiente — "evidencia de que algo pasó" y "cómo se
-procesa/secuencia" son responsabilidades distintas.
-
-**Enfoque:** autorar un `Phase` enum NUEVO con la taxonomía real de jflow —
-NO revivir `crates/keel-runtime/src/phase.rs` (taxonomía RCCA incorrecta:
-`Investigation/Planning/Implementation/Verification/Audit/Resolution/
-Acceptance/Delivery`, sin concepto RED/GREEN, construida para el diseño de
-API ya descartado). Representar la fase como EVENTOS en el mismo
-`evaluate_event`, derivada de evidencia acumulada en el ledger (RED por
-`test.completed=FAILED`, GREEN por un `test.completed=passed` posterior,
-AUDIT/VERIFY por H-009) — no como archivo de estado separado, para evitar el
-bug de estado obsoleto que jflow mismo tuvo. Reusar
-`PhaseTransitionReceipt`/`ArtifactReceipt`/`PhaseError` de `phase.rs` solo
-como referencia de diseño, no como código importado. Entregar contenido por
-fase extendiendo `build_delivery_context`/`emit_delivery` (D-016) — no un
-canal nuevo.
-
-**Aceptación + test:** una sesión con workflow `tdd` deriva red→green
-correctamente desde `test.completed=FAILED` seguido de
-`test.completed=passed`, sin persistir estado propio.
-
-**Depende de:** H-009.
-
 ### H-011 [P1] MCPProvider real + `wire_convergence` multi-servidor
 
 **Problema:** `MCPProvider` es un valor de enum sin campos propios en
@@ -204,6 +176,25 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 5. Cerrado / superado (registro de auditoría)
 
+- **H-010** (capa de fases TDD/SDD) → RECLASIFICADO, no es un ítem de motor
+  (2026-08-10). Al redactar este documento se planteó como un `Phase` enum
+  NUEVO a autorar en el motor (`crates/keel-engine`), derivado de eventos del
+  ledger — eso hubiera significado meter la taxonomía RED/GREEN/AUDIT/VERIFY
+  de TDD/SDD (contenido de `keel-workflow`, autoría del operador) DENTRO del
+  SDK. Corregido en conversación con el usuario: el motor ya expone TODO lo
+  necesario para derivar fase sin ningún cambio de código —
+  `event.recorded_evidence` (poblado antes de evaluar) viaja íntegro por
+  stdin a cualquier `Tool` externo (`run_external`,
+  `crates/keel-engine/src/tools.rs`, `serde_json::to_vec(event)`), así que
+  una regla `on: [test.completed]`/`on: [task.completed]` con precondición
+  `builtin:evidence.recorded` (el mismo patrón exacto que
+  `require-red-before-write.yaml` y el fixture GO/NO-GO que probó H-009)
+  alcanza para expresar RED→GREEN→AUDIT→VERIFY íntegramente como Reglas
+  autoradas — nada que el motor no soporte hoy. Mismo patrón de resolución
+  que H-008 (bash-write-guard): lo que parecía brecha de motor resultó ser
+  puro trabajo de contenido. La autoría real (Rules `record-task-result`/
+  `require-go-before-close`, y cualquier regla de secuencia RED→GREEN) es
+  trabajo de `keel-workflow`, no de este repo — no trackeado acá.
 - **H-009** (`gate.rs` no capturaba el resultado de un `Task`/subagente) →
   RESUELTO (2026-08-10). Problema: sin arm `"Task"` en el match de
   herramientas, un subagente completado (code-auditor, edu-revisor, cualquier
@@ -391,12 +382,16 @@ Abierto, no perdido, no activo ahora mismo:
   `pattern-guard`/`rn-guard`/reglas de contenido de código), no exhaustivo
   para cualquier tipo de archivo.
 - **H-001** (workflow de 8 fases, `PhaseController` no conectado) →
-  SUPERADO por H-010: rediseño desde cero con la taxonomía RED/GREEN real
-  de jflow, no la de RCCA (`Investigation/Planning/.../Delivery`).
+  SUPERADO: la taxonomía RCCA (`Investigation/Planning/.../Delivery`,
+  `crates/keel-runtime/src/phase.rs`) queda descartada, no reemplazada por
+  código de motor — la fase TDD/SDD real de jflow (RED/GREEN/AUDIT/VERIFY)
+  se deriva íntegra como Reglas de contenido en `keel-workflow` (ver H-010
+  en "Cerrado/superado"), sin ningún `Phase` enum en el SDK.
   `PhaseController`/`RuntimeHost` siguen sin importarse en el camino de
   producción (`grep -rln "RuntimeHost" --include="*.rs" .` solo devuelve
-  sus propios tests de crate) — se mantiene así a propósito, H-010 no lo
-  wirea, lo reemplaza.
+  sus propios tests de crate) — código muerto, candidato a retirar (no
+  trackeado como ítem propio: bajo riesgo, se puede borrar en cualquier
+  limpieza).
 - **Plan viejo "Compiled Workflow" (ítem 1 de 8)** → equivalente a H-001,
   ver arriba.
 - **Plan viejo "MCPProvider" (ítem 4 de 8: transports/discovery/
@@ -416,10 +411,8 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 6. Orden sugerido
 
-- H-010 primero — es la brecha activa más importante que queda: la evidencia
-  que necesitaba (H-009) ya está resuelta, así que la fase audit/verify de
-  H-010 puede derivarla directamente.
-- H-011 y H-013 son independientes entre sí y del resto.
+- H-011 y H-013 son independientes entre sí y del resto — cualquiera de los
+  dos puede ir primero (H-010 ya no aplica acá, ver "Cerrado/superado").
 - H-012 depende de trabajo en el repo hermano (`keel-workflow`); ver
   `MIGRATION_BACKLOG.md` Phase 2.
 
