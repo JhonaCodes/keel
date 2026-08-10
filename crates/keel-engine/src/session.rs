@@ -5,13 +5,16 @@
 //! context economy ladder:
 //!
 //! ```text
-//! nothing at start → compact on first activation → full only on oscillation
+//! nothing at start → compact on first activation → full on escalation
 //! ```
 //!
 //! A skill already loaded is NOT re-sent when the same momentum arises again
-//! — the agent has it in context. The exception is oscillation (section 6.5): three
-//! repeated findings at the same rule+location mean the agent lost or is
-//! ignoring the context, so the runtime escalates to the `full` variant.
+//! — the agent has it in context. Escalation to `full` has two triggers: an
+//! explicit on-demand request (`keel.skills.load {full: true}`) or oscillation
+//! (section 6.5): three repeated findings at the same rule+location mean the
+//! agent lost or is ignoring the context. `deliver_skills` treats both the
+//! same way — it never re-sends what a session already has at the requested
+//! level or higher.
 //!
 //! INVARIANT 16: this state is append-only in spirit — it only ever records
 //! what was delivered; it cannot touch enforcement, scope, validation or
@@ -89,18 +92,24 @@ impl SessionStore {
 /// Resolves what a rule's `load.skills` should DELIVER to the session right
 /// now, updating the state. Returns the payload chunks for the packet.
 ///
+/// `escalate` asks for the `full` variant — either because the caller
+/// explicitly requested it (`keel.skills.load {full: true}`, H-009's mitigation
+/// PR's known gap) or because P3 detected oscillation (section 6.5, not yet
+/// wired to a live call site — see `PLAN_MAESTRO.md`). `deliver_skills` does
+/// not need to know WHICH reason applies, only THAT full was asked for.
+///
 /// | Situation | Delivery |
 /// |---|---|
-/// | not loaded, no oscillation | compact content + exemplar; mark compact |
-/// | loaded compact, no oscillation | one-line reference only (no re-send) |
-/// | oscillating, not at full yet | FULL content (escalation section 6.5); mark full |
+/// | not loaded, no escalation | compact content + exemplar; mark compact |
+/// | loaded compact, no escalation | one-line reference only (no re-send) |
+/// | escalating, not at full yet | FULL content; mark full |
 /// | loaded full | reference only |
 pub fn deliver_skills(
     snapshot: &Snapshot,
     workspace_root: &Path,
     state: &mut SessionState,
     skill_refs: &[String],
-    oscillating: bool,
+    escalate: bool,
     force_exemplar: bool,
 ) -> Vec<String> {
     let mut payload = Vec::new();
@@ -121,7 +130,7 @@ pub fn deliver_skills(
             continue;
         };
 
-        let desired = if oscillating {
+        let desired = if escalate {
             SkillLevel::Full
         } else {
             SkillLevel::Compact

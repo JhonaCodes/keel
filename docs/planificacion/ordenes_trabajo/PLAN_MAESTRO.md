@@ -79,6 +79,11 @@ Resumen — el detalle completo vive en `STATUS.md`, no se duplica acá:
   parsearlo — mitigación del riesgo admitido tras H-009 (la forma real del
   `tool_response` de un `Task` nunca se verificó contra una sesión viva; no
   existía forma de capturarla). Ver H-021 en "Cerrado/superado".
+- **Entrega de `full` bajo demanda** (0.18.0+, `crates/keel-host/src/mcp.rs`
+  + `crates/keel-engine/src/session.rs`) — `keel.skills.load` acepta
+  `full: true` y entrega el contenido `full` de un skill directamente, sin
+  necesitar 3 hallazgos de oscilación fingidos primero. Ver H-022 en
+  "Cerrado/superado".
 
 ## 3. Roadmap activo
 
@@ -168,6 +173,48 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 5. Cerrado / superado (registro de auditoría)
 
+- **H-022** (`full` de un skill solo alcanzable por escalamiento de
+  oscilación P3, nunca bajo demanda) → RESUELTO (2026-08-10). Contexto: tras
+  migrar 375 blueprints a skills en `keel-workflow`, `keel_reactive_notifier`
+  quedó con un `full` real de 27,441 líneas — efectivamente inalcanzable, ya
+  que el único mecanismo de escalamiento (`oscillating: bool` en
+  `deliver_skills`, `crates/keel-engine/src/session.rs`) nunca se cableaba
+  desde ningún camino de producción: el supervisor P3
+  (`crates/keel-host/src/supervisor.rs`) solo imprime una sugerencia al
+  operador, nunca llama a `deliver_skills`; el único call site real
+  (`keel.skills.load`, `crates/keel-host/src/mcp.rs`) lo invocaba con
+  `false` fijo. `oscillating: true` solo se ejercitaba en tests unitarios —
+  mismo gap ya documentado para los 12 skills de Design/UI en
+  `keel-workflow/MIGRATION_BACKLOG.md`. Investigado antes de diseñar: no
+  había precedente de un parámetro "dame más" en ningún tool MCP del repo
+  (`keel.rules.query`/`keel.agent.invoke` no tienen booleanos); `SessionState.
+  loaded_skills` ya trackeaba el nivel entregado por sesión, así que no hizo
+  falta tocar ledger/evidencia. Fix: `keel.skills.load`'s `inputSchema` ganó
+  `full: boolean` (opcional, default `false` — compatible con cualquier
+  caller existente que solo pasa `id`); `skills_load(id, full)` lo pasa a
+  `deliver_skills`. Renombrado `oscillating: bool` → `escalate: bool` en
+  `deliver_skills`/su doc (el nombre viejo presuponía que oscilación era la
+  ÚNICA razón para escalar a `Full`; ahora hay una segunda razón legítima —
+  pedido explícito — y la función no necesita saber POR QUÉ, solo QUE se
+  pidió). Los 6 call sites de test en `tests-unit/session.rs` no necesitaron
+  cambios (usan booleanos posicionales, el rename no rompe nada). Test nuevo
+  end-to-end en `test/tests/mcp_stdio.rs`
+  (`keel_skills_load_serves_full_content_on_explicit_request`, RED
+  confirmado antes — `full` no existía en el schema — GREEN después):
+  `keel.skills.load` sin `full` sigue sirviendo compact (regresión
+  explícita); con `full: true` sirve el contenido `full`, etiquetado
+  `(full)`. Verificado además contra el binario real instalado, con el caso
+  real que motivó el pedido: `keel_reactive_notifier` en `keel-workflow`
+  (recién migrado, H-012) — `keel mcp` por stdio, `keel.skills.load` sin
+  `full` devuelve 11,679 caracteres `(compact)`; con `full: true` devuelve
+  758,931 caracteres `(full)` con las 60 fuentes de ReactiveNotifier
+  intactas. `keel-workflow` recompila/testea/lockea sin drift.
+  **Explícitamente fuera de este ítem** (no se tocó): cablear el
+  escalamiento automático real desde el supervisor P3 — requeriría
+  señalización cross-proceso (el supervisor corre separado del servidor
+  MCP), un ítem de motor más grande que "hacerlo alcanzable bajo demanda",
+  que era el pedido concreto. `cargo test --workspace --locked`,
+  `clippy -D warnings`, `fmt --check` verdes.
 - **H-011** (`MCPProvider` sin lógica de conexión, `wire_convergence`
   hardcodeado a un solo servidor) → RESUELTO (2026-08-10). Motivación real:
   el usuario quiere autorar N MCPs de terceros (Linear, GitHub) UNA vez, con

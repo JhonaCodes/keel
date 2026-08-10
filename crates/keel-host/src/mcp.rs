@@ -137,10 +137,13 @@ impl Server {
                 },
                 {
                     "name": "keel.skills.load",
-                    "description": "Load a governed skill's content into your context by id. Keel records the delivery. Use the id from keel.skills.list.",
+                    "description": "Load a governed skill's content into your context by id. Keel records the delivery. Use the id from keel.skills.list. Set full:true for the deeper reference variant when the skill declares one (compact is the default).",
                     "inputSchema": {
                         "type": "object",
-                        "properties": { "id": { "type": "string" } },
+                        "properties": {
+                            "id": { "type": "string" },
+                            "full": { "type": "boolean" }
+                        },
                         "required": ["id"],
                         "additionalProperties": false
                     }
@@ -182,7 +185,8 @@ impl Server {
                     .get("id")
                     .and_then(Value::as_str)
                     .ok_or_else(|| rpc_error(-32602, "missing skill id"))?;
-                Ok(text_result(&self.skills_load(id)))
+                let full = args.get("full").and_then(Value::as_bool).unwrap_or(false);
+                Ok(text_result(&self.skills_load(id, full)))
             }
             "keel.rules.query" => {
                 let command = args.get("command").and_then(Value::as_str);
@@ -217,10 +221,10 @@ impl Server {
         out
     }
 
-    fn skills_load(&mut self, id: &str) -> String {
+    fn skills_load(&mut self, id: &str, full: bool) -> String {
         let mut state = self.sessions.load(&self.session_id);
         let refs = vec![format!("skill:{id}")];
-        let payload = deliver_skills(&self.snapshot, &self.root, &mut state, &refs, false, false);
+        let payload = deliver_skills(&self.snapshot, &self.root, &mut state, &refs, full, false);
         // Record the delivery: Keel, not the model's word, is the evidence
         // that a skill entered context (D-003, spec section 6.4). Best-effort;
         // a store hiccup must not deny the model its content.
