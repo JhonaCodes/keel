@@ -305,3 +305,72 @@ fn env_violation_classifies_deny_and_allowlist() {
     };
     assert!(env_violation(&empty, &cmd("psql production-db")).is_none());
 }
+
+/// A rule with NO scope declared (or a scope that matches everything) is
+/// meant to govern the WORKSPACE's own content — not arbitrary files a
+/// client happens to edit outside the project (e.g. Claude Code's own
+/// `~/.claude/plans/*.md` scratch file). Live bug: `require-red-before-
+/// write` demanded RED test evidence for a Plan Mode file that isn't
+/// production code and isn't even part of the governed project, because
+/// nothing compared `event.file` against the workspace root at all.
+#[test]
+fn a_rule_without_scope_does_not_fire_on_a_file_outside_the_workspace() {
+    let mut rule = blocking_rule();
+    rule.scope = None; // matches everything BUT for the workspace-boundary check
+    let s = snap(vec![rule]);
+    let workspace = tempfile::tempdir().unwrap();
+    let outside_file = workspace.path().parent().unwrap().join("elsewhere/x.dart");
+
+    let evs = evaluate_event(
+        &s,
+        &edited(outside_file.to_str().unwrap(), "x // TODO"),
+        workspace.path(),
+        Mode::Enforce,
+    );
+    assert!(
+        evs.is_empty(),
+        "a file outside the workspace root must not evaluate any rule, got: {evs:?}"
+    );
+}
+
+/// The same rule DOES fire normally for a file genuinely inside the
+/// workspace, given as an absolute path (the real shape Claude Code sends).
+#[test]
+fn a_rule_without_scope_still_fires_inside_the_workspace_absolute_path() {
+    let mut rule = blocking_rule();
+    rule.scope = None;
+    let s = snap(vec![rule]);
+    let workspace = tempfile::tempdir().unwrap();
+    let inside_file = workspace.path().join("lib/a.dart");
+
+    let evs = evaluate_event(
+        &s,
+        &edited(inside_file.to_str().unwrap(), "x // TODO"),
+        workspace.path(),
+        Mode::Enforce,
+    );
+    assert_eq!(
+        evs.len(),
+        1,
+        "an in-workspace absolute path must still fire"
+    );
+}
+
+/// A RELATIVE `event.file` (the shape every existing test in this module
+/// uses, e.g. `edited("lib/a.dart", ...)`) is workspace-relative by
+/// definition and must keep firing exactly as before — the workspace-root
+/// comparison only applies to absolute paths. `workspace_root` itself is
+/// never canonicalized anywhere in this codebase (confirmed: no
+/// `.canonicalize()` call exists for it), so it can legitimately be a
+/// relative path like `.` too — this must not break that either.
+#[test]
+fn a_relative_file_path_is_unaffected_by_the_workspace_boundary_check() {
+    let s = snap(vec![blocking_rule()]);
+    let evs = evaluate_event(
+        &s,
+        &edited("lib/a.dart", "x // TODO"),
+        Path::new("."),
+        Mode::Enforce,
+    );
+    assert_eq!(evs.len(), 1);
+}

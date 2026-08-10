@@ -17,3 +17,6 @@ regex = { workspace = true }
 globset = { workspace = true }
 jiff = { workspace = true }
 ulid = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -56,6 +56,11 @@ Resumen — el detalle completo vive en `STATUS.md`, no se duplica acá:
   `projects/<name>/`), es decir, para prácticamente todas. Ver H-017 en
   "Cerrado/superado".
 
+- **Límite de workspace en la evaluación de reglas** (0.18.0+,
+  `crates/keel-engine/src/runtime.rs`) — ninguna regla `file.edited` (con o
+  sin `scope` declarado) dispara para un archivo fuera del workspace
+  gobernado. Ver H-020 en "Cerrado/superado".
+
 ## 3. Roadmap activo
 
 Cada ítem: problema, enfoque, criterio de aceptación + test, referencias.
@@ -210,6 +215,41 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 5. Cerrado / superado (registro de auditoría)
 
+- **H-020** (ninguna regla distinguía "archivo fuera del workspace
+  gobernado") → RESUELTO (2026-08-10). Reportado en vivo por el usuario
+  trabajando NUI-4922: `keel claude` bloqueó con `global.require-red-
+  before-write` el propio mecanismo interno de Plan Mode de Claude Code
+  (que escribe a `~/.claude/plans/*.md`, fuera del workspace gobernado por
+  completo), exigiendo evidencia RED para un archivo que no es código de
+  producción ni parte del proyecto. Causa raíz confirmada: `CompiledScope::
+  matches` (`snapshot.rs`) hace matching de glob sobre el string crudo de
+  `event.file`, sin normalizar contra la raíz del workspace — y en ningún
+  lado del motor se comparaba `event.file` contra `workspace_root` en
+  absoluto, ni siquiera para reglas SIN `scope` declarado (que matchean
+  todo por defecto). Dos arreglos, alcance distinto:
+  1. **Inmediato, en `keel-workflow`** — agregado `**/.claude/**` al
+     `scope.paths.exclude` de `require-red-before-write.yaml`. Destraba el
+     caso puntual sin esperar al release del motor.
+  2. **Estructural, en el motor** — nueva función
+     `file_is_outside_workspace` (`crates/keel-engine/src/runtime.rs`),
+     consultada al inicio de `evaluate_rule` (paso 0, antes del propio
+     `scope`): si `event.file` es una ruta ABSOLUTA que no es subpath de
+     `workspace_root` (también absoluto), NINGUNA regla dispara para ese
+     evento — sin importar si la regla declara `scope` o no. Deliberadamente
+     léxico (sin `canonicalize`, sin I/O): `workspace_root` no se
+     canonicaliza en ningún lado de este código base, así que comparar
+     rutas relativas de forma confiable no es posible — en ese caso
+     ambiguo (ej. `--workspace .`) la función NO excluye (conservador: más
+     vale evaluar de más que dejar pasar algo real). 4 tests nuevos en
+     `runtime.rs` (RED confirmado antes, GREEN después): archivo fuera del
+     workspace no dispara ninguna regla; archivo absoluto DENTRO del
+     workspace sigue disparando igual que antes; ruta relativa (la forma
+     que usa cada test preexistente del módulo) no se ve afectada.
+     Verificado además contra el binario real: `/tmp/archivo-externo.dart`
+     (con `--workspace` absoluto, la forma real en que se invoca en
+     producción) ya no bloquea; el mismo archivo real dentro del workspace
+     sigue bloqueando exit 2, sin regresión. `cargo test --workspace
+     --locked`, `clippy -D warnings`, `fmt --check` verdes.
 - **H-017** (entrega de contenido de Skill rota fuera de la raíz del
   workspace) → RESUELTO (2026-08-10). Reportado en vivo por el usuario: una
   sesión `keel claude` real en `keel-workflow` no pudo cargar `keel_tdd`

@@ -124,6 +124,24 @@ pub fn evaluate_event(
     out
 }
 
+/// True when `file` is an absolute path that does NOT fall under
+/// `workspace_root` — i.e. content a client edited that isn't part of the
+/// governed project at all (e.g. Claude Code's own `~/.claude/plans/*.md`
+/// Plan Mode scratch file). A relative `file` is workspace-relative by
+/// definition and never counts as outside. `workspace_root` is never
+/// canonicalized anywhere in this codebase, so a relative root (the "." a
+/// test or a loose CLI invocation might pass) can't be compared reliably
+/// either — in that ambiguous case this returns `false` (don't exclude)
+/// rather than risk silently dropping a legitimate in-workspace rule.
+/// Deliberately lexical, no filesystem access: matches the "Phase 0
+/// simplicity" already established for glob scope matching.
+fn file_is_outside_workspace(file: &str, workspace_root: &Path) -> bool {
+    let file_path = Path::new(file);
+    file_path.is_absolute()
+        && workspace_root.is_absolute()
+        && !file_path.starts_with(workspace_root)
+}
+
 fn evaluate_rule(
     snapshot: &Snapshot,
     rule: &CompiledRule,
@@ -131,6 +149,16 @@ fn evaluate_rule(
     ctx: ExecContext<'_>,
     mode: Mode,
 ) -> Option<Evaluation> {
+    // 0. Workspace boundary: a rule governs the PROJECT's own content — a
+    //    file a client happened to edit outside the workspace root is out
+    //    of scope for ANY rule, whether or not it declares an explicit
+    //    `scope` block (a rule with none currently matches everything).
+    if let Some(file) = event.file.as_deref()
+        && file_is_outside_workspace(file, ctx.workspace_root)
+    {
+        return None;
+    }
+
     // 1. Scope: the rule does not apply outside its coverage (D1 of section 7.4).
     if let Some(scope) = &rule.scope
         && !scope.matches(event.file.as_deref(), event.language.as_deref())
