@@ -251,8 +251,9 @@ machine authoring for a Keel workspace must follow it.
 Scoring (for intuition): structured context (3) > explicit term (2) > derived
 term (1); ties break by specificity (more declared conditions win). An agent
 declares the same `match` block; agents are exposed as suggestions, never
-auto-invoked. **Governed components** (Blueprint, Knowledge, Workflow…) take the
-same `description` + `match`, so a blueprint is surfaced at the right moment too.
+auto-invoked. **Governed components** (Knowledge, Workflow…) take the
+same `description` + `match`, so a knowledge/workflow component is surfaced at
+the right moment too.
 
 **Opportune delivery (D-016).** keel surfaces the relevant resources not only on
 the prompt but at each MOMENT — a file edit, a command, any tool, session start —
@@ -441,11 +442,9 @@ platforms/
 ├── flutter/            # namespaced by technology
 │   ├── rules/          # e.g. widget-classes, no-DI-in-VMs (scope: languages:[dart])
 │   ├── skills/         # e.g. keel_flutter_adaptive_ui  (match: terms:[flutter,adaptive])
-│   ├── blueprints/
 │   ├── knowledge/
 │   └── tools/
 └── rust/
-    ├── blueprints/
     ├── rules/          # scope: languages:[rust]
     └── skills/
 ```
@@ -460,7 +459,7 @@ platforms/
   ```
 
 - What keeps individual components precise is still each component's own
-  declaration: a rule scopes to `languages: [dart]`, a skill/blueprint declares
+  declaration: a rule scopes to `languages: [dart]`, a skill declares
   `match`. So author those — an unscoped rule in a selected platform can still
   fire broadly inside that platform.
 - Same `rules/ skills/ agents/ knowledge/ tools/` convention as any layer.

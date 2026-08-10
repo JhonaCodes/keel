@@ -162,7 +162,7 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
     }
 
     // Opportune delivery (D-016): a pre-action tool moment that did NOT block is
-    // the moment to hand the model the relevant rules/skills/agents/blueprints —
+    // the moment to hand the model the relevant rules/skills/agents/knowledge —
     // "you're about to touch this, keel has these". Uses the file content / the
     // command as the moment text; emits `additionalContext` without a permission
     // decision, so the client's own approval flow is untouched.
@@ -195,7 +195,7 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
 /// 1. Rule enrichment (D-013): a matched rule's tool output — the task already
 ///    deserialized (a decomposed ticket, a PR).
 /// 2. Routed catalog (D-014/D-016): the ranked, relevant skills / agents /
-///    governed components (blueprints, knowledge…) for `moment` — "you're about
+///    governed components (knowledge, workflows…) for `moment` — "you're about
 ///    to touch this, keel has these" — plus any skill a matched rule asked to
 ///    load (`enforcement.*.load.skills`). An `autoload` skill is injected whole.
 ///
@@ -291,7 +291,7 @@ fn emit_delivery(
 
 /// Renders the routed capabilities into one context block: a token-thrifty
 /// catalog (id + description + trigger) the model can pull from — skills, agents
-/// and other governed components (blueprints, knowledge…) — plus the skills a
+/// and other governed components (knowledge, workflows…) — plus the skills a
 /// matched rule attached, and the full content of any `autoload` skill. `None`
 /// when there is nothing to surface.
 fn routed_catalog_block(
@@ -340,7 +340,9 @@ fn routed_catalog_block(
     }
 
     if !routed.components.is_empty() {
-        lines.push("\nBlueprints/knowledge (consultá con keel.blueprints):".to_string());
+        lines.push(
+            "\nOtros componentes gobernados (knowledge/workflows/contracts/...):".to_string(),
+        );
         for c in &routed.components {
             let desc = snapshot
                 .components

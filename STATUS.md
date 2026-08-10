@@ -66,15 +66,16 @@ Detalle completo, criterio de aceptación y test de cada uno en
 [`PLAN_MAESTRO.md`](docs/planificacion/ordenes_trabajo/PLAN_MAESTRO.md) —
 esta lista es solo un puntero, no se duplica el contenido:
 
-- El shim de PATH solo cubre `DEFAULT_SHIM_COMMANDS` — ver H-008.
-- `MCPProvider`/`Hook` se compilan pero sin transport/dispatcher propio —
-  ver H-011 (MCPProvider) / H-005 (Hook, backlog).
-- `Workflow`/`Contract`/`Policy`/`AgentRoutingPolicy`/`Blueprint` se
-  parsean y validan pero sin lógica de evaluación dedicada — ver H-012
-  (Blueprint) / H-002 (Contract, backlog).
+- `Hook` se compila pero sin transport/dispatcher propio — ver H-005 (backlog).
+- `Workflow`/`Contract`/`Policy`/`AgentRoutingPolicy` se parsean y validan
+  pero sin lógica de evaluación dedicada — ver H-002 (Contract, backlog).
 - `RuntimeHost`/`Phase`/`PhaseController` no están en el camino de
-  producción — ver H-001 (superado) / H-010 (rediseño vigente).
+  producción — ver H-001 (superado). La fase TDD/SDD real se deriva como
+  contenido (Rules) en `keel-workflow`, no en el motor — no es una brecha
+  del motor, ver `PLAN_MAESTRO.md` sección "Cerrado/superado" (H-010).
 - Instalador es build-from-source, sin distribución firmada — ver H-007.
+- `kind: Blueprint` fue eliminado del todo (no deprecado): 0 componentes
+  activos tras la migración de `keel-workflow` a `Skill` — ver H-012.
 
 Por estas limitaciones, el baseline es operativo y testeable de punta a
 punta (ver `examples/starter-workspace/` para un workspace de arranque con

@@ -25,6 +25,27 @@ fn rule_without_provenance_is_rejected() {
     );
 }
 
+/// `Blueprint` was removed as a kind (H-012: 0 active components after the
+/// keel-workflow migration to `Skill`) — it is rejected exactly like any
+/// other nonexistent kind, `UnsupportedKind`, not a special case.
+#[test]
+fn blueprint_kind_is_rejected_like_any_unsupported_kind() {
+    let raw: serde_json::Value = serde_json::from_str(
+        r#"{
+              "apiVersion": "keel/v1alpha1",
+              "kind": "Blueprint",
+              "metadata": { "id": "x" },
+              "spec": { "content": "x.md" }
+            }"#,
+    )
+    .unwrap();
+    let err = validate("Blueprint", &raw).unwrap_err();
+    assert!(
+        matches!(&err, DslError::UnsupportedKind(k) if k == "Blueprint"),
+        "expected UnsupportedKind(\"Blueprint\"), got: {err:?}"
+    );
+}
+
 /// Unknown fields are rejected: this is how Phase 0a detects that a real
 /// gate uses vocabulary the DSL does not yet express (instead of
 /// swallowing it silently — the failure mode Keel fights).

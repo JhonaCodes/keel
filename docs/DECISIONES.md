@@ -36,7 +36,7 @@ Evidencia: `crates/keel-runtime/src/lib.rs`, `crates/keel-runtime/src/executor.r
 
 ## D-002 Recursos propiedad de Keel
 
-Skills, knowledge, blueprints, agents, workflows, policies, rules, tools, hooks
+Skills, knowledge, agents, workflows, policies, rules, tools, hooks
 internos, providers y executors se resuelven desde el workspace/snapshot de
 Keel. Nada se copia a configuracion o archivos de instrucciones del proveedor.
 
@@ -348,13 +348,13 @@ desambiguacion).
 
 El invariante 3 manda que "los componentes reutilizables viven en packages
 versionados". En el uso real, la necesidad concreta es agrupar tecnologia
-(Flutter, Rust, React, React Native, Web u otras: rules, skills, blueprints,
+(Flutter, Rust, React, React Native, Web u otras: rules, skills,
 librerias) y seleccionarla por repositorio sin meterla en `global/`.
 
 Decision: `platforms/<tech>/` es una capa de composicion real seleccionada por
 `.keel/project.yaml` (`platforms: [flutter, rust]`). `packages/` puede seguir
 existiendo para bundles que compongan siempre, pero no es la ruta principal para
-reglas/skills/blueprints tecnologicos.
+reglas/skills tecnologicos.
 
 - Posicion: entre Organization y Package en la cadena (el `Ord` derivado de
   `LayerId` ES el orden). La plataforma es mas general que un paquete/proyecto
@@ -363,14 +363,13 @@ reglas/skills/blueprints tecnologicos.
 - Se selecciona explicitamente por binding de repositorio. Lo que lo hace
   seguro dentro de la plataforma sigue siendo que cada componente declara DONDE
   aplica: una rule con `scope: { languages: [dart] }` no dispara fuera de Dart;
-  un skill/agente/blueprint con `match` (D-014) solo aflora en un prompt
-  relevante.
+  un skill/agente con `match` (D-014) solo aflora en un prompt relevante.
 - Reutilizacion, no copia (invariante 2): el contenido de una tecnologia vive
   una vez y compone para todo proyecto, en vez de duplicarse por proyecto.
 
 Convencion: `platforms/flutter/`, `platforms/rust/`, `platforms/react-native/`,
-cada uno con la convencion usual `rules/ skills/ agents/ knowledge/ tools/
-blueprints/`. Versionado por componente via `metadata.version` hasta que llegue
+cada uno con la convencion usual `rules/ skills/ agents/ knowledge/ tools/`.
+Versionado por componente via `metadata.version` hasta que llegue
 el pinning cross-workspace.
 
 Evidencia: `crates/keel-engine/src/workspace.rs` (`LayerId::Platform` en el
@@ -389,7 +388,7 @@ contexto, reglas, skills, agents en su momento adecuado, que no omita lo que se
 necesita"). Hasta D-014, keel entregaba contexto SOLO en el prompt (enrichment) o
 en un BLOCK (packet). El resto de los momentos quedaban sin cobertura: al editar
 Dart, al correr un comando, al usar un tool nativo, el modelo no recibia la regla/
-skill/blueprint relevante salvo que bloqueara. Ese es el hueco que las reglas
+skill relevante salvo que bloqueara. Ese es el hueco que las reglas
 advisory nunca cierran (llegan tarde o no llegan).
 
 Decision: keel entrega el recurso relevante EN CADA MOMENTO, de forma no
@@ -412,9 +411,9 @@ bloqueante y sin tocar el flujo de permisos del cliente.
   adjunto (`enforcement.*.load.skills`, incluida la rama `always` de activacion
   cognitiva). Un emisor unico (`emit_delivery`) lo manda por el canal del momento.
 - Enrutar TODOS los kinds: el `match`/routing se extiende del par skills+agents al
-  mapa `components` (blueprints, knowledge, workflows). `route` devuelve
+  mapa `components` (knowledge, workflows, ...). `route` devuelve
   `RouteResult { skills, agents, components }`. Asi "vas a tocar X" surface el
-  blueprint/knowledge relevante, no solo skills.
+  componente relevante, no solo skills.
 - Sin re-enviar: reusa `deliver_skills` (no re-manda lo ya cargado, re-entrega en
   oscilacion). El bloqueo duro y la captura PostToolUse quedan para una fase
   posterior (este cambio es entrega-primero).

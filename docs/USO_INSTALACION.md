@@ -88,7 +88,7 @@ model judgment involved in WHETHER or WHEN they fire):
   relevant, ranked context before the model even starts reasoning.
 - **Opportune delivery at every moment, not just the prompt** (D-016): a
   file edit, a command, or an unmapped tool call each surface the relevant
-  skill/agent/rule/blueprint right then — non-blocking, so it never
+  skill/agent/rule right then — non-blocking, so it never
   overrides your own permission prompts.
 
 Options:

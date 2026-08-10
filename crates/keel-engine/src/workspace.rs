@@ -110,12 +110,11 @@ pub enum WorkspaceError {
 /// flat (single-layer) workspace. `tests/` is deliberately EXCLUDED: the
 /// section 8.5 layered layout carries a workspace-level `tests/` at the root
 /// alongside the layer directories, so it must not be read as a flat marker.
-const FLAT_MARKER_SUBDIRS: [&str; 12] = [
+const FLAT_MARKER_SUBDIRS: [&str; 11] = [
     "rules",
     "tools",
     "skills",
     "agents",
-    "blueprints",
     "knowledge",
     "workflows",
     "contracts",
@@ -169,7 +168,6 @@ pub fn load_components(dir: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
         ("tools", "Tool"),
         ("skills", "Skill"),
         ("agents", "Agent"),
-        ("blueprints", "Blueprint"),
         ("knowledge", "Knowledge"),
         ("workflows", "Workflow"),
         ("contracts", "Contract"),
@@ -195,9 +193,6 @@ pub fn load_components(dir: &Path) -> Result<WorkspaceFiles, WorkspaceError> {
                     (Document::AgentRoutingPolicy(x), "Agent") => files
                         .components
                         .push(("agent-routing-policy".to_string(), *x)),
-                    (Document::Blueprint(x), "Blueprint") => {
-                        files.components.push(("blueprint".to_string(), *x))
-                    }
                     (Document::Knowledge(x), "Knowledge") => {
                         files.components.push(("knowledge".to_string(), *x))
                     }
