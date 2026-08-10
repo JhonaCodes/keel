@@ -42,27 +42,17 @@ Resumen — el detalle completo vive en `STATUS.md`, no se duplica acá:
   resultado real (`is_test_runner`/`test_outcome_content` en
   `crates/keel-cli/src/gate.rs`), consumido por la precondición builtin
   `evidence.recorded`.
+- **Gate genérico de escritura por Bash** (`keel-workflow/global/rules/
+  bash-write-guard.yaml` + `tools/bash-write-guard.py`) — cierra el bypass de
+  `echo/sed -i/tee/cp/install/truncate > archivo.{rs,dart,py,ts,...}`
+  evadiendo `file.edited`. Resuelto **sin cambios de motor**: el puente de
+  hook (`command.requested`) ya ve TODOS los comandos Bash, no solo los del
+  shim de PATH — una `Rule`+`Tool` de contenido alcanza. Ver H-008 en
+  "Cerrado/superado".
 
 ## 3. Roadmap activo
 
 Cada ítem: problema, enfoque, criterio de aceptación + test, referencias.
-
-### H-008 [P0] Bypass de Bash / gate genérico de escritura
-
-**Problema:** el shim de PATH solo cubre `DEFAULT_SHIM_COMMANDS` (`rm`,
-`unlink`, `mv`, `git`, `dd`, `shred`, `crates/keel-engine/src/adapter.rs`).
-Confirmado EN VIVO (2026-08-09, sesión real `keel claude`, no simulado): un
-`echo "..." > archivo` evade por completo el canal `file.edited`, invalidando
-CUALQUIER regla de contenido — incluidas `pattern-guard`/`rn-guard`, ya
-shippeadas en `keel-workflow`.
-
-**Enfoque:** extender la clasificación de comandos de escritura (`sed -i`,
-`tee`, `cp`, `install`, `truncate`, redirección de shell) más allá de la
-lista fija, o interceptar el patrón de escritura genérico en el broker.
-
-**Aceptación + test:** un RuleTest que ejecuta `echo x > notas.md` bajo una
-regla equivalente a `file.edited` queda BLOQUEADO igual que un `Edit`/`Write`
-real. Test en `test/tests/host_launch.rs` o `gate_hook.rs`.
 
 ### H-009 [P1] Captura de resultado de Task-tool/subagente
 
@@ -214,6 +204,16 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 5. Cerrado / superado (registro de auditoría)
 
+- **H-008** (bypass de Bash / gate genérico de escritura) → RESUELTO — ver
+  detalle en Sección 2 (Baseline). El fix real terminó siendo del lado de
+  contenido (`keel-workflow`), no del motor: el enfoque que este documento
+  proponía originalmente (extender `DEFAULT_SHIM_COMMANDS`) no hizo falta,
+  porque el puente de hook por cliente ya observa `command.requested` para
+  CUALQUIER Bash, sin depender de la lista fija del shim de PATH. Alcance
+  real: cubre extensiones de código fuente (`.rs/.dart/.py/.ts/...`), no
+  archivos arbitrarios — suficiente para el caso que importa (proteger
+  `pattern-guard`/`rn-guard`/reglas de contenido de código), no exhaustivo
+  para cualquier tipo de archivo.
 - **H-001** (workflow de 8 fases, `PhaseController` no conectado) →
   SUPERADO por H-010: rediseño desde cero con la taxonomía RED/GREEN real
   de jflow, no la de RCCA (`Investigation/Planning/.../Delivery`).
@@ -240,8 +240,8 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 6. Orden sugerido
 
-- H-008 primero — bloquea la confianza en TODA regla de contenido existente
-  y futura.
+- H-009 primero — desbloquea H-010 y es la brecha activa más importante que
+  queda (H-008 ya está resuelto).
 - H-009 antes de H-010 — las fases audit/verify de H-010 derivan de la
   evidencia que aporta H-009.
 - H-011 y H-013 son independientes entre sí y del resto.
