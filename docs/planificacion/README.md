@@ -22,6 +22,5 @@ Esta carpeta contiene las reglas de planificación y las órdenes de trabajo del
 
 ## Órdenes de trabajo
 
-- `ordenes_trabajo/PLAN_MAESTRO.md`: secuencia de implementación y estado honesto.
+- `ordenes_trabajo/PLAN_MAESTRO.md`: secuencia de implementación, roadmap activo y estado honesto (incluye desviaciones, límites y deuda explícita).
 - `ordenes_trabajo/PRUEBAS_Y_ACEPTACION.md`: pruebas, gates y criterios de entrega.
-- `ordenes_trabajo/HALLAZGOS.md`: desviaciones, límites y deuda explícita.

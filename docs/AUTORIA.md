@@ -12,8 +12,10 @@ tokens), not a model call.
 Minimum flow after authoring anything:
 
 ```bash
+keel test --workspace <ws>      # runs RuleTests against a staging snapshot, no publish — cheapest gate while iterating
 keel compile --workspace <ws>   # validates schema + runs RuleTests + publishes snapshot
 keel lock --workspace <ws>      # fixes lock to snapshot (drift detectable with --verify)
+keel bind --workspace <ws> .    # (once per repo) writes .keel/project.yaml — the repo stores binding + lock only, never definitions
 ```
 
 Layers live in `global/` (applies everywhere), `projects/<name>/` (that project
@@ -422,7 +424,7 @@ spec:
 
 ---
 
-## Where technology content goes — the `platforms/` layer
+## Where technology content goes — the `platforms/` layer (D-015)
 
 Reusable content for ONE technology lives in a selected platform layer
 (invariant 3: reusable components are not copied per project — invariant 2):

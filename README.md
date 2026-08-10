@@ -93,6 +93,3 @@ cargo clippy --workspace --all-targets -- -D warnings
 - **[Runtime Contracts](docs/CONTRATOS_RUNTIME.md)** — behavioral specifications
 - **[Component Authoring](docs/AUTORIA.md)** — how to create rules, skills, agents, and workflows
 - **[Master Plan](docs/planificacion/ordenes_trabajo/PLAN_MAESTRO.md)** — work order and limits
-
-For more on the RACC architecture:
-- **[RACC Reference Architecture](docs/RACC_reference_architecture_v0_9_1.md)** — complete specification (v0.9.1)

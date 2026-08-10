@@ -22,7 +22,7 @@ RuntimeHost -> verifica -> capability/agent broker -> evidencia -> siguiente fas
 
 Los hooks de Claude Code, configuraciones del cliente y MCP no son el plano de control.
 
-Evidencia: `crates/keel-runtime/src/lib.rs`, `crates/keel-runtime/src/executor.rs` y la seccion 6.2 de `docs/RACC_reference_architecture_v0_9_1.md`.
+Evidencia: `crates/keel-runtime/src/lib.rs`, `crates/keel-runtime/src/executor.rs`.
 
 > **Nota de estado (verificar antes de confiar en este parrafo).** `RuntimeHost`
 > y su `PhaseController` (`crates/keel-runtime/src/{lib,phase}.rs`) existen y

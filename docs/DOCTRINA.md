@@ -43,3 +43,12 @@ tocarlo: el broker de shims evalúa reglas (`evaluate_event`, 0 tokens) y el
 sandbox del SO impone el anillo duro. El modelo solo entra donde la spec lo
 marca semántico, y su salida se valida contra un contrato antes de confiarse.
 El compilador, el lock, el snapshot y el scheduling son **código determinista**.
+
+La misma lógica gobierna QUÉ se le entrega al modelo, no solo qué se le
+bloquea: el enrutado de skills/reglas/agentes es determinista y auditable
+(`match{terms,context,autoload}`, derivación de términos por el compilador —
+D-014), no bolsa-de-palabras ni semántica difusa. La entrega en sí ocurre en
+cada momento relevante (`SessionStart`, edición de archivo, comando, prompt),
+no solo al inicio de la sesión (D-013, D-016) — "tener una regla disponible"
+y "que se entregue en el momento correcto" son dos garantías distintas, y
+ambas son código determinista, no criterio del modelo.

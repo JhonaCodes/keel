@@ -3,11 +3,9 @@
 Este directorio separa la documentación estable del proyecto de las órdenes de trabajo activas.
 
 > **Estado actual (D-012).** Keel es un runtime PADRE sobre el CLI del modelo,
-> sin APIs de proveedor. Para el modelo y el flujo REALES, la fuente de verdad
-> hoy es [`DECISIONES.md`](DECISIONES.md) (D-012) + [`USO_INSTALACION.md`](USO_INSTALACION.md)
-> + [`DOCTRINA.md`](DOCTRINA.md). Los documentos marcados abajo con "(banner
-> D-012)" conservan el diseño anterior por API con una corrección al tope; su
-> reescritura integral es trabajo pendiente registrado en PRUEBAS_Y_ACEPTACION.
+> sin APIs de proveedor. Toda la documentación de este directorio está
+> alineada con esa arquitectura (reescrita 2026-08-10) — no quedan banners de
+> corrección pendiente.
 
 ## Documentación del proyecto
 
@@ -16,19 +14,17 @@ Este directorio separa la documentación estable del proyecto de las órdenes de
 - [`AUTORIA.md`](AUTORIA.md): cómo crear cada tipo (Rule, Tool, Containment, Skill, Agent, ModelExecutor, RuleTest, Exception) — ejemplos copiables para humano o IA.
 - [`DOCTRINA.md`](DOCTRINA.md): herramientas en frío antes que IA.
 - [`CONTENCION_MULTIPLATAFORMA.md`](CONTENCION_MULTIPLATAFORMA.md): matriz macOS/Linux/Windows del anillo duro (Seatbelt/Landlock/WSL2) y plan de F2b.
-- [`PROYECTO.md`](PROYECTO.md): descripción del proyecto (banner D-012).
-- [`ARQUITECTURA_RUNTIME.md`](ARQUITECTURA_RUNTIME.md): arquitectura técnica (banner D-012).
-- [`CONTRATOS_RUNTIME.md`](CONTRATOS_RUNTIME.md): operaciones, executors y scheduler (banner D-012).
-- [`RACC_reference_architecture_v0_9_1.md`](RACC_reference_architecture_v0_9_1.md): especificación normativa RACC/Keel (banner D-012).
+- [`PROYECTO.md`](PROYECTO.md): descripción del proyecto.
+- [`ARQUITECTURA_RUNTIME.md`](ARQUITECTURA_RUNTIME.md): arquitectura técnica.
+- [`CONTRATOS_RUNTIME.md`](CONTRATOS_RUNTIME.md): operaciones, executors y scheduler.
 
 ## Órdenes de trabajo
 
 Las órdenes de trabajo viven exclusivamente en [`planificacion/ordenes_trabajo/`](planificacion/ordenes_trabajo/). No deben mezclarse con la documentación estable.
 
 - [`planificacion/README.md`](planificacion/README.md): reglas para cualquier LLM que trabaje con documentación.
-- [`planificacion/ordenes_trabajo/PLAN_MAESTRO.md`](planificacion/ordenes_trabajo/PLAN_MAESTRO.md): secuencia y estado de implementación.
+- [`planificacion/ordenes_trabajo/PLAN_MAESTRO.md`](planificacion/ordenes_trabajo/PLAN_MAESTRO.md): secuencia de implementación, roadmap activo y estado honesto (incluye desviaciones, límites y deuda explícita).
 - [`planificacion/ordenes_trabajo/PRUEBAS_Y_ACEPTACION.md`](planificacion/ordenes_trabajo/PRUEBAS_Y_ACEPTACION.md): criterios de aceptación y gates.
-- [`planificacion/ordenes_trabajo/HALLAZGOS.md`](planificacion/ordenes_trabajo/HALLAZGOS.md): desviaciones, riesgos y límites pendientes.
 
 ## Regla de navegación
 

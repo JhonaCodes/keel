@@ -2,8 +2,7 @@
 
 Starts from `0.11.0` forward — not a retroactive reconstruction of the
 whole project history (that lives in `git log`). Versions here track
-`Cargo.toml`'s workspace `version`, which is independent of the "spec
-version" used by `docs/RACC_reference_architecture_v0_9_1.md`.
+`Cargo.toml`'s workspace `version`.
 
 ## 0.16.0
 

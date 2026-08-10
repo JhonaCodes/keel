@@ -1,13 +1,3 @@
-> **CORRECTION (D-012, 2026-08-07).** This document describes, in parts, the
-> design of "session owned by Keel via provider API" (RuntimeHost ->
-> ModelExecutor -> API). That direction was REVERTED: **Keel is a PARENT
-> runtime that governs the EXECUTION ENVIRONMENT of the model's CLI and does NOT
-> use provider APIs.** Where this text speaks of calling the model's API, of
-> `keel run`, or of `keel configure executor`, it is OBSOLETE — see
-> `DECISIONES.md` (D-012 a-d) and the real flow in `USO_INSTALACION.md`. The
-> full rewrite of this document to parent-runtime architecture is pending work
-> (not an oversight).
-
 # Runtime Contracts
 
 ## Operations
@@ -70,51 +60,73 @@ when attempting to advance.
 
 ## Phases and Artifacts
 
-```text
-investigation -> planning -> implementation -> verification
-              -> audit -> resolution -> acceptance -> delivery
-```
+The concrete sequence implemented by `PhaseController`/`RuntimeStore` today
+(`investigation -> planning -> implementation -> verification -> audit ->
+resolution -> acceptance -> delivery`) predates the parent-runtime pivot and
+is NOT wired into production (`keel-host`/`keel-cli` don't import
+`RuntimeHost`). It is being replaced by a phase design authored with jflow's
+real vocabulary (analysis/red/green/refactor/audit/verify/done), derived as
+events from ledger evidence rather than tracked as separate state — see
+`planificacion/ordenes_trabajo/PLAN_MAESTRO.md#H-010`. The artifact-per-phase
+CONTRACT SHAPE described below is durable and architecture-agnostic; only the
+specific phase names above are superseded.
 
-Each transition requires a valid artifact: Investigation Report, Solution
-Contract, Implementation Record, Evidence Report, Audit Report, Resolution
-Record, and Acceptance Record. Each type can only be registered in its owning
-phase, so a future phase cannot be preloaded. Keel validates content via JSON
-Schema, calculates canonical hash, and registers both the artifact receipt and
-transition receipt before changing state in memory.
+Each transition requires a valid artifact (one type per phase, e.g.
+Investigation Report, Solution Contract, Implementation Record, Evidence
+Report, Audit Report, Resolution Record, Acceptance Record — names will
+follow whatever phase set H-010 lands on). Each type can only be registered
+in its owning phase, so a future phase cannot be preloaded. Keel validates
+content via JSON Schema, calculates canonical hash, and registers both the
+artifact receipt and transition receipt before changing state in memory.
 
 Transitions cannot skip phases. On restore, Keel verifies the order and that each
 transition points to the valid artifact that enabled it; manipulated history fails
 closed.
 
 Current state: schemas are delivered to the runtime validation API. Resolving them
-exclusively from contracts compiled in the snapshot remains pending.
+exclusively from contracts compiled in the snapshot remains pending — see
+`planificacion/ordenes_trabajo/PLAN_MAESTRO.md#H-002`.
 
 ## ModelExecutor
 
-The executor receives normalized `ModelRequest` and returns normalized
-`ModelResponse`. It exposes provider/model, completion, and cancellation. It
-does not decide skills, policies, phases, capabilities, shell, filesystem, MCP,
-or agents.
+The executor runs a LOCAL command and returns its output — no HTTP request to
+any model provider. It exposes the local command spec (`config.command`,
+`config.env`) and cancellation. It does not decide skills, policies, phases,
+capabilities, shell, filesystem, MCP, or agents.
 
-The request's `session_id` must match the `RuntimeHost`; a cross-request is
+The request's `session_id` must match the running session; a cross-request is
 rejected before reaching the executor.
 
-Implemented: `MockModelExecutor`, Anthropic Messages, and OpenAI Responses. HTTP
-drivers translate messages, tools, text, and tool calls to the normalized
-contract. Interactive CLIs are not canonical runtime nor remain as an alternative
-mode. Smoke tests with real providers require operator credentials.
+Implemented: `MockModelExecutor` (tests) and `CliModelExecutor` — the only
+non-mock executor, confined to `cwd=root`, `env_clear()` + declared
+`config.env`, running the local CLI command (`crates/keel-runtime/src/
+executor.rs`). This is how the interactive model CLI itself (`claude -p`,
+`codex exec`) is invoked when Keel needs to run one as a governed AGENT
+(distinct from the interactive session the operator drives via `keel
+claude`/`keel codex`, which wraps the CLI via PTY, not via `ModelExecutor`).
 
-## AgentScheduler
+## AgentScheduler / agent.invoke
 
-Target contract: each task has id, session, project, parent, depth, agent id,
-executor id, budget, state, and lease. States: `pending`, `claimed`, `running`,
-`completed`, `failed`, `cancelled`. The scheduler must limit concurrency and
-prevent duplicate claims via SQLite transaction and recoverable lease.
+`keel.agent.invoke` (served by the MCP server, `crates/keel-host/src/
+mcp.rs`) resolves `Agent -> ModelExecutor (CliModelExecutor) -> lease via
+AgentScheduler -> validates result against outputSchema -> returns to
+caller`. This is how agents are actually invoked today — cross-model (a
+Claude parent session can invoke a Codex-executed agent, deterministically,
+without any provider API).
+
+Scheduler contract: each task has id, session, project, parent, depth, agent
+id, executor id, budget, state, and lease. States: `pending`, `claimed`,
+`running`, `completed`, `failed`, `cancelled`. The scheduler limits
+concurrency and prevents duplicate claims via SQLite transaction and
+recoverable lease.
 
 Current state: the SQLite queue can be durable or in-memory, applies a global
 limit, makes transactional claim, renews leases, and recovers tasks whose lease
 expires. It doesn't yet model per-project/session limits, depth, fan-out, graph,
-budgets, priorities, or cascading cancellation.
+budgets, priorities, or cascading cancellation — see
+`planificacion/ordenes_trabajo/PLAN_MAESTRO.md#H-003`. Agent subprocesses are
+confined by `cwd`/`env` today, not yet wrapped in the full shim+sandbox ring
+— see `#H-015`.
 
 The child agent receives only declared context, skills, capabilities, credentials,
 and budget. Implicit inheritance is forbidden.
@@ -122,21 +134,35 @@ and budget. Implicit inheritance is forbidden.
 ## Governed CLI
 
 ```text
-keel init <workspace> --executor mock [--json]
-keel configure executor add|list|test|remove|default
+keel init <workspace> [--json]
+keel bind <workspace> [--json]
+keel compile <workspace> [--json]
+keel test <workspace> [--json]
+keel lock <workspace> [--verify] [--json]
 keel doctor --workspace <workspace> --governed [--json]
-keel run --workspace <workspace> --task <text> [--executor <id>] [--json]
-keel run --workspace <workspace> --resume <session-id> [--json]
+keel claude|codex -- [args...]
+keel launch --client generic -- <cmd>
+keel gate --client <claude-code|codex> < hook-payload.json
+keel mcp --workspace <workspace> --session <id>
+keel knowledge append|verify
+keel ci resolve|run
+keel use <workspace>
 ```
 
-`init` leaves valid snapshot, lock, mock config, and store. `run` only accepts
-executors resolved by Keel config, requires lock and snapshot to match, creates
-session identity, and emits state, phase, snapshot, and executor. Task and
-executor are persisted. `resume` continues from durable phase, rejects snapshot
-drift, and does not allow replacing the fixed executor.
+`init` leaves valid snapshot, lock, and store, with no default rules (Keel
+ships nothing by design). `bind` associates a repo to a project — the repo
+only ever stores binding + lock, never definitions. `compile`/`test`/`lock`
+validate the workspace and fix resolution, shared between local and CI.
+`claude`/`codex`/`launch` start a governed session: the client CLI runs as
+the child, wrapped in PTY passthrough, with the shim, hook bridge, and
+sandbox wired in before the child process starts. `gate` and `mcp` are the
+two channels the child CLI uses to talk to Keel (hook bridge and MCP
+server, respectively) — not invoked directly by the operator.
 
-Current exit codes: `0` completed and `1` error, denial, or unfinished session.
-Differentiated codes for denial/approval remain pending.
+Current exit codes: `0` completed and `1` error/denial. A blocked action
+inside a governed session exits `2` (see `keel gate`'s doc comment in
+`crates/keel-cli/src/gate.rs`). Differentiated codes for every denial/approval
+case remain pending.
 
 ## Secrets
 

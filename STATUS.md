@@ -62,22 +62,19 @@
 
 ## Límites pendientes / brechas conocidas
 
-- `MCPProvider` y `Hook` se compilan como componentes (parseados, hasheados
-  en el snapshot) pero aún no tienen transport/dispatcher de producción
-  propio — están representados, no ejecutados.
+Detalle completo, criterio de aceptación y test de cada uno en
+[`PLAN_MAESTRO.md`](docs/planificacion/ordenes_trabajo/PLAN_MAESTRO.md) —
+esta lista es solo un puntero, no se duplica el contenido:
+
+- El shim de PATH solo cubre `DEFAULT_SHIM_COMMANDS` — ver H-008.
+- `MCPProvider`/`Hook` se compilan pero sin transport/dispatcher propio —
+  ver H-011 (MCPProvider) / H-005 (Hook, backlog).
 - `Workflow`/`Contract`/`Policy`/`AgentRoutingPolicy`/`Blueprint` se
-  parsean y validan contra el schema compartido, pero no tienen lógica de
-  evaluación dedicada más allá del almacenamiento genérico en el snapshot.
-- `RuntimeHost`/`Phase`/`PhaseController` (`crates/keel-runtime/src/lib.rs`,
-  `phase.rs`) existen y están probados, pero **no están conectados al
-  camino de producción hoy**: ni `keel-host` ni `keel-cli` los importan
-  (verificable con `grep -rln "RuntimeHost" --include="*.rs" .`). El
-  enforcement real es `keel_engine::runtime::evaluate_event`, más simple y
-  sin concepto de fases. Cambiar `config.phases` no altera ningún
-  comportamiento en ejecución real todavía.
-- El instalador actual (`install.sh`) construye desde un checkout fuente;
-  releases firmados y rollback remoto requieren un pipeline de distribución
-  que todavía no existe.
+  parsean y validan pero sin lógica de evaluación dedicada — ver H-012
+  (Blueprint) / H-002 (Contract, backlog).
+- `RuntimeHost`/`Phase`/`PhaseController` no están en el camino de
+  producción — ver H-001 (superado) / H-010 (rediseño vigente).
+- Instalador es build-from-source, sin distribución firmada — ver H-007.
 
 Por estas limitaciones, el baseline es operativo y testeable de punta a
 punta (ver `examples/starter-workspace/` para un workspace de arranque con

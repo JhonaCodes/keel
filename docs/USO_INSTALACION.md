@@ -45,6 +45,15 @@ the LAST line of stdout, not the whole output.
 Workspace resolution order: `--workspace` > `KEEL_WORKSPACE` > walk up from cwd
 to `workspace.yaml` > **the registered default** > error.
 
+To validate changes without a full `doctor` pass, or to associate a repo with
+a workspace so the repo only ever stores binding + lock (never definitions):
+
+```bash
+keel compile ~/keel-workspace            # validates + publishes snapshot
+keel test ~/keel-workspace                # runs RuleTests against a staging snapshot
+keel bind --workspace ~/keel-workspace .  # writes .keel/project.yaml in the current repo
+```
+
 ## Run a Governed CLI
 
 ```bash
@@ -67,7 +76,20 @@ When a client exposes lifecycle hooks, Keel also wires those hooks as transport
 to `keel gate`: Claude through `PreToolUse`, Codex through session-scoped
 `-c hooks.*` overrides, and OpenCode through a per-session plugin loaded from
 `OPENCODE_CONFIG_DIR`. The hook contains no rule logic; enforcement stays in
-Keel.
+Keel. `keel gate` and `keel mcp` are the two channels the child CLI itself
+calls — you don't invoke them directly in normal use; they exist as testable
+subcommands (`keel gate --client native < payload.json` is how you dry-run a
+hook payload while authoring, see `docs/AUTORIA.md`).
+
+Two further things happen on every governed launch, both deterministic (no
+model judgment involved in WHETHER or WHEN they fire):
+
+- **Enrichment on the prompt itself** (D-013): `UserPromptSubmit` carries
+  relevant, ranked context before the model even starts reasoning.
+- **Opportune delivery at every moment, not just the prompt** (D-016): a
+  file edit, a command, or an unmapped tool call each surface the relevant
+  skill/agent/rule/blueprint right then — non-blocking, so it never
+  overrides your own permission prompts.
 
 Options:
 
@@ -108,7 +130,15 @@ Windows = WSL2). See [`CONTENCION_MULTIPLATAFORMA.md`](CONTENCION_MULTIPLATAFORM
 ## Convergence: Skills and Agents Through Keel
 
 On launch, Keel wires its MCP endpoint in the child. The model discovers and loads
-its skills THROUGH Keel (not from its own config):
+its skills THROUGH Keel (not from its own config). WHICH skills/agents are
+relevant to a given prompt or moment is decided declaratively (D-014):
+each skill/agent optionally declares a `match{terms,context,autoload}`
+block, and the compiler derives terms from its `id`+`description` automatically
+where the author doesn't — no embeddings, no bag-of-words, fully auditable
+(the delivered context always names the trigger that surfaced it). Content
+scoped to a technology (Flutter, Rust, ...) lives once in
+`platforms/<tech>/` and composes into every project that declares that
+platform (D-015), instead of being duplicated per project:
 
 - `keel.skills.list` — catalog of governed skills + load state.
 - `keel.skills.load` — delivers content to context and registers receipt.
