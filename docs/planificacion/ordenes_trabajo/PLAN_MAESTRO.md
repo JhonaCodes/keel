@@ -234,6 +234,42 @@ Abierto, no perdido, no activo ahora mismo:
   contenido real de `keel_tdd` (5548 caracteres, sin placeholder) desde
   `keel-workflow`. Pendiente que el usuario reproduzca el caso original en
   una sesión `keel claude` real (no simulado por Claude).
+- **H-018** (Claude nunca dispara `PostToolUse` → captura de evidencia
+  RED/GREEN imposible en sesiones `keel claude`) → RESUELTO (2026-08-10).
+  Reportado en vivo por el usuario, con diagnóstico propio muy detallado
+  (corrido dentro de una sesión `keel claude` real): `require-red-before-
+  write` bloqueaba TODO edit de producción para siempre, incluso después de
+  correr un test real en rojo (`flutter test`, exit 1). Causa raíz
+  confirmada en `crates/keel-host/src/launch.rs::wire_convergence`: el
+  bloque `HookMethod::SettingsFileFlag` (Claude) solo registraba
+  `PreToolUse`/`UserPromptSubmit`/`SessionStart`/`Stop` en el
+  `settings.json` — **`PostToolUse` nunca se registraba para Claude**
+  (sí para Codex, `HookMethod::ConfigOverrideFlags`, que ya lo tenía desde
+  antes). La síntesis de evidencia RED/GREEN (`is_test_runner`/
+  `test_outcome_content` en `gate.rs`) SOLO puede ocurrir en `PostToolUse`
+  (es el único momento en que el exit code y la salida real del test
+  existen) — sin el hook registrado, `keel gate` nunca se invocaba después
+  de que el test corriera, así que el mecanismo (que sí funciona, y sí
+  tiene tests) jamás se ejecutaba en una sesión Claude real. `keel observe`
+  sí lo registra porque es un camino manual separado (passive mode,
+  telemetría) — no sustituye al hook.
+  Diagnóstico correcto en el síntoma y en el mecanismo general; la causa
+  raíz real terminó siendo mucho más simple que la propuesta (no hacía
+  falta un comando nuevo ni cambiar `record-test-result` — ese ya clasifica
+  correctamente por exit code vía `test_outcome_content`, que emite su
+  propio marcador `FAILED`/`passed` en mayúscula/minúscula fijo,
+  independiente de cómo imprima `flutter`/`dart`; el `text.contains
+  "FAILED"` de la regla compara contra ESE marcador, no contra la salida
+  cruda). Fix: agregar `PostToolUse` al bloque de hooks de Claude en
+  `wire_convergence`, mismo matcher catch-all que `PreToolUse`. Test de
+  regresión nuevo (`claude_convergence_writes_a_posttooluse_hook_alongside_
+  pretooluse`, RED confirmado antes del fix, GREEN después) — ningún test
+  existente ejercitaba antes el `settings.json` real generado para Claude,
+  por eso el gap pasó desapercibido pese a que el mecanismo interno ya
+  tenía tests propios. Verificado: `cargo test --workspace --locked`,
+  `clippy -D warnings`, `fmt --check`, todos verdes. Pendiente que el
+  usuario reproduzca el ciclo TDD completo (test rojo → edit permitido →
+  test verde → edit bloqueado de nuevo) en una sesión `keel claude` real.
 - **H-008** (bypass de Bash / gate genérico de escritura) → RESUELTO — ver
   detalle en Sección 2 (Baseline). El fix real terminó siendo del lado de
   contenido (`keel-workflow`), no del motor: el enfoque que este documento

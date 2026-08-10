@@ -329,6 +329,17 @@ fn wire_convergence(
                             "matcher": "",
                             "hooks": [{ "type": "command", "command": command }]
                         }],
+                        // PostToolUse: AFTER a tool finished, catch-all too. This is
+                        // the only moment a Bash test-runner's real exit code and
+                        // output exist — it is how RED/GREEN evidence
+                        // (`test.completed`, gate.rs::is_test_runner) enters the
+                        // ledger. Without this, `evidence.recorded` preconditions
+                        // (e.g. require-red-before-write) can NEVER be satisfied in
+                        // a governed Claude session — not stricter, impossible.
+                        "PostToolUse": [{
+                            "matcher": "",
+                            "hooks": [{ "type": "command", "command": command }]
+                        }],
                         // UserPromptSubmit: keel enriches the prompt with the
                         // output of `prompt.submitted` rules (D-013), so the model
                         // receives the task already deserialized.
@@ -676,5 +687,48 @@ mod tests {
         assert!(script.exists());
         let script = std::fs::read_to_string(script).unwrap();
         assert!(script.contains("gate --client codex"));
+    }
+
+    #[test]
+    fn claude_convergence_writes_a_posttooluse_hook_alongside_pretooluse() {
+        // Regression for a live bug: RED/GREEN evidence capture (test.completed)
+        // is synthesized on PostToolUse for a Bash test-runner (gate.rs). Without
+        // this hook registered, a governed `keel claude` session never calls
+        // `keel gate` after a test finishes, so `require-red-before-write` can
+        // never see the RED evidence and blocks every production-file edit
+        // forever — the TDD gate becomes impossible to satisfy, not just
+        // stricter. PreToolUse alone (blocking) is not enough; delivery of
+        // test outcomes requires the AFTER-the-fact hook too.
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let host_dir = root.join("host");
+        std::fs::create_dir_all(&host_dir).unwrap();
+
+        let manifest = AdapterManifest::for_client("claude").unwrap();
+        let mut env = BTreeMap::new();
+        let argv = wire_convergence(
+            manifest.command.clone(),
+            &mut env,
+            &manifest,
+            &host_dir,
+            root,
+            "session-test",
+            &["keel_verification".into()],
+        )
+        .unwrap();
+
+        let settings_path = argv
+            .iter()
+            .find(|a| a.ends_with("settings.json"))
+            .expect("a --settings-style flag value pointing at the written file");
+        let settings: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(settings_path).unwrap()).unwrap();
+        let hooks = &settings["hooks"];
+        for event in ["PreToolUse", "PostToolUse", "SessionStart", "Stop"] {
+            assert!(
+                hooks[event].is_array(),
+                "expected hooks.{event} to be registered for Claude, got: {hooks}"
+            );
+        }
     }
 }
