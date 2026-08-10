@@ -269,7 +269,34 @@ Abierto, no perdido, no activo ahora mismo:
   tenía tests propios. Verificado: `cargo test --workspace --locked`,
   `clippy -D warnings`, `fmt --check`, todos verdes. Pendiente que el
   usuario reproduzca el ciclo TDD completo (test rojo → edit permitido →
-  test verde → edit bloqueado de nuevo) en una sesión `keel claude` real.
+  test verde → edit bloqueado de nuevo).
+  **Corrección post-fix (mismo día):** el matcher catch-all que habilita
+  `PostToolUse` también disparaba para `Edit`/`Write`/`MultiEdit`, y el
+  parser ya sintetizaba ahí un segundo evento `file.edited` — idéntico
+  bit-a-bit al de `PreToolUse` (`LedgerEntry` no distingue Pre de Post).
+  Cada edición real escribía DOS filas en el ledger para la misma regla.
+  Investigado antes de tocar nada: ningún consumidor de corrección depende
+  de la segunda fila (`evidence.recorded` lee `DISTINCT`), pero sí afecta a
+  dos reales: `rule_stats()` (`keel prune` reporta el doble de evaluaciones
+  de las que hubo) y, más importante, `oscillations()` — el único
+  consumidor del supervisor P3 — cuyo umbral de "3 intentos" se sesga
+  (~1.5-2 intentos reales alcanzan para dispararlo en una regla `file.
+  edited` no bloqueante, y un intento bloqueado aporta 1 fila contra 2 de
+  uno exitoso: ni siquiera comparable). Ningún comentario/test/doc
+  justificaba grabar `file.edited` en Post por mérito propio — D-016
+  (`DECISIONES.md:419`) ya decía que esa captura quedaba diferida "para una
+  fase posterior"; es un efecto lateral del catch-all agregado para Bash,
+  no un diseño. Fix: `PostToolUse` + `Edit`/`Write`/`MultiEdit` (Claude) y
+  `apply_patch`/`Edit`/`Write` (Codex) devuelven `None` desde el parser —
+  mismo camino que una forma de hook no reconocida — sin tocar el brazo de
+  `Bash` (la captura RED/GREEN de H-018 sigue intacta). 5 tests nuevos en
+  `gate.rs` (RED confirmado antes, GREEN después): Post no genera evento en
+  ninguno de los dos clientes, Pre sigue bloqueando igual que antes, Bash
+  test-runner en Post no se tocó. Verificado además contra el binario real
+  en `keel-workflow`: un `Write` por `PostToolUse` no agrega fila al ledger
+  (conteo antes/después idéntico); el mismo `Write` por `PreToolUse` sigue
+  bloqueando y agrega exactamente una fila. `cargo test --workspace
+  --locked`, `clippy -D warnings`, `fmt --check` verdes.
 - **H-008** (bypass de Bash / gate genérico de escritura) → RESUELTO — ver
   detalle en Sección 2 (Baseline). El fix real terminó siendo del lado de
   contenido (`keel-workflow`), no del motor: el enfoque que este documento

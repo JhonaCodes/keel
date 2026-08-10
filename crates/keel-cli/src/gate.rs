@@ -443,6 +443,18 @@ fn parse_claude_code_hook(input: &str) -> Option<(Event, bool)> {
                     Some((ev, pre))
                 }
                 "Edit" | "Write" | "MultiEdit" => {
+                    // PostToolUse fires here too (catch-all matcher, needed for
+                    // Bash test-runner evidence — see the `"Bash"` arm above),
+                    // but a Post file.edited would be a bit-for-bit duplicate of
+                    // the PreToolUse one already evaluated for this same write
+                    // (LedgerEntry carries no Pre/Post marker to tell them
+                    // apart). No consumer needs the second row — evidence.
+                    // recorded reads DISTINCT — while `keel prune`'s stats and
+                    // the P3 supervisor's oscillation threshold both get
+                    // skewed by it. Skip it, same as an unrecognized hook shape.
+                    if !pre {
+                        return None;
+                    }
                     let mut ev = mk(EventKind::FileEdited);
                     ev.file = ti
                         .get("file_path")
@@ -577,6 +589,13 @@ fn parse_codex_hook(input: &str) -> Option<(Event, bool)> {
                     Some((ev, pre))
                 }
                 "apply_patch" | "Edit" | "Write" => {
+                    // See the matching Claude arm above for why PostToolUse is
+                    // skipped here: a bit-for-bit duplicate of the PreToolUse
+                    // file.edited row, needed by no consumer, that skews
+                    // rule_stats()/oscillations().
+                    if !pre {
+                        return None;
+                    }
                     let mut ev = mk(EventKind::FileEdited);
                     ev.content = ti
                         .get("command")
@@ -898,5 +917,83 @@ mod tests {
         let (event, preventable) = parse_codex_hook(&payload).expect("parsed");
         assert_eq!(event.kind, EventKind::CompletionRequested);
         assert!(preventable);
+    }
+
+    // Regression: adding the PostToolUse hook for Claude (H-018) made the
+    // catch-all matcher fire for Edit/Write too, not just Bash — and the
+    // parser already produced a second `file.edited` event on PostToolUse,
+    // identical to the PreToolUse one (LedgerEntry carries no Pre/Post
+    // marker). Every edit wrote two rows for the same rule/file/content,
+    // which inflates `keel prune`'s stats and skews the P3 supervisor's
+    // oscillation threshold (a blocked attempt contributes 1 row, a
+    // successful one contributes 2 — the counts the supervisor compares
+    // aren't even on the same basis). No consumer needs the second row
+    // (evidence.recorded reads DISTINCT), so PostToolUse Edit/Write is
+    // skipped entirely — same path as an unrecognized hook shape.
+    #[test]
+    fn claude_posttooluse_write_produces_no_event() {
+        let payload = serde_json::json!({
+            "hook_event_name": "PostToolUse",
+            "session_id": "s1",
+            "tool_name": "Write",
+            "tool_input": { "file_path": "src/lib.rs", "content": "fn f() {}" },
+            "tool_response": { "success": true }
+        })
+        .to_string();
+
+        assert!(
+            parse_claude_code_hook(&payload).is_none(),
+            "PostToolUse Write must not synthesize a second file.edited event"
+        );
+    }
+
+    #[test]
+    fn claude_pretooluse_write_is_unaffected() {
+        let payload = serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "session_id": "s1",
+            "tool_name": "Write",
+            "tool_input": { "file_path": "src/lib.rs", "content": "fn f() {}" }
+        })
+        .to_string();
+
+        let (event, preventable) = parse_claude_code_hook(&payload).expect("parsed");
+        assert_eq!(event.kind, EventKind::FileEdited);
+        assert!(preventable, "PreToolUse must still be able to block");
+    }
+
+    #[test]
+    fn codex_posttooluse_apply_patch_produces_no_event() {
+        let payload = serde_json::json!({
+            "hook_event_name": "PostToolUse",
+            "session_id": "s1",
+            "tool_name": "apply_patch",
+            "tool_input": { "command": "*** Update File: src/lib.rs\n+fn f() {}\n" },
+            "tool_response": { "success": true }
+        })
+        .to_string();
+
+        assert!(
+            parse_codex_hook(&payload).is_none(),
+            "PostToolUse apply_patch must not synthesize a second file.edited event"
+        );
+    }
+
+    #[test]
+    fn claude_posttooluse_test_runner_bash_is_unaffected() {
+        // The fix must not touch the Bash arm: RED/GREEN evidence capture
+        // (H-018) depends entirely on this still firing.
+        let payload = serde_json::json!({
+            "hook_event_name": "PostToolUse",
+            "session_id": "s1",
+            "tool_name": "Bash",
+            "tool_input": { "command": "cargo test" },
+            "tool_response": { "exit_code": 1, "stdout": "test result: FAILED" }
+        })
+        .to_string();
+
+        let (event, preventable) = parse_claude_code_hook(&payload).expect("parsed");
+        assert_eq!(event.kind, EventKind::TestCompleted);
+        assert!(!preventable);
     }
 }
