@@ -106,11 +106,14 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
     // so a short unique name is enough. Cleaned up on teardown.
     let socket_path = std::env::temp_dir().join(format!("keel-{}.sock", short_id(&session_id)));
     let ledger = Ledger::open(&files.ledger_path())?;
-    // Capture what the announce and sandbox need before the snapshot moves
-    // into the broker: the containment, and the governed skill ids (so keel
-    // can name them to the model up front, not just say "go list them").
+    // Capture what the announce, sandbox, and convergence need before the
+    // snapshot moves into the broker: the containment, the governed skill ids
+    // (so keel can name them to the model up front, not just say "go list
+    // them"), and the compiled components (H-011: resolves configured
+    // `MCPProvider`s for `wire_convergence`).
     let snapshot_containment = snapshot.containment.clone();
     let skill_ids: Vec<String> = snapshot.skills.keys().cloned().collect();
+    let components = snapshot.components.clone();
     let broker = Broker::new(snapshot, ledger, root.clone(), session_id.clone());
     let (join, handle) = spawn_broker(broker, &socket_path)?;
 
@@ -137,10 +140,13 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
         argv,
         &mut env,
         &manifest,
-        &host_dir,
-        &root,
-        &session_id,
-        &skill_ids,
+        ConvergenceContext {
+            host_dir: &host_dir,
+            root: &root,
+            session_id: &session_id,
+            skill_ids: &skill_ids,
+            components: &components,
+        },
     )?;
 
     // The hard ring: wrap argv in the OS sandbox when the snapshot declares a
@@ -201,9 +207,21 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
     })
 }
 
+/// Read-only launch context `wire_convergence` needs, captured before the
+/// snapshot moves into the broker (H-011 added `components` alongside the
+/// pre-existing `skill_ids` — grouped here rather than as more positional
+/// arguments).
+struct ConvergenceContext<'a> {
+    host_dir: &'a std::path::Path,
+    root: &'a std::path::Path,
+    session_id: &'a str,
+    skill_ids: &'a [String],
+    components: &'a BTreeMap<String, keel_engine::snapshot::CompiledComponent>,
+}
+
 /// Wires keel's MCP endpoint into the child per the adapter manifest and
 /// returns the augmented argv. Writes an ephemeral per-session MCP config
-/// under `host_dir`; appends the client's config flag and the "you are
+/// under `ctx.host_dir`; appends the client's config flag and the "you are
 /// governed by keel" announcement. A client with no known wiring (generic)
 /// is returned unchanged — convergence is opt-in there; the hard rings hold
 /// regardless.
@@ -211,11 +229,15 @@ fn wire_convergence(
     mut argv: Vec<String>,
     env: &mut BTreeMap<String, String>,
     manifest: &AdapterManifest,
-    host_dir: &std::path::Path,
-    root: &std::path::Path,
-    session_id: &str,
-    skill_ids: &[String],
+    ctx: ConvergenceContext<'_>,
 ) -> Result<Vec<String>> {
+    let ConvergenceContext {
+        host_dir,
+        root,
+        session_id,
+        skill_ids,
+        components,
+    } = ctx;
     use keel_engine::adapter::{Announce, HookMethod, McpMethod};
 
     if manifest.mcp.is_none() && manifest.hook.is_none() {
@@ -227,50 +249,107 @@ fn wire_convergence(
     let root_str = root.display().to_string();
 
     if let Some(mcp) = &manifest.mcp {
+        // Every configured `MCPProvider` (H-011) wires in ALONGSIDE keel's own
+        // entry, unconditionally — the same way "keel" itself always is.
+        // `wire_convergence` runs at launch time, before any prompt/tool
+        // "moment" text exists to route a `match` block against (D-014), so
+        // there is nothing to condition provider wiring on yet.
+        let mut servers = vec![keel_runtime::McpServerSpec {
+            name: "keel".to_string(),
+            command: vec![
+                keel_bin.clone(),
+                "mcp".to_string(),
+                "--workspace".to_string(),
+                root_str.clone(),
+                "--session".to_string(),
+                session_id.to_string(),
+            ],
+            env: Vec::new(),
+        }];
+        servers.extend(
+            keel_runtime::compiled_mcp_providers(components)
+                .context("convergence: resolving configured MCP providers")?,
+        );
+
         match &mcp.method {
             McpMethod::ConfigFileFlag { flag } => {
                 // Claude-style: a JSON file of MCP servers.
-                let config = serde_json::json!({
-                    "mcpServers": {
-                        "keel": {
-                            "command": keel_bin,
-                            "args": ["mcp", "--workspace", root_str, "--session", session_id],
-                        }
+                let mut mcp_servers = serde_json::Map::new();
+                for server in &servers {
+                    let mut entry = serde_json::json!({
+                        "command": server.command[0],
+                        "args": server.command[1..],
+                    });
+                    if !server.env.is_empty() {
+                        entry["env"] = server
+                            .env
+                            .iter()
+                            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+                            .collect();
                     }
-                });
+                    mcp_servers.insert(server.name.clone(), entry);
+                }
+                let config = serde_json::json!({ "mcpServers": mcp_servers });
                 let path = host_dir.join("mcp.json");
                 std::fs::write(&path, serde_json::to_string_pretty(&config)?)?;
                 argv.push(flag.clone());
                 argv.push(path.display().to_string());
             }
             McpMethod::ConfigOverrideFlag { flag } => {
-                // Codex-style: dotted TOML overrides.
-                let args_toml = format!(
-                    "[\"mcp\",\"--workspace\",\"{root_str}\",\"--session\",\"{session_id}\"]"
-                );
-                argv.push(flag.clone());
-                argv.push(format!("mcp_servers.keel.command=\"{keel_bin}\""));
-                argv.push(flag.clone());
-                argv.push(format!("mcp_servers.keel.args={args_toml}"));
+                // Codex-style: dotted TOML overrides, one triple per server.
+                for server in &servers {
+                    let name = &server.name;
+                    let args_toml = format!(
+                        "[{}]",
+                        server.command[1..]
+                            .iter()
+                            .map(|a| toml_string(a))
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    );
+                    argv.push(flag.clone());
+                    argv.push(format!(
+                        "mcp_servers.{name}.command={}",
+                        toml_string(&server.command[0])
+                    ));
+                    argv.push(flag.clone());
+                    argv.push(format!("mcp_servers.{name}.args={args_toml}"));
+                    if !server.env.is_empty() {
+                        let env_toml = format!(
+                            "{{{}}}",
+                            server
+                                .env
+                                .iter()
+                                .map(|(k, v)| format!("{k}={}", toml_string(v)))
+                                .collect::<Vec<_>>()
+                                .join(",")
+                        );
+                        argv.push(flag.clone());
+                        argv.push(format!("mcp_servers.{name}.env={env_toml}"));
+                    }
+                }
             }
             McpMethod::EnvConfigVar { var } => {
                 // OpenCode-style: runtime config JSON from an environment variable.
+                let mut mcp = serde_json::Map::new();
+                for server in &servers {
+                    let mut entry = serde_json::json!({
+                        "type": "local",
+                        "command": server.command,
+                        "enabled": true,
+                    });
+                    if !server.env.is_empty() {
+                        entry["environment"] = server
+                            .env
+                            .iter()
+                            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+                            .collect();
+                    }
+                    mcp.insert(server.name.clone(), entry);
+                }
                 let config = serde_json::json!({
                     "$schema": "https://opencode.ai/config.json",
-                    "mcp": {
-                        "keel": {
-                            "type": "local",
-                            "command": [
-                                keel_bin.clone(),
-                                "mcp",
-                                "--workspace",
-                                root_str.clone(),
-                                "--session",
-                                session_id
-                            ],
-                            "enabled": true
-                        }
-                    }
+                    "mcp": mcp,
                 });
                 env.insert(var.clone(), serde_json::to_string(&config)?);
             }
@@ -607,6 +686,36 @@ fn resolve_workspace(explicit: Option<PathBuf>) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use keel_engine::snapshot::{CompiledComponent, CompiledMatch};
+
+    fn no_providers() -> BTreeMap<String, CompiledComponent> {
+        BTreeMap::new()
+    }
+
+    /// A `kind: MCPProvider` component the way `compile.rs` produces one,
+    /// keyed `mcp-provider:<id>` (H-011).
+    fn linear_provider() -> BTreeMap<String, CompiledComponent> {
+        let mut components = BTreeMap::new();
+        components.insert(
+            "mcp-provider:linear".to_string(),
+            CompiledComponent {
+                kind: "mcp-provider".into(),
+                id: "linear".into(),
+                version: "0".into(),
+                description: None,
+                match_: CompiledMatch::default(),
+                content: None,
+                inline: None,
+                requirements: vec![],
+                capabilities: vec![],
+                config: Some(serde_json::json!({
+                    "command": ["sh", "fake-linear-mcp.sh"],
+                    "env": { "LINEAR_API_KEY": "${KEEL_TEST_LINEAR_KEY}" }
+                })),
+            },
+        );
+        components
+    }
 
     #[test]
     fn opencode_convergence_writes_mcp_config_to_env() {
@@ -621,10 +730,13 @@ mod tests {
             manifest.command.clone(),
             &mut env,
             &manifest,
-            &host_dir,
-            root,
-            "session-test",
-            &["keel_verification".into()],
+            ConvergenceContext {
+                host_dir: &host_dir,
+                root,
+                session_id: "session-test",
+                skill_ids: &["keel_verification".into()],
+                components: &no_providers(),
+            },
         )
         .unwrap();
 
@@ -668,10 +780,13 @@ mod tests {
             manifest.command.clone(),
             &mut env,
             &manifest,
-            &host_dir,
-            root,
-            "session-test",
-            &["keel_verification".into()],
+            ConvergenceContext {
+                host_dir: &host_dir,
+                root,
+                session_id: "session-test",
+                skill_ids: &["keel_verification".into()],
+                components: &no_providers(),
+            },
         )
         .unwrap();
 
@@ -710,10 +825,13 @@ mod tests {
             manifest.command.clone(),
             &mut env,
             &manifest,
-            &host_dir,
-            root,
-            "session-test",
-            &["keel_verification".into()],
+            ConvergenceContext {
+                host_dir: &host_dir,
+                root,
+                session_id: "session-test",
+                skill_ids: &["keel_verification".into()],
+                components: &no_providers(),
+            },
         )
         .unwrap();
 
@@ -730,5 +848,189 @@ mod tests {
                 "expected hooks.{event} to be registered for Claude, got: {hooks}"
             );
         }
+    }
+
+    // H-011: a workspace with a configured `MCPProvider` (e.g. Linear) wires
+    // it ALONGSIDE keel's own entry, into every client — not instead of it,
+    // and without installing anything per client.
+    #[test]
+    fn claude_convergence_wires_a_configured_mcp_provider_alongside_keel() {
+        // SAFETY: single-threaded test-only variable name.
+        unsafe {
+            std::env::set_var("KEEL_TEST_LINEAR_KEY", "sk-linear-test");
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let host_dir = root.join("host");
+        std::fs::create_dir_all(&host_dir).unwrap();
+
+        let manifest = AdapterManifest::for_client("claude").unwrap();
+        let mut env = BTreeMap::new();
+        let argv = wire_convergence(
+            manifest.command.clone(),
+            &mut env,
+            &manifest,
+            ConvergenceContext {
+                host_dir: &host_dir,
+                root,
+                session_id: "session-test",
+                skill_ids: &["keel_verification".into()],
+                components: &linear_provider(),
+            },
+        )
+        .unwrap();
+
+        let mcp_path = argv
+            .iter()
+            .find(|a| a.ends_with("mcp.json"))
+            .expect("a --mcp-config-style flag value pointing at the written file");
+        let config: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(mcp_path).unwrap()).unwrap();
+        assert!(
+            config["mcpServers"]["keel"]["command"].is_string(),
+            "keel's own entry must still be present: {config}"
+        );
+        assert_eq!(config["mcpServers"]["linear"]["command"], "sh");
+        assert_eq!(
+            config["mcpServers"]["linear"]["args"][0],
+            "fake-linear-mcp.sh"
+        );
+        assert_eq!(
+            config["mcpServers"]["linear"]["env"]["LINEAR_API_KEY"], "sk-linear-test",
+            "the provider's ${{VAR}} must resolve from the process env: {config}"
+        );
+        assert!(
+            config["mcpServers"]["keel"]["env"].is_null(),
+            "keel's own entry has no env — only a resolved provider does"
+        );
+    }
+
+    #[test]
+    fn codex_convergence_wires_a_configured_mcp_provider_alongside_keel() {
+        unsafe {
+            std::env::set_var("KEEL_TEST_LINEAR_KEY", "sk-linear-test");
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let host_dir = root.join("host");
+        std::fs::create_dir_all(&host_dir).unwrap();
+
+        let manifest = AdapterManifest::for_client("codex").unwrap();
+        let mut env = BTreeMap::new();
+        let argv = wire_convergence(
+            manifest.command.clone(),
+            &mut env,
+            &manifest,
+            ConvergenceContext {
+                host_dir: &host_dir,
+                root,
+                session_id: "session-test",
+                skill_ids: &["keel_verification".into()],
+                components: &linear_provider(),
+            },
+        )
+        .unwrap();
+
+        assert!(
+            argv.iter()
+                .any(|a| a.starts_with("mcp_servers.keel.command=")),
+            "keel's own entry must still be present: {argv:?}"
+        );
+        assert!(
+            argv.iter()
+                .any(|a| a == "mcp_servers.linear.command=\"sh\""),
+            "the provider's command: {argv:?}"
+        );
+        assert!(
+            argv.iter()
+                .any(|a| a.contains("LINEAR_API_KEY") && a.contains("sk-linear-test")),
+            "the provider's ${{VAR}} must resolve from the process env: {argv:?}"
+        );
+    }
+
+    #[test]
+    fn opencode_convergence_wires_a_configured_mcp_provider_alongside_keel() {
+        unsafe {
+            std::env::set_var("KEEL_TEST_LINEAR_KEY", "sk-linear-test");
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let host_dir = root.join("host");
+        std::fs::create_dir_all(&host_dir).unwrap();
+
+        let manifest = AdapterManifest::for_client("opencode").unwrap();
+        let mut env = BTreeMap::new();
+        wire_convergence(
+            manifest.command.clone(),
+            &mut env,
+            &manifest,
+            ConvergenceContext {
+                host_dir: &host_dir,
+                root,
+                session_id: "session-test",
+                skill_ids: &["keel_verification".into()],
+                components: &linear_provider(),
+            },
+        )
+        .unwrap();
+
+        let config = env
+            .get("OPENCODE_CONFIG_CONTENT")
+            .expect("opencode config env is written");
+        let config: serde_json::Value = serde_json::from_str(config).unwrap();
+        assert!(
+            config["mcp"]["keel"]["command"].is_array(),
+            "keel's own entry must still be present: {config}"
+        );
+        assert_eq!(config["mcp"]["linear"]["command"][0], "sh");
+        assert_eq!(config["mcp"]["linear"]["command"][1], "fake-linear-mcp.sh");
+        assert_eq!(
+            config["mcp"]["linear"]["environment"]["LINEAR_API_KEY"], "sk-linear-test",
+            "the provider's ${{VAR}} must resolve from the process env: {config}"
+        );
+    }
+
+    #[test]
+    fn a_provider_missing_config_command_fails_convergence_loudly() {
+        let mut components = BTreeMap::new();
+        components.insert(
+            "mcp-provider:broken".to_string(),
+            CompiledComponent {
+                kind: "mcp-provider".into(),
+                id: "broken".into(),
+                version: "0".into(),
+                description: None,
+                match_: CompiledMatch::default(),
+                content: None,
+                inline: None,
+                requirements: vec![],
+                capabilities: vec![],
+                config: Some(serde_json::json!({})),
+            },
+        );
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let host_dir = root.join("host");
+        std::fs::create_dir_all(&host_dir).unwrap();
+        let manifest = AdapterManifest::for_client("claude").unwrap();
+        let mut env = BTreeMap::new();
+
+        let err = wire_convergence(
+            manifest.command.clone(),
+            &mut env,
+            &manifest,
+            ConvergenceContext {
+                host_dir: &host_dir,
+                root,
+                session_id: "session-test",
+                skill_ids: &["keel_verification".into()],
+                components: &components,
+            },
+        )
+        .unwrap_err();
+        assert!(
+            format!("{err:#}").contains("broken"),
+            "the error must name the misconfigured provider: {err:#}"
+        );
     }
 }
