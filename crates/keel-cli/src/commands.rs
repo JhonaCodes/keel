@@ -246,7 +246,7 @@ pub fn compile(root: &Path) -> Result<ExitCode> {
             files: &l.files,
         })
         .collect();
-    let outcome = compiler::compile_layered(&chain, now_ts())?;
+    let outcome = compiler::compile_layered(root, &chain, now_ts())?;
 
     // Gate: the configuration tests (aggregated across the chain) decide the
     // publication.
@@ -633,7 +633,7 @@ pub fn test(root: &Path) -> Result<ExitCode> {
             files: &l.files,
         })
         .collect();
-    let outcome = compiler::compile_layered(&chain, now_ts())?;
+    let outcome = compiler::compile_layered(root, &chain, now_ts())?;
     let tests: Vec<_> = selected
         .iter()
         .flat_map(|l| l.files.tests.iter().cloned())

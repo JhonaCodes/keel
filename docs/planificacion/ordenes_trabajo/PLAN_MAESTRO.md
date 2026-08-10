@@ -49,6 +49,12 @@ Resumen — el detalle completo vive en `STATUS.md`, no se duplica acá:
   hook (`command.requested`) ya ve TODOS los comandos Bash, no solo los del
   shim de PATH — una `Rule`+`Tool` de contenido alcanza. Ver H-008 en
   "Cerrado/superado".
+- **Entrega real de contenido de Skill fuera de la raíz del workspace**
+  (0.18.0+, `crates/keel-engine/src/compile.rs`) — `keel.skills.load`
+  entregaba un placeholder de "archivo faltante" para CUALQUIER skill
+  autorada dentro de una capa (`global/`, `platforms/<tech>/`,
+  `projects/<name>/`), es decir, para prácticamente todas. Ver H-017 en
+  "Cerrado/superado".
 
 ## 3. Roadmap activo
 
@@ -204,6 +210,30 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 5. Cerrado / superado (registro de auditoría)
 
+- **H-017** (entrega de contenido de Skill rota fuera de la raíz del
+  workspace) → RESUELTO (2026-08-10). Reportado en vivo por el usuario: una
+  sesión `keel claude` real en `keel-workflow` no pudo cargar `keel_tdd`
+  ("the skill file is missing"). Causa raíz confirmada en 3 archivos:
+  `compile.rs` valida la existencia del `compact` file contra la raíz de la
+  CAPA (correcto) pero guardaba en el snapshot la ruta CRUDA sin resolver
+  (relativa a la capa, ej. `"skills/keel_tdd_keel.md"`); `session.rs::
+  render_skill` (el handler real detrás de `keel.skills.load` vía
+  `mcp.rs`) resuelve el contenido contra la raíz del WORKSPACE, no de la
+  capa — nunca podían coincidir para ninguna skill fuera de la raíz plana.
+  Afectaba a TODAS las skills en `global/`/`platforms/`/`projects/`, no solo
+  `keel_tdd`. Distinto del `Tool` (que sí funciona: el autor escribe la ruta
+  completa relativa al workspace a mano en el YAML). Fix: `compile_layered`
+  ahora recibe la raíz del workspace y re-ancla `compact`/`full` a esa raíz
+  al compilar (`crates/keel-engine/src/compile.rs`), sin cambiar la
+  convención de autoría (`compact: skills/x_keel.md`, relativo a la capa,
+  sigue siendo lo que se escribe a mano). Verificado: `cargo test --workspace
+  --locked` (incluye un caso de `test/tests/mcp_stdio.rs` que tenía la
+  convención de ruta mal escrita, compensando el bug — corregido también),
+  `cargo clippy -D warnings`, `cargo fmt --check`, y verificación mecánica
+  end-to-end contra el binario real (`keel mcp` por stdio) entregando el
+  contenido real de `keel_tdd` (5548 caracteres, sin placeholder) desde
+  `keel-workflow`. Pendiente que el usuario reproduzca el caso original en
+  una sesión `keel claude` real (no simulado por Claude).
 - **H-008** (bypass de Bash / gate genérico de escritura) → RESUELTO — ver
   detalle en Sección 2 (Baseline). El fix real terminó siendo del lado de
   contenido (`keel-workflow`), no del motor: el enfoque que este documento

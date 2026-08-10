@@ -38,6 +38,7 @@ use crate::workspace::WorkspaceFiles;
 use keel_core::{Decision, Reversibility};
 use keel_dsl::{Branch, Enforcement, OnFail, RuleDoc, ToolDoc, ToolRef};
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 const DEFAULT_TOOL_TIMEOUT_MS: u64 = 10_000;
 
@@ -120,6 +121,7 @@ pub struct CompileLayer<'a> {
 /// one-element chain — the same code path, no special case.
 pub fn compile(files: &WorkspaceFiles, created_at: String) -> Result<CompileOutcome, CompileError> {
     compile_layered(
+        &files.root,
         &[CompileLayer {
             label: "project".to_string(),
             files,
@@ -133,6 +135,7 @@ pub fn compile(files: &WorkspaceFiles, created_at: String) -> Result<CompileOutc
 /// them into effective rules while verifying `locked` monotonicity (section 7.4,
 /// [`compose`]), then builds the snapshot.
 pub fn compile_layered(
+    workspace_root: &Path,
     chain: &[CompileLayer],
     created_at: String,
 ) -> Result<CompileOutcome, CompileError> {
@@ -182,6 +185,24 @@ pub fn compile_layered(
                     skill.metadata.id, skill.spec.compact
                 ));
             }
+            // `skill.spec.compact`/`full` are authored relative to the LAYER
+            // root (e.g. "skills/x_keel.md" from inside `global/`) — the
+            // ergonomic, layer-local convention authors actually write. But
+            // `render_skill` (session.rs) resolves delivered content against
+            // the WORKSPACE root, not the layer root, so what gets stored in
+            // the snapshot must already carry the layer's prefix (e.g.
+            // "global/skills/x_keel.md") — otherwise delivery looks for the
+            // file one directory up from where it lives and reports it
+            // missing even though it compiled clean. Re-anchor here, once,
+            // at the only point that knows both roots.
+            let layer_prefix = layer
+                .files
+                .root
+                .strip_prefix(workspace_root)
+                .unwrap_or(Path::new(""));
+            let resolve = |relative: &str| -> String {
+                layer_prefix.join(relative).to_string_lossy().into_owned()
+            };
             skills.insert(
                 skill.metadata.id.clone(),
                 CompiledSkill {
@@ -197,8 +218,8 @@ pub fn compile_layered(
                         &skill.metadata.id,
                         skill.spec.description.as_deref(),
                     ),
-                    compact: skill.spec.compact.clone(),
-                    full: skill.spec.full.clone(),
+                    compact: resolve(&skill.spec.compact),
+                    full: skill.spec.full.as_deref().map(resolve),
                     examples: skill
                         .spec
                         .examples

@@ -61,7 +61,7 @@ metadata:
   id: access-patterns
   version: 0.1.0
 spec:
-  compact: global/skills/access_keel.md
+  compact: skills/access_keel.md
 "#,
     )
     .unwrap();

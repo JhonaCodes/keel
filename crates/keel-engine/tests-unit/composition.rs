@@ -37,6 +37,7 @@ fn compile_chain(
     project: &WorkspaceFiles,
 ) -> Result<CompileOutcome, CompileError> {
     compile_layered(
+        &PathBuf::from("/tmp/keel-compose-it"),
         &[
             CompileLayer {
                 label: "global".to_string(),
@@ -66,7 +67,11 @@ fn compile_labeled_at(
             files,
         })
         .collect();
-    compile_layered(&chain, created_at.to_string())
+    compile_layered(
+        &PathBuf::from("/tmp/keel-compose-it"),
+        &chain,
+        created_at.to_string(),
+    )
 }
 
 fn violation(res: Result<CompileOutcome, CompileError>) -> MonotonicityViolation {
