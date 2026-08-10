@@ -29,7 +29,6 @@ El runtime es dueño del estado. La frase del modelo "voy a leer este skill" no 
 
 - `Skill`: conocimiento operativo compacto/full y ejemplos, con `match{terms,context,autoload}` para enrutado declarativo (D-014).
 - `Knowledge`: fuente consultable con provenance, versionada como cadena de hashes encadenados (`keel knowledge append/verify`).
-- `Blueprint`: patrón de trabajo, requisitos, inputs y outputs.
 - `Agent`: responsabilidad lógica ejecutada por un CLI local distinto (cross-model), invocada vía `keel.agent.invoke` con `outputSchema` validado.
 - `Workflow`: fases, transiciones y artefactos requeridos.
 - `Tool`: función determinista local o externa.
@@ -59,7 +58,6 @@ Los recursos viven dentro del workspace de Keel, en capas de composición (`glob
 keel-workspace/
 ├── skills/
 ├── knowledge/
-├── blueprints/
 ├── agents/
 ├── workflows/
 ├── policies/
@@ -72,7 +70,7 @@ keel-workspace/
 
 `executors/` contiene specs de `ModelExecutor` para comandos LOCALES (p. ej. `command: [claude, -p]`, `command: [codex, exec, -]`) — no drivers de API de proveedor; ese camino fue eliminado (D-012).
 
-No se copian skills, policies, blueprints o knowledge a directorios, archivos de instrucciones ni configuracion del proveedor.
+No se copian skills, policies o knowledge a directorios, archivos de instrucciones ni configuracion del proveedor.
 
 ## Integración y seguridad
 

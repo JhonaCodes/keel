@@ -8,7 +8,7 @@
   "properties": {
     "apiVersion": { "const": "keel/v1alpha1" },
     "kind": {
-      "enum": ["Blueprint", "Knowledge", "Workflow", "Contract", "Hook", "MCPProvider", "ModelExecutor", "AgentRoutingPolicy", "Policy"]
+      "enum": ["Knowledge", "Workflow", "Contract", "Hook", "MCPProvider", "ModelExecutor", "AgentRoutingPolicy", "Policy"]
     },
     "metadata": {
       "type": "object",

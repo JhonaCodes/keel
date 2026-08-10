@@ -151,15 +151,15 @@ fn route_returns_nothing_when_no_capability_matches() {
 }
 
 #[test]
-fn route_surfaces_governed_components_like_blueprints() {
-    // D-016: not only skills/agents — a blueprint (or knowledge/workflow) is
-    // surfaced at the right moment too.
+fn route_surfaces_governed_components_like_knowledge() {
+    // D-016: not only skills/agents — a governed component (knowledge,
+    // workflow, ...) is surfaced at the right moment too.
     use crate::snapshot::CompiledComponent;
     let mut components = BTreeMap::new();
     components.insert(
-        "blueprint:flutter_code_rules".to_string(),
+        "knowledge:flutter_code_rules".to_string(),
         CompiledComponent {
-            kind: "blueprint".into(),
+            kind: "knowledge".into(),
             id: "flutter_code_rules".into(),
             version: "0.1.0".into(),
             description: Some("Flutter coding rules: widget classes, Result pattern".into()),
@@ -187,7 +187,7 @@ fn route_surfaces_governed_components_like_blueprints() {
     .unwrap();
 
     let r = route(&snap, "estoy escribiendo un widget en flutter", 8);
-    assert_eq!(r.components.len(), 1, "the flutter blueprint is surfaced");
-    assert_eq!(r.components[0].id, "blueprint:flutter_code_rules");
+    assert_eq!(r.components.len(), 1, "the flutter knowledge is surfaced");
+    assert_eq!(r.components[0].id, "knowledge:flutter_code_rules");
     assert!(r.components[0].trigger.contains("flutter"));
 }

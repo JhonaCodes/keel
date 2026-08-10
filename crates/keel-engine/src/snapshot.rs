@@ -37,8 +37,8 @@ pub struct Snapshot {
     /// and `keel ci resolve` must detect (invariant 14).
     #[serde(default)]
     pub agents: BTreeMap<String, CompiledAgent>,
-    /// Open-ended Keel-owned resources such as blueprints, knowledge,
-    /// workflows, contracts, hooks, providers, policies and model executors.
+    /// Open-ended Keel-owned resources such as knowledge, workflows,
+    /// contracts, hooks, providers, policies and model executors.
     #[serde(default)]
     pub components: BTreeMap<String, CompiledComponent>,
     /// OS-sandbox backstop (section 5.2 runner). Part of the governed config,
@@ -527,7 +527,7 @@ pub struct CompiledComponent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Resolved routing signal (D-014/D-016): authored `match` + derived terms,
-    /// so a blueprint/knowledge/workflow can be surfaced at the right moment.
+    /// so a knowledge/workflow component can be surfaced at the right moment.
     #[serde(
         default,
         rename = "match",

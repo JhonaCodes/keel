@@ -61,8 +61,8 @@ fn validator_for(kind: &str) -> Option<&'static Validator> {
         "Profile" => Some(PROFILE.get_or_init(|| build(PROFILE_SCHEMA))),
         "Exception" => Some(EXCEPTION.get_or_init(|| build(EXCEPTION_SCHEMA))),
         "Containment" => Some(CONTAINMENT.get_or_init(|| build(CONTAINMENT_SCHEMA))),
-        "Blueprint" | "Knowledge" | "Workflow" | "Contract" | "Hook" | "MCPProvider"
-        | "ModelExecutor" | "AgentRoutingPolicy" | "Policy" => {
+        "Knowledge" | "Workflow" | "Contract" | "Hook" | "MCPProvider" | "ModelExecutor"
+        | "AgentRoutingPolicy" | "Policy" => {
             Some(GOVERNED_COMPONENT.get_or_init(|| build(GOVERNED_COMPONENT_SCHEMA)))
         }
         _ => None,

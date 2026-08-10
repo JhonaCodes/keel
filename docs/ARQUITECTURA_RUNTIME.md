@@ -35,7 +35,6 @@ ring explicitly, never silently).
   `match{terms,context,autoload}` for declarative routing (D-014).
 - `Knowledge`: queryable source with provenance, versioned as a hash-chained
   append-only log (`keel knowledge append/verify`).
-- `Blueprint`: work template, inputs, outputs, phases, and requirements.
 - `Agent`: logical responsibility executed by a distinct local CLI
   (cross-model), invoked via `keel.agent.invoke` with a validated
   `outputSchema`.

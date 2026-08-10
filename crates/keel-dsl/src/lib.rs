@@ -73,7 +73,6 @@ pub enum Document {
     RepositoryRegistry(Box<RepositoryRegistryDoc>),
     Profile(Box<ProfileDoc>),
     Exception(Box<ExceptionDoc>),
-    Blueprint(Box<GovernedComponentDoc>),
     Knowledge(Box<GovernedComponentDoc>),
     Workflow(Box<GovernedComponentDoc>),
     Contract(Box<GovernedComponentDoc>),
@@ -97,8 +96,7 @@ impl Document {
             Document::RepositoryRegistry(d) => &d.metadata,
             Document::Profile(d) => &d.metadata,
             Document::Exception(d) => &d.metadata,
-            Document::Blueprint(d)
-            | Document::Knowledge(d)
+            Document::Knowledge(d)
             | Document::Workflow(d)
             | Document::Contract(d)
             | Document::Hook(d)
@@ -121,7 +119,6 @@ impl Document {
             Document::RepositoryRegistry(_) => "RepositoryRegistry",
             Document::Profile(_) => "Profile",
             Document::Exception(_) => "Exception",
-            Document::Blueprint(_) => "Blueprint",
             Document::Knowledge(_) => "Knowledge",
             Document::Workflow(_) => "Workflow",
             Document::Contract(_) => "Contract",
@@ -153,8 +150,8 @@ pub struct GovernedComponentSpec {
     /// One-line description for the exposed catalog + routing derivation (D-014).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// Declarative routing (D-014/D-016): when this component (blueprint,
-    /// knowledge, workflow, …) is relevant to a moment. Optional — the compiler
+    /// Declarative routing (D-014/D-016): when this component (knowledge,
+    /// workflow, …) is relevant to a moment. Optional — the compiler
     /// derives terms from `id` + `description`.
     #[serde(default, rename = "match", skip_serializing_if = "Option::is_none")]
     pub match_: Option<MatchSpec>,

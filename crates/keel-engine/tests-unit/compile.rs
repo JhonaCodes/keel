@@ -19,7 +19,6 @@ fn files_from_yaml(yaml: &str) -> WorkspaceFiles {
             | Document::RepositoryRegistry(_)
             | Document::Profile(_)
             | Document::Exception(_)
-            | Document::Blueprint(_)
             | Document::Knowledge(_)
             | Document::Workflow(_)
             | Document::Contract(_)

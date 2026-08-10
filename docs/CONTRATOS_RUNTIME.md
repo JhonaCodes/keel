@@ -7,7 +7,6 @@ session.start
 component.list
 skill.read
 knowledge.read
-blueprint.read
 plan.submit
 action.request
 agent.invoke
@@ -31,7 +30,7 @@ Minimum request:
   "variant": "compact",
   "session_id": "session-123",
   "phase": "planning",
-  "reason": "blueprint requirement"
+  "reason": "reference requirement"
 }
 ```
 
@@ -47,7 +46,7 @@ Minimum response:
   "required": true,
   "session_id": "session-123",
   "phase": "planning",
-  "reason": "blueprint requirement",
+  "reason": "reference requirement",
   "read_at": "2026-08-07T00:00:00Z"
 }
 ```

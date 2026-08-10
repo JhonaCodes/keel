@@ -242,7 +242,7 @@ platforms: [flutter]
 ```
 
 Only listed platform directories compose into the resolved snapshot. Keep
-technology-specific rules, skills, tools, agents, and blueprints here instead of
+technology-specific rules, skills, tools, agents, and knowledge here instead of
 putting them in `global/`.
 "#;
 
