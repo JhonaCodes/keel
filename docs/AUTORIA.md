@@ -18,6 +18,13 @@ keel lock --workspace <ws>      # fixes lock to snapshot (drift detectable with 
 keel bind --workspace <ws> .    # (once per repo) writes .keel/project.yaml — the repo stores binding + lock only, never definitions
 ```
 
+**Same flow after upgrading the `keel` binary itself, even with zero content
+changes.** A compiler-internals change (e.g. how a path gets resolved into
+the snapshot) changes the snapshot hash exactly like editing a rule would —
+`keel lock --verify` will report drift on the NEXT run either way, but
+running it proactively right after `./install.sh` catches it immediately
+instead of silently, in every workspace you use.
+
 Layers live in `global/` (applies everywhere), `projects/<name>/` (that project
 only), and elsewhere (section 8.5). Examples use `global/`; you can author the
 same under `projects/app/`.
