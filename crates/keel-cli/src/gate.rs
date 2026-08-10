@@ -52,6 +52,16 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
         .read_to_string(&mut input)
         .context("gate: could not read the hook payload from stdin")?;
 
+    // Opt-in, off by default: diagnoses hook-shape assumptions (e.g. what a
+    // real client's `tool_response` for a given tool actually looks like)
+    // against a live session, without guessing. Never on unless explicitly
+    // requested — a hook payload can carry sensitive prompt/tool content.
+    capture_raw_for_debug(
+        std::env::var("KEEL_GATE_DEBUG_RAW").ok().as_deref(),
+        client,
+        &input,
+    );
+
     // Unknown / ungoverned hook shapes pass through silently: the bridge only
     // governs what it understands; breaking the client on unrelated hooks would
     // make it fragile, not safe.
@@ -774,6 +784,31 @@ fn task_result_text(v: &serde_json::Value) -> Option<String> {
     }
 }
 
+/// Best-effort raw hook-payload capture, opt-in via `KEEL_GATE_DEBUG_RAW=
+/// <path>` — appends one JSONL line (`{ts, client, raw}`) per hook payload
+/// `gate()` receives, verbatim, BEFORE parsing. Exists to diagnose hook-shape
+/// assumptions against a live session (H-009 shipped 3 guessed shapes for
+/// Task's `tool_response`, never checked against a real payload) without
+/// having to guess again for the next one. `path` is `None` (the default,
+/// nothing captured, zero cost) unless the caller reads the env var — kept as
+/// an explicit parameter so this stays a pure, easily-testable unit, not
+/// coupled to process-global environment state. A write failure is silent,
+/// same as a failed ledger write: debug capture must never break the client.
+fn capture_raw_for_debug(path: Option<&str>, client: Client, raw: &str) {
+    let Some(path) = path else {
+        return;
+    };
+    let line = serde_json::json!({ "ts": now_ts(), "client": format!("{client:?}"), "raw": raw });
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        use std::io::Write as _;
+        let _ = writeln!(file, "{line}");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1039,6 +1074,58 @@ mod tests {
     // blocked a faithful port of jflow's verify-before-close pattern (a Stop
     // gate requiring recorded audit evidence): nothing ever synthesized that
     // evidence from a real subagent run.
+    // Mitigation for the risk flagged after H-009: no assumption about a real
+    // client's hook payload shape (e.g. Task's `tool_response`) has ever been
+    // checked against a live session — because there was no way to capture
+    // one. This opt-in debug path closes that gap generically (any future
+    // hook-shape assumption, not just Task).
+    #[test]
+    fn capture_raw_for_debug_is_a_noop_without_a_path() {
+        // Nothing to assert on disk (there is no path) — this only proves it
+        // does not panic when the feature is off, the default state.
+        capture_raw_for_debug(None, Client::ClaudeCode, "irrelevant payload");
+    }
+
+    #[test]
+    fn capture_raw_for_debug_appends_the_raw_payload_as_jsonl() {
+        let dir = std::env::temp_dir().join(format!("keel-gate-debug-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("raw.jsonl");
+        let path_str = path.to_str().unwrap();
+
+        capture_raw_for_debug(
+            Some(path_str),
+            Client::ClaudeCode,
+            "{\"hook_event_name\":\"Stop\"}",
+        );
+        capture_raw_for_debug(
+            Some(path_str),
+            Client::Codex,
+            "{\"hook_event_name\":\"PreToolUse\"}",
+        );
+
+        let contents = std::fs::read_to_string(&path).unwrap();
+        let lines: Vec<&str> = contents.lines().collect();
+        assert_eq!(
+            lines.len(),
+            2,
+            "each call appends one JSONL line: {contents}"
+        );
+        assert!(
+            lines[0].contains("\"raw\":\"{\\\"hook_event_name\\\":\\\"Stop\\\"}\"")
+                && lines[0].contains("\"client\":\"ClaudeCode\""),
+            "the raw payload and client must be carried verbatim: {}",
+            lines[0]
+        );
+        assert!(
+            lines[1].contains("\"client\":\"Codex\""),
+            "second call must append, not overwrite: {}",
+            lines[1]
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn claude_posttooluse_task_becomes_task_completed_carrying_the_result_text() {
         let payload = serde_json::json!({
