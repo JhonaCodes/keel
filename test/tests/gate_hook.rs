@@ -126,6 +126,44 @@ spec:
     .unwrap();
 }
 
+/// The verify-before-close pair (H-009): a rule that records `task.completed`
+/// (Invalid when the subagent's text says NO-GO) and a rule that blocks Stop
+/// unless a GO (Valid) audit was recorded this session.
+fn author_require_go_before_close(root: &Path) {
+    let rules = root.join("global/rules");
+    fs::create_dir_all(&rules).unwrap();
+    fs::write(
+        rules.join("record-task.yaml"),
+        r#"apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: global.record-task, author: test, adrRef: adr:ADR-006, reviewAfter: P6M }
+spec:
+  on: [task.completed]
+  validate: { using: "builtin:text.contains", with: { value: "NO-GO" } }
+  enforcement:
+    invalid: { decision: allow }
+    valid: { decision: allow }
+"#,
+    )
+    .unwrap();
+    fs::write(
+        rules.join("require-go-before-close.yaml"),
+        r#"apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: global.require-go-before-close, author: test, adrRef: adr:ADR-007, reviewAfter: P6M }
+spec:
+  on: [completion.requested]
+  preconditions:
+    - using: "builtin:evidence.recorded"
+      with: { event: "task.completed", verdict: valid }
+      onFail: block
+  enforcement:
+    valid: { decision: allow }
+"#,
+    )
+    .unwrap();
+}
+
 /// evidence-capture end to end through the claude-code bridge: a real `cargo
 /// test` completion that FAILED (PostToolUse Bash, non-zero exit) is turned
 /// into durable `test.completed`/Invalid evidence by keel itself, which then
@@ -431,5 +469,72 @@ fn the_hook_bridge_blocks_an_internal_write_via_pretooluse() {
         post_out.status.code(),
         Some(0),
         "post-hoc feedback must not exit 2"
+    );
+}
+
+/// H-009 end to end through the claude-code bridge: a real `Task` subagent
+/// completion (a code-auditor/edu-revisor style GO/NO-GO reviewer) is turned
+/// into durable `task.completed` evidence by keel itself — no hand-fed native
+/// event — which then gates `Stop`: blocked with no audit at all, still
+/// blocked after a NO-GO verdict, allowed only after a GO verdict.
+#[test]
+fn a_completed_task_subagent_captured_by_keel_gates_stop_on_its_go_no_go_verdict() {
+    let ws = Workspace::new();
+    let root = ws.path().to_str().unwrap().to_string();
+    assert!(ws.run(&["init", &root, "--json"]).status.success());
+    author_require_go_before_close(ws.path());
+    assert!(ws.run(&["compile", "--workspace", &root]).status.success());
+
+    let gate_args = [
+        "gate",
+        "--client",
+        "claude-code",
+        "--workspace",
+        &root,
+        "--session",
+        "s1",
+    ];
+
+    // No audit at all yet → Stop is blocked.
+    let stop = r#"{"hook_event_name":"Stop","session_id":"s1"}"#;
+    let blocked = ws.run_stdin(&gate_args, stop);
+    assert_eq!(
+        blocked.status.code(),
+        Some(2),
+        "Stop with no recorded audit must be blocked: {}",
+        String::from_utf8_lossy(&blocked.stderr)
+    );
+
+    // keel OBSERVES a completed code-auditor Task subagent saying NO-GO
+    // (PostToolUse, feedback-only, exit 0) and records task.completed/Invalid
+    // itself.
+    let post_task_nogo = r#"{"hook_event_name":"PostToolUse","session_id":"s1","tool_name":"Task","tool_input":{"subagent_type":"code-auditor"},"tool_response":{"content":[{"type":"text","text":"Veredicto: NO-GO - missing coverage on the auth path"}]}}"#;
+    let captured = ws.run_stdin(&gate_args, post_task_nogo);
+    assert_eq!(
+        captured.status.code(),
+        Some(0),
+        "capturing a completed Task run is post-hoc, never a block"
+    );
+
+    // Still blocked: the only recorded audit evidence is NO-GO, not GO.
+    let still_blocked = ws.run_stdin(&gate_args, stop);
+    assert_eq!(
+        still_blocked.status.code(),
+        Some(2),
+        "a NO-GO audit must not unblock Stop"
+    );
+
+    // The auditor re-runs and now says GO → keel records task.completed/Valid.
+    let post_task_go = r#"{"hook_event_name":"PostToolUse","session_id":"s1","tool_name":"Task","tool_input":{"subagent_type":"code-auditor"},"tool_response":{"content":[{"type":"text","text":"Veredicto: GO - all checks pass"}]}}"#;
+    let captured2 = ws.run_stdin(&gate_args, post_task_go);
+    assert_eq!(captured2.status.code(), Some(0));
+
+    // Same session, now with GO evidence → Stop is allowed.
+    let allowed = ws.run_stdin(&gate_args, stop);
+    assert_eq!(
+        allowed.status.code(),
+        Some(0),
+        "a GO audit must unblock Stop: {}",
+        String::from_utf8_lossy(&allowed.stderr)
     );
 }

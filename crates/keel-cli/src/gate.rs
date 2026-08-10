@@ -495,6 +495,33 @@ fn parse_claude_code_hook(input: &str) -> Option<(Event, bool)> {
                     ev.command = ti.get("url").and_then(|u| u.as_str()).map(str::to_string);
                     Some((ev, pre))
                 }
+                "Task" => {
+                    // A completed subagent run (H-009 — code-auditor,
+                    // edu-revisor, any GO/NO-GO reviewer) becomes durable
+                    // evidence: `task.completed` carrying the subagent's raw
+                    // final text VERBATIM, unclassified — a Task has no exit
+                    // code, so (unlike the Bash test-runner arm above) the
+                    // bridge does not decide pass/fail; an authored rule does,
+                    // via `builtin:text.contains` on the marker it expects
+                    // (e.g. "NO-GO"). No extractable text → nothing to carry,
+                    // same as an unrecognized hook shape.
+                    if !pre {
+                        return task_result_text(&v).map(|content| {
+                            let mut ev = mk(EventKind::TaskCompleted);
+                            ev.content = Some(content);
+                            (ev, false)
+                        });
+                    }
+                    // PreToolUse: same as any other tool — observed so keel
+                    // can deliver context at that moment, never blocked by
+                    // itself.
+                    let mut ev = mk(EventKind::ToolRequested);
+                    ev.command = Some("Task".to_string());
+                    let input = ti.to_string();
+                    let input: String = input.chars().take(500).collect();
+                    ev.content = Some(format!("Task {input}"));
+                    Some((ev, true))
+                }
                 other => {
                     // Any other tool the model is about to use (a native MCP tool,
                     // a read, a search): keel SEES it (matcher is catch-all) and can
@@ -717,6 +744,33 @@ fn test_outcome_content(v: &serde_json::Value) -> String {
         format!("FAILED\n{output}")
     } else {
         format!("passed\n{output}")
+    }
+}
+
+/// Extracts a completed `Task` tool's raw final text from `tool_response`.
+/// Claude Code's shape for a subagent result varies by version — tried, in
+/// order: a plain string, `{result|output|text}`, or an assistant-message-
+/// like `{content: [{text}, ...]}`. `None` when nothing textual is found
+/// (nothing to carry — same as an unrecognized hook shape).
+fn task_result_text(v: &serde_json::Value) -> Option<String> {
+    let tr = v.get("tool_response")?;
+    if let Some(s) = tr.as_str() {
+        return Some(s.to_string());
+    }
+    for key in ["result", "output", "text"] {
+        if let Some(s) = tr.get(key).and_then(|x| x.as_str()) {
+            return Some(s.to_string());
+        }
+    }
+    let blocks = tr.get("content")?.as_array()?;
+    let joined: Vec<&str> = blocks
+        .iter()
+        .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+        .collect();
+    if joined.is_empty() {
+        None
+    } else {
+        Some(joined.join("\n"))
     }
 }
 
@@ -977,6 +1031,87 @@ mod tests {
             parse_codex_hook(&payload).is_none(),
             "PostToolUse apply_patch must not synthesize a second file.edited event"
         );
+    }
+
+    // H-009: a completed `Task` (Claude Code's subagent tool — code-auditor,
+    // edu-revisor, any GO/NO-GO reviewer) had no arm at all — it fell to the
+    // generic `other` handler, which ignores PostToolUse entirely. That
+    // blocked a faithful port of jflow's verify-before-close pattern (a Stop
+    // gate requiring recorded audit evidence): nothing ever synthesized that
+    // evidence from a real subagent run.
+    #[test]
+    fn claude_posttooluse_task_becomes_task_completed_carrying_the_result_text() {
+        let payload = serde_json::json!({
+            "hook_event_name": "PostToolUse",
+            "session_id": "s1",
+            "tool_name": "Task",
+            "tool_input": { "subagent_type": "code-auditor" },
+            "tool_response": {
+                "content": [{ "type": "text", "text": "Veredicto: NO-GO — missing coverage" }]
+            }
+        })
+        .to_string();
+
+        let (event, preventable) = parse_claude_code_hook(&payload).expect("parsed");
+        assert_eq!(event.kind, EventKind::TaskCompleted);
+        assert!(
+            !preventable,
+            "a completed Task is post-hoc feedback, never a block"
+        );
+        assert!(
+            event.content.as_deref().unwrap_or("").contains("NO-GO"),
+            "the raw subagent text must be carried verbatim, unclassified"
+        );
+    }
+
+    #[test]
+    fn claude_pretooluse_task_is_observe_only_tool_requested() {
+        // Mirrors the generic `other` arm: seen before it runs, never blocked
+        // by itself, so keel can deliver context at that moment (D-016).
+        let payload = serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "session_id": "s1",
+            "tool_name": "Task",
+            "tool_input": { "subagent_type": "code-auditor", "prompt": "audit the auth module" }
+        })
+        .to_string();
+
+        let (event, preventable) = parse_claude_code_hook(&payload).expect("parsed");
+        assert_eq!(event.kind, EventKind::ToolRequested);
+        assert_eq!(event.command.as_deref(), Some("Task"));
+        assert!(preventable);
+    }
+
+    #[test]
+    fn claude_posttooluse_task_without_extractable_text_produces_no_event() {
+        // No `content`/`result`/`output`/`text` field anywhere → nothing to
+        // carry, same as an unrecognized hook shape.
+        let payload = serde_json::json!({
+            "hook_event_name": "PostToolUse",
+            "session_id": "s1",
+            "tool_name": "Task",
+            "tool_input": { "subagent_type": "code-auditor" },
+            "tool_response": { "success": true }
+        })
+        .to_string();
+
+        assert!(parse_claude_code_hook(&payload).is_none());
+    }
+
+    #[test]
+    fn claude_posttooluse_task_reads_plain_string_response() {
+        let payload = serde_json::json!({
+            "hook_event_name": "PostToolUse",
+            "session_id": "s1",
+            "tool_name": "Task",
+            "tool_input": { "subagent_type": "code-auditor" },
+            "tool_response": "Veredicto: GO"
+        })
+        .to_string();
+
+        let (event, _) = parse_claude_code_hook(&payload).expect("parsed");
+        assert_eq!(event.kind, EventKind::TaskCompleted);
+        assert_eq!(event.content.as_deref(), Some("Veredicto: GO"));
     }
 
     #[test]

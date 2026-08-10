@@ -64,6 +64,16 @@ pub enum EventKind {
     TestCompleted,
     #[serde(rename = "audit.started")]
     AuditStarted,
+    /// Bridge-layer extension (NOT one of the 17): a completed Claude Code
+    /// `Task` tool call (a subagent run — code-auditor, edu-revisor, or any
+    /// other) carrying its raw final text verbatim. Symmetric to
+    /// `TestCompleted` for a Bash test-runner, but a Task has no exit code —
+    /// no ground-truth pass/fail signal exists at the bridge, so (unlike
+    /// `TestCompleted`) the content is NOT classified here: an authored rule
+    /// decides what a GO/NO-GO/other marker in the text means, via
+    /// `builtin:text.contains` (H-009, "the hook is pure transport").
+    #[serde(rename = "task.completed")]
+    TaskCompleted,
     #[serde(rename = "completion.requested")]
     CompletionRequested,
     #[serde(rename = "delivery.requested")]

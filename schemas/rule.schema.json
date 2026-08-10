@@ -109,6 +109,7 @@
         "command.requested", "command.completed", "dependency.changed",
         "transition.requested", "implementation.started",
         "verification.started", "test.completed", "audit.started",
+        "task.completed",
         "completion.requested", "delivery.requested", "session.ended"
       ]
     },

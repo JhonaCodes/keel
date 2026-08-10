@@ -60,27 +60,16 @@ Resumen — el detalle completo vive en `STATUS.md`, no se duplica acá:
   `crates/keel-engine/src/runtime.rs`) — ninguna regla `file.edited` (con o
   sin `scope` declarado) dispara para un archivo fuera del workspace
   gobernado. Ver H-020 en "Cerrado/superado".
+- **Captura de resultado de Task-tool/subagente** (0.18.0+,
+  `crates/keel-cli/src/gate.rs`) — un `Task` (subagente: code-auditor,
+  edu-revisor, cualquier revisor GO/NO-GO) completado se vuelve evidencia
+  durable `task.completed`, consumible por `evidence.recorded` — habilita el
+  patrón verify-before-close (gate de `Stop` que exige auditoría GO). Ver
+  H-009 en "Cerrado/superado".
 
 ## 3. Roadmap activo
 
 Cada ítem: problema, enfoque, criterio de aceptación + test, referencias.
-
-### H-009 [P1] Captura de resultado de Task-tool/subagente
-
-**Problema:** `gate.rs` no tiene arm `"Task"` en el match de herramientas —
-cae al genérico `tool.requested` (observe-only, sin extracción de
-pass/fail). Bloquea el puerto fiel de `verify-before-close.sh` (gate de
-Stop que requiere evidencia de audit+verify) y el patrón go/no-go
-(code-auditor, edu-revisor).
-
-**Enfoque:** construir el hermano de `is_test_runner`/`test_outcome_content`
-para la tool `Task`: parsear el resultado de un subagente completado
-buscando un marcador GO/NO-GO o pass/fail, sintetizar un evento
-`audit.completed`/`verification.completed` consumible por
-`evidence.recorded`.
-
-**Aceptación + test:** un `Task` completado con marcador GO/NO-GO en su
-resultado sintetiza el evento correspondiente. Test en `gate_hook.rs`.
 
 ### H-010 [P1] Capa de fases TDD/SDD
 
@@ -215,6 +204,60 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 5. Cerrado / superado (registro de auditoría)
 
+- **H-009** (`gate.rs` no capturaba el resultado de un `Task`/subagente) →
+  RESUELTO (2026-08-10). Problema: sin arm `"Task"` en el match de
+  herramientas, un subagente completado (code-auditor, edu-revisor, cualquier
+  revisor GO/NO-GO) caía al genérico `tool.requested` en `PostToolUse`, que
+  se ignora por completo — nada sintetizaba evidencia utilizable por
+  `evidence.recorded`, bloqueando el puerto fiel del patrón
+  verify-before-close (gate de `Stop` que exige auditoría). Fix: nuevo
+  `EventKind::TaskCompleted` (`task.completed`, extensión de capa puente —
+  no uno de los 17 eventos reservados, documentado en el propio enum) + un
+  arm `"Task"` en `parse_claude_code_hook` (`crates/keel-cli/src/gate.rs`):
+  en `PostToolUse`, extrae el texto final crudo del subagente
+  (`task_result_text`, tolera 4 formas distintas de `tool_response` — string
+  plano, `{result|output|text}`, o bloques `{content:[{text}]}` estilo
+  mensaje de asistente) y lo lleva VERBATIM como `content`, sin clasificar
+  pass/fail en el motor — a diferencia de `test_outcome_content` (que sí
+  clasifica FAILED/passed porque el exit code de un test-runner es una señal
+  de verdad real), un `Task` no tiene exit code: el veredicto GO/NO-GO es
+  puramente textual y por convención de cada agente, así que clasificarlo es
+  responsabilidad de una regla autorada (`builtin:text.contains`), no del
+  puente (coherente con el propio comentario del módulo: "the hook is pure
+  TRANSPORT — no rule logic lives in it"). En `PreToolUse`, `Task` se
+  comporta igual que cualquier otra tool no mapeada (`tool.requested`,
+  observe-only) — sin cambios ahí. Efecto secundario encontrado y corregido
+  en el mismo fix: `task.completed` no estaba en el enum `on:` de
+  `schemas/rule.schema.json`/`ruletest.schema.json` (una lista JSON Schema
+  separada del enum de Rust `EventKind`, que **no** se actualiza sola) — sin
+  este segundo cambio, cualquier regla `on: [task.completed]` fallaba la
+  compilación con "is not one of [...]"; detectado por el propio test de
+  integración (RED genuino, no anticipado) al intentar `keel compile` con la
+  regla de fixture. 4 tests unitarios nuevos en `gate.rs` (RED confirmado
+  antes, GREEN después): Post con marcador GO/NO-GO en distintos formatos de
+  `tool_response` se vuelve `task.completed` preservando el texto; Pre sigue
+  siendo `tool.requested` observe-only; sin texto extraíble no sintetiza
+  nada (mismo camino que un hook no reconocido). 1 test de integración
+  end-to-end nuevo en `test/tests/gate_hook.rs`
+  (`a_completed_task_subagent_captured_by_keel_gates_stop_on_its_go_no_go_verdict`):
+  reproduce el patrón verify-before-close completo contra el binario
+  compilado — `Stop` bloqueado sin auditoría, sigue bloqueado tras un
+  `Task` con NO-GO, permitido recién después de un `Task` con GO, sin
+  ningún evento nativo alimentado a mano. Verificado además contra el
+  binario real instalado (`~/.local/bin/keel`) con los 5 pasos del mismo
+  escenario por `keel gate` real vía stdin: exit 2 → exit 0 (captura,
+  feedback-only) → exit 2 (NO-GO no desbloquea) → exit 0 (captura) → exit 0
+  (GO desbloquea). `cargo test --workspace --locked` (218 tests), `cargo
+  clippy --workspace --all-targets -D warnings`, `cargo fmt --check` todos
+  verdes. `keel test`/`keel compile`/`keel lock --verify` en `keel-workflow`
+  sin drift (mismo hash `sha256:5973a65a...` antes y después — esperado:
+  `keel-workflow` no autora todavía ninguna regla `on: [task.completed]`,
+  así que el snapshot compilado no cambia con este fix). Pendiente:
+  `keel-workflow` no tiene aún una regla `record-task-result`/
+  `require-go-before-close` real (equivalente de contenido a
+  `record-test-result`/`require-red-before-write`) — eso es autoría de
+  contenido en el repo hermano, fuera del alcance de este ítem (H-009 era
+  puramente de motor, según su propio criterio de aceptación).
 - **H-020** (ninguna regla distinguía "archivo fuera del workspace
   gobernado") → RESUELTO (2026-08-10). Reportado en vivo por el usuario
   trabajando NUI-4922: `keel claude` bloqueó con `global.require-red-
@@ -373,10 +416,9 @@ Abierto, no perdido, no activo ahora mismo:
 
 ## 6. Orden sugerido
 
-- H-009 primero — desbloquea H-010 y es la brecha activa más importante que
-  queda (H-008 ya está resuelto).
-- H-009 antes de H-010 — las fases audit/verify de H-010 derivan de la
-  evidencia que aporta H-009.
+- H-010 primero — es la brecha activa más importante que queda: la evidencia
+  que necesitaba (H-009) ya está resuelta, así que la fase audit/verify de
+  H-010 puede derivarla directamente.
 - H-011 y H-013 son independientes entre sí y del resto.
 - H-012 depende de trabajo en el repo hermano (`keel-workflow`); ver
   `MIGRATION_BACKLOG.md` Phase 2.
