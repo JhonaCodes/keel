@@ -248,8 +248,23 @@ fn evaluate_rule(
                         started.elapsed().as_millis() as u64,
                         vec![],
                     )
+                } else if !rule.preconditions.is_empty() {
+                    // Precondition gate: reaching here means EVERY precondition
+                    // passed (a failing one returned Invalid + onFail above), so
+                    // the gate is satisfied → Valid → the `valid`/allow branch.
+                    // Without this, a gate rule (preconditions + `valid: allow`,
+                    // no `validate`) fell to Unknown → review and NEVER allowed
+                    // the action it was authored to permit once satisfied — e.g.
+                    // `require-audit-before-commit` stayed blocked after a GO.
+                    (
+                        Verdict::Valid,
+                        OriginClass::Deterministic,
+                        started.elapsed().as_millis() as u64,
+                        vec![],
+                    )
                 } else {
-                    // No validate and no always: undecidable by construction.
+                    // No gate at all (no preconditions, no validate, no always):
+                    // undecidable by construction.
                     (
                         Verdict::Unknown,
                         OriginClass::Deterministic,
