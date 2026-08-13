@@ -3,7 +3,8 @@
 
 use super::*;
 use crate::snapshot::{
-    CompiledEnforcement, CompiledScope, CompiledToolCall, CompiledToolRef, Snapshot,
+    CompiledEnforcement, CompiledPrecondition, CompiledScope, CompiledToolCall, CompiledToolRef,
+    Snapshot,
 };
 use keel_core::event::EventKind;
 use std::collections::BTreeMap;
@@ -373,4 +374,101 @@ fn a_relative_file_path_is_unaffected_by_the_workspace_boundary_check() {
         Mode::Enforce,
     );
     assert_eq!(evs.len(), 1);
+}
+
+fn branch(decision: Decision) -> CompiledBranch {
+    CompiledBranch {
+        decision,
+        load_skills: vec![],
+        load_capabilities: vec![],
+        report_message: None,
+        invoke_agent: None,
+    }
+}
+
+/// A precondition-gated rule (like `require-audit-before-commit`): a precondition
+/// with `onFail: block`, `enforcement.valid: allow`, and NO `validate`/`always`.
+fn precondition_gate_rule() -> CompiledRule {
+    CompiledRule {
+        id: "require-audit".into(),
+        version: Some("1.0.0".into()),
+        author: "t".into(),
+        adr_ref: "adr:ADR-1".into(),
+        review_after: "P6M".into(),
+        reversibility: Some(keel_core::Reversibility::Reversible),
+        scope: None,
+        on: vec![EventKind::CommandRequested],
+        when: None,
+        detect: None,
+        preconditions: vec![CompiledPrecondition {
+            using: CompiledToolRef::Builtin("evidence.recorded".into()),
+            with: Some(serde_json::json!({"event": "task.completed", "verdict": "invalid"})),
+            on_fail_declared: Decision::Block,
+        }],
+        validate: None,
+        enforcement: CompiledEnforcement {
+            invalid: None,
+            unknown: None,
+            valid: Some(branch(Decision::Allow)),
+            always: None,
+        },
+        constraints: None,
+        origin_layer: None,
+        locked_at: None,
+    }
+}
+
+fn commit_event(recorded: Vec<(EventKind, Verdict)>) -> Event {
+    Event {
+        kind: EventKind::CommandRequested,
+        session_id: Some("s".into()),
+        file: None,
+        language: None,
+        content: None,
+        line: None,
+        command: Some("git commit -m x".into()),
+        env: Default::default(),
+        files: vec![],
+        loaded_skills: vec![],
+        recorded_evidence: recorded,
+    }
+}
+
+/// When a precondition-gated rule's precondition PASSES (the required evidence
+/// exists) and it has no `validate`, the gate is satisfied → `Valid` → the
+/// `valid`/allow branch. Regression guard for the bug where it fell to
+/// `Unknown`/review and never allowed the action.
+#[test]
+fn precondition_gate_allows_when_precondition_passes() {
+    let s = snap(vec![precondition_gate_rule()]);
+    let ev = commit_event(vec![(EventKind::TaskCompleted, Verdict::Invalid)]);
+    let evs = evaluate_event(&s, &ev, Path::new("/ws"), Mode::Enforce);
+    assert_eq!(evs.len(), 1);
+    assert_eq!(evs[0].verdict, Verdict::Valid);
+    assert_eq!(evs[0].effective_decision, Decision::Allow);
+}
+
+/// The same rule still BLOCKS when the required evidence is absent (precondition
+/// fails → `onFail` block).
+#[test]
+fn precondition_gate_blocks_when_precondition_fails() {
+    let s = snap(vec![precondition_gate_rule()]);
+    let ev = commit_event(vec![]);
+    let evs = evaluate_event(&s, &ev, Path::new("/ws"), Mode::Enforce);
+    assert_eq!(evs.len(), 1);
+    assert_eq!(evs[0].verdict, Verdict::Invalid);
+    assert_eq!(evs[0].effective_decision, Decision::Block);
+}
+
+/// Narrowing guard: a rule with NO gate at all (no preconditions, no validate,
+/// no always) stays `Unknown` — genuinely undecidable, not silently allowed.
+#[test]
+fn ungated_rule_without_validate_stays_unknown() {
+    let mut rule = precondition_gate_rule();
+    rule.preconditions = vec![];
+    let s = snap(vec![rule]);
+    let ev = commit_event(vec![]);
+    let evs = evaluate_event(&s, &ev, Path::new("/ws"), Mode::Enforce);
+    assert_eq!(evs.len(), 1);
+    assert_eq!(evs[0].verdict, Verdict::Unknown);
 }
