@@ -304,8 +304,18 @@ impl Server {
             Ok(s) => s,
             Err(e) => return format!("scheduler unavailable: {e}"),
         };
-        let mut executor =
-            CliModelExecutor::new(command, self.root.clone(), executor_id).with_env(env);
+        // Always cap the external CLI: an agent's declared budget, else a sane
+        // default. Without it a slow `codex exec`/`claude -p` would hang the
+        // single-threaded MCP server and every other keel tool with it.
+        let timeout_ms = self
+            .snapshot
+            .agents
+            .get(agent_id)
+            .and_then(|agent| agent.timeout_ms)
+            .unwrap_or(120_000);
+        let mut executor = CliModelExecutor::new(command, self.root.clone(), executor_id)
+            .with_env(env)
+            .with_timeout(std::time::Duration::from_millis(timeout_ms));
         match broker.invoke(
             &self.session_id,
             agent_id,

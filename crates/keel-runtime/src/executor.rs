@@ -9,9 +9,10 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -169,6 +170,10 @@ pub struct CliModelExecutor {
     /// to hand a governed CLI what it needs to run (e.g. `HOME` for its auth
     /// config) without inheriting ambient secrets wholesale.
     env: Vec<(String, String)>,
+    /// Optional hard wall-clock timeout: the child is killed and `complete`
+    /// returns an error once it elapses (agent `budget.timeoutMs`, invariant).
+    /// Without it a slow external CLI could hang the single-threaded MCP server.
+    timeout: Option<Duration>,
 }
 
 impl CliModelExecutor {
@@ -183,6 +188,7 @@ impl CliModelExecutor {
             provider_id: "cli".to_string(),
             model_id,
             env: Vec::new(),
+            timeout: None,
         }
     }
 
@@ -190,6 +196,13 @@ impl CliModelExecutor {
     /// still runs first, so only `PATH` plus these reach the CLI.
     pub fn with_env(mut self, env: Vec<(String, String)>) -> Self {
         self.env = env;
+        self
+    }
+
+    /// Sets a hard wall-clock timeout after which the child is killed and
+    /// `complete` returns an error (from the agent's `budget.timeoutMs`).
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
         self
     }
 
@@ -239,9 +252,12 @@ impl ModelExecutor for CliModelExecutor {
             let _ = stdin.write_all(Self::prompt(&request).as_bytes());
             // drop closes stdin → the CLI sees EOF.
         }
-        let output = child
-            .wait_with_output()
-            .map_err(|error| ExecutorError::Failed(error.to_string()))?;
+        let output = match self.timeout {
+            Some(timeout) => wait_with_timeout(child, timeout, &self.model_id)?,
+            None => child
+                .wait_with_output()
+                .map_err(|error| ExecutorError::Failed(error.to_string()))?,
+        };
         if !output.status.success() {
             return Err(ExecutorError::Failed(format!(
                 "executor `{}` exited with {}: {}",
@@ -262,6 +278,62 @@ impl ModelExecutor for CliModelExecutor {
         // Each `complete` is a fresh short-lived process; there is nothing to
         // cancel between turns.
         Ok(())
+    }
+}
+
+/// Waits for `child` up to `timeout`, killing it if it overruns. stdout/stderr
+/// are drained on threads so a chatty child cannot deadlock on a full pipe while
+/// we poll. On timeout the child is killed and an error is returned — a slow
+/// external CLI must never hang the caller (the single-threaded MCP server).
+fn wait_with_timeout(
+    mut child: std::process::Child,
+    timeout: Duration,
+    id: &str,
+) -> Result<std::process::Output, ExecutorError> {
+    let mut stdout_pipe = child.stdout.take();
+    let mut stderr_pipe = child.stderr.take();
+    let out_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(pipe) = stdout_pipe.as_mut() {
+            let _ = pipe.read_to_end(&mut buf);
+        }
+        buf
+    });
+    let err_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(pipe) = stderr_pipe.as_mut() {
+            let _ = pipe.read_to_end(&mut buf);
+        }
+        buf
+    });
+
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child
+            .try_wait()
+            .map_err(|error| ExecutorError::Failed(error.to_string()))?
+        {
+            Some(status) => {
+                let stdout = out_handle.join().unwrap_or_default();
+                let stderr = err_handle.join().unwrap_or_default();
+                return Ok(std::process::Output {
+                    status,
+                    stdout,
+                    stderr,
+                });
+            }
+            None => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(ExecutorError::Failed(format!(
+                        "executor `{id}` timed out after {}ms and was killed",
+                        timeout.as_millis()
+                    )));
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+        }
     }
 }
 
