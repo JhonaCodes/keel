@@ -132,3 +132,24 @@ fn unknown_method_is_a_jsonrpc_error_not_a_crash() {
     let resp = server.handle(&req).unwrap();
     assert_eq!(resp["error"]["code"], -32601);
 }
+
+/// A validated verdict becomes the `task.completed` text the audit gate keys on:
+/// record-audit matches the literal `VERDICT: GO`, so `{"verdict":"GO"}` must
+/// render as `VERDICT: GO`. Missing verdict → nothing to record.
+#[test]
+fn verdict_event_content_derives_gate_text_from_validated_output() {
+    let go = json!({ "verdict": "GO", "note": "ship it" });
+    assert_eq!(
+        verdict_event_content(&go).as_deref(),
+        Some("VERDICT: GO\nship it")
+    );
+
+    let bare = json!({ "verdict": "NO-GO" });
+    assert_eq!(
+        verdict_event_content(&bare).as_deref(),
+        Some("VERDICT: NO-GO")
+    );
+
+    let missing = json!({ "note": "no verdict field" });
+    assert!(verdict_event_content(&missing).is_none());
+}

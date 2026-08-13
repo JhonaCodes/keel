@@ -19,6 +19,8 @@
 //! P2's cooperation.
 
 use anyhow::{Context, Result};
+use keel_core::event::{Event, EventKind};
+use keel_engine::runtime::{Mode, evaluate_event};
 use keel_engine::session::{SessionStore, deliver_skills};
 use keel_engine::snapshot::Snapshot;
 use keel_engine::workspace::WorkspaceFiles;
@@ -311,20 +313,93 @@ impl Server {
             &mut scheduler,
             &mut executor,
         ) {
-            Ok(result) => match result.output {
-                Some(value) => format!(
-                    "agent `{agent_id}` (executor `{}`) — validated output:\n{}",
-                    result.executor_id,
-                    serde_json::to_string_pretty(&value).unwrap_or(result.content)
-                ),
-                None => format!(
-                    "agent `{agent_id}` (executor `{}`):\n{}",
-                    result.executor_id, result.content
-                ),
-            },
+            Ok(result) => {
+                let body = match &result.output {
+                    Some(value) => format!(
+                        "agent `{agent_id}` (executor `{}`) — validated output:\n{}",
+                        result.executor_id,
+                        serde_json::to_string_pretty(value)
+                            .unwrap_or_else(|_| result.content.clone())
+                    ),
+                    None => format!(
+                        "agent `{agent_id}` (executor `{}`):\n{}",
+                        result.executor_id, result.content
+                    ),
+                };
+                // Bridge to the audit gate: a validated verdict is recorded as a
+                // `task.completed` evidence event, evaluated through the same
+                // rules the Task-tool hook drives, so record-audit can govern the
+                // commit. "evidence is keel's" (see this fn's doc). A recording
+                // failure is surfaced, never swallowed.
+                match result.output.as_ref().and_then(verdict_event_content) {
+                    Some(content) => match self.record_task_completed(&content) {
+                        Ok(_) => format!(
+                            "{body}\n\n(recorded for the audit gate: {})",
+                            content.lines().next().unwrap_or_default()
+                        ),
+                        Err(e) => {
+                            format!("{body}\n\n(warning: verdict not recorded as evidence: {e})")
+                        }
+                    },
+                    None => body,
+                }
+            }
             Err(e) => format!("agent `{agent_id}` failed: {e}"),
         }
     }
+
+    /// Records a validated agent verdict as a `task.completed` evidence event,
+    /// evaluated against the snapshot exactly as the gate hook does — so rules
+    /// like record-audit govern it and the commit gate can see the GO/NO-GO.
+    /// Returns how many evidence rows were written; errors are returned (not
+    /// swallowed) so the caller can tell the model the gate did not see it.
+    fn record_task_completed(&self, content: &str) -> std::result::Result<usize, String> {
+        let files = WorkspaceFiles::empty(self.root.clone());
+        let ledger = keel_engine::ledger::Ledger::open(&files.ledger_path())
+            .map_err(|e| format!("open ledger: {e}"))?;
+        let event = Event {
+            kind: EventKind::TaskCompleted,
+            session_id: Some(self.session_id.clone()),
+            file: None,
+            language: None,
+            content: Some(content.to_string()),
+            line: None,
+            command: None,
+            env: std::collections::BTreeMap::new(),
+            files: Vec::new(),
+            loaded_skills: Vec::new(),
+            recorded_evidence: Vec::new(),
+        };
+        let evals = evaluate_event(&self.snapshot, &event, &self.root, Mode::Enforce);
+        let mut written = 0usize;
+        for eval in &evals {
+            let entry = eval.to_ledger_entry(
+                &event,
+                &self.snapshot.hash.to_string(),
+                keel_engine::ledger::new_ev_id(),
+                keel_engine::ledger::now_ts(),
+            );
+            ledger
+                .append(&entry)
+                .map_err(|e| format!("append evidence: {e}"))?;
+            written += 1;
+        }
+        Ok(written)
+    }
+}
+
+/// Builds the `task.completed` content that feeds the audit gate from a
+/// validated agent verdict. record-audit keys on the literal text
+/// `VERDICT: <v>`, so a `{"verdict":"GO"}` output becomes `VERDICT: GO`.
+/// Returns `None` when the output carries no `verdict` (nothing to record).
+fn verdict_event_content(output: &Value) -> Option<String> {
+    let verdict = output.get("verdict").and_then(Value::as_str)?;
+    let note = output.get("note").and_then(Value::as_str).unwrap_or("");
+    Some(if note.is_empty() {
+        format!("VERDICT: {verdict}")
+    } else {
+        format!("VERDICT: {verdict}\n{note}")
+    })
 }
 
 /// Wraps text as an MCP `tools/call` result.
