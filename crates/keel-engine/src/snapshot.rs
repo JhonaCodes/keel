@@ -569,6 +569,11 @@ pub struct CompiledAgent {
     pub role: String,
     /// Executor id this agent routes to (the `executor:` prefix is stripped).
     pub executor: String,
+    /// Native-subagent equivalent in the launched client (e.g. Claude Code's
+    /// `~/.claude/agents/<name>`). Present when the agent can run in-session as a
+    /// Task subagent instead of the external `executor` CLI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_subagent: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub objective: Option<String>,
     /// Resolved routing signal (D-014): authored `match` + derived terms.

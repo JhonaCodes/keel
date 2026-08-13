@@ -362,6 +362,16 @@ pub struct AgentDoc {
 pub struct AgentSpec {
     pub role: String,
     pub executor: String,
+    /// Optional native-subagent equivalent in the launched client (e.g. Claude
+    /// Code's `~/.claude/agents/<name>`). When the parent client provides native
+    /// subagents, Keel delivers this agent as an in-session Task subagent instead
+    /// of spawning the external `executor` CLI. `executor` stays the fallback.
+    #[serde(
+        default,
+        rename = "nativeSubagent",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub native_subagent: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub objective: Option<String>,
     /// Declarative routing (D-014): when this agent APPLIES to a prompt. Same

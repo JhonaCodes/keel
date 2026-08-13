@@ -40,6 +40,17 @@ pub enum Client {
     Codex,
 }
 
+impl Client {
+    /// Whether the launched client provides in-session native subagents (Claude
+    /// Code's `Task` tool over `~/.claude/agents/`). When true, an agent that
+    /// declares `nativeSubagent` is delivered as an in-session Task subagent
+    /// instead of the external `executor` CLI — faster, no `env_clear`, and it
+    /// cannot hang the mono-thread `keel mcp` server.
+    fn provides_native_subagents(self) -> bool {
+        matches!(self, Client::ClaudeCode)
+    }
+}
+
 /// Reads one hook payload from stdin, evaluates it, and returns the exit code
 /// the client must honor: 2 = block the action, 0 = allow.
 pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result<ExitCode> {
@@ -135,6 +146,7 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
             &files.root,
             "UserPromptSubmit",
             "contexto entregado al modelo",
+            client,
         ));
     }
     // Session start (D-016): deliver the base context/rules up front — no moment
@@ -147,6 +159,7 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
             &files.root,
             "SessionStart",
             "contexto de inicio",
+            client,
         ));
     }
 
@@ -184,6 +197,7 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
             &files.root,
             "PreToolUse",
             "recursos en este momento",
+            client,
         ));
     }
 
@@ -207,6 +221,7 @@ fn build_delivery_context(
     snapshot: &Snapshot,
     moment: Option<&str>,
     root: &Path,
+    client: Client,
 ) -> Option<(String, Vec<String>)> {
     let mut blocks: Vec<String> = Vec::new();
     let mut sources: Vec<String> = Vec::new();
@@ -238,7 +253,7 @@ fn build_delivery_context(
         Some(moment) => keel_engine::routing::route(snapshot, moment, 6),
         None => keel_engine::routing::RouteResult::default(),
     };
-    if let Some(block) = routed_catalog_block(snapshot, &routed, &rule_skills, root) {
+    if let Some(block) = routed_catalog_block(snapshot, &routed, &rule_skills, root, client) {
         blocks.push(block);
         for s in &routed.skills {
             sources.push(format!("{}·{}", s.id, s.trigger));
@@ -270,8 +285,10 @@ fn emit_delivery(
     root: &Path,
     hook_event_name: &str,
     banner_label: &str,
+    client: Client,
 ) -> ExitCode {
-    let Some((context, sources)) = build_delivery_context(evals, snapshot, moment, root) else {
+    let Some((context, sources)) = build_delivery_context(evals, snapshot, moment, root, client)
+    else {
         return ExitCode::SUCCESS;
     };
     let banner = format!("keel ✦ {banner_label}: {}", sources.join(", "));
@@ -299,6 +316,7 @@ fn routed_catalog_block(
     routed: &keel_engine::routing::RouteResult,
     rule_skills: &[String],
     root: &Path,
+    client: Client,
 ) -> Option<String> {
     if routed.is_empty() && rule_skills.is_empty() {
         return None;
@@ -327,15 +345,38 @@ fn routed_catalog_block(
     }
 
     if !routed.agents.is_empty() {
-        lines.push("\nAgentes (invocá con keel.agent.invoke agent=<id>):".to_string());
+        // Two distinct delivery paths (the whole point of this block): an agent
+        // that declares `nativeSubagent` and runs under a client with native
+        // subagents (Claude Code) is spawned IN-SESSION via the Task tool — fast,
+        // no `env_clear`, cannot hang the mono-thread `keel mcp`. Everything else
+        // (no native equivalent, or a client without subagents) stays the
+        // external `keel.agent.invoke` CLI path, which is the opt-in cross-model
+        // second opinion — never the default closure auditor.
+        let native_ok = client.provides_native_subagents();
+        let mut in_session = Vec::new();
+        let mut cross_model = Vec::new();
         for a in &routed.agents {
-            let obj = snapshot
-                .agents
-                .get(&a.id)
-                .and_then(|c| c.objective.as_deref())
-                .unwrap_or("");
-            let sep = if obj.is_empty() { "" } else { ": " };
-            lines.push(format!("- {} [{}]{sep}{obj}", a.id, a.trigger));
+            let component = snapshot.agents.get(&a.id);
+            let obj = component.and_then(|c| c.objective.as_deref()).unwrap_or("");
+            let native = component.and_then(|c| c.native_subagent.as_deref());
+            let (is_native, line) = agent_delivery_line(&a.id, &a.trigger, obj, native, native_ok);
+            if is_native {
+                in_session.push(line);
+            } else {
+                cross_model.push(line);
+            }
+        }
+        if !in_session.is_empty() {
+            lines.push(
+                "\nSubagentes Task in-session (spawneá con la tool Task subagent_type=<nombre>; NUNCA keel.agent.invoke — eso lanza un CLI externo que se cuelga):".to_string(),
+            );
+            lines.extend(in_session);
+        }
+        if !cross_model.is_empty() {
+            lines.push(
+                "\nAgentes cross-model (opt-in segunda opinión, invocá con keel.agent.invoke agent=<id>):".to_string(),
+            );
+            lines.extend(cross_model);
         }
     }
 
@@ -368,6 +409,32 @@ fn routed_catalog_block(
             .to_string(),
     );
     Some(lines.join("\n"))
+}
+
+/// Decides how a routed agent is delivered and renders its catalog line.
+///
+/// Returns `(is_in_session, line)`. An agent that declares a `native_subagent`
+/// AND runs under a client that provides native subagents (`native_ok`) is
+/// delivered IN-SESSION as a Task subagent — the line names the native subagent
+/// and points at the Task tool, NEVER `keel.agent.invoke`. Otherwise it stays
+/// the external cross-model `keel.agent.invoke` path (opt-in second opinion).
+fn agent_delivery_line(
+    id: &str,
+    trigger: &str,
+    obj: &str,
+    native_subagent: Option<&str>,
+    native_ok: bool,
+) -> (bool, String) {
+    let sep = if obj.is_empty() { "" } else { ": " };
+    match native_subagent {
+        Some(name) if native_ok => (
+            true,
+            format!(
+                "- {name} [{trigger}]{sep}{obj} (subagente Task in-session; procede del agente keel {id})"
+            ),
+        ),
+        _ => (false, format!("- {id} [{trigger}]{sep}{obj}")),
+    }
 }
 
 /// One catalog line for a skill: `- <id> [<trigger>]: <description>`.
@@ -1219,5 +1286,59 @@ mod tests {
         let (event, preventable) = parse_claude_code_hook(&payload).expect("parsed");
         assert_eq!(event.kind, EventKind::TestCompleted);
         assert!(!preventable);
+    }
+
+    // ── Agent delivery: native Task subagent vs external cross-model CLI ──────
+    // The core of this change: under a client with native subagents (Claude
+    // Code), an agent that declares `nativeSubagent` must be delivered as an
+    // IN-SESSION Task subagent, never as `keel.agent.invoke` (the external CLI
+    // that hangs). Without a native equivalent, or under another client, it
+    // stays the cross-model path.
+
+    #[test]
+    fn native_agent_under_claude_code_is_delivered_in_session() {
+        let (is_native, line) = agent_delivery_line(
+            "keel_code_auditor",
+            "term:audit",
+            "Audit the change",
+            Some("code-auditor"),
+            Client::ClaudeCode.provides_native_subagents(),
+        );
+        assert!(is_native, "must route to the in-session Task bucket");
+        assert!(line.contains("code-auditor"), "names the native subagent");
+        assert!(
+            !line.contains("keel.agent.invoke"),
+            "the in-session line must never mention the external CLI"
+        );
+    }
+
+    #[test]
+    fn native_agent_under_codex_falls_back_to_cross_model() {
+        // Codex has no native subagents → even a `nativeSubagent`-declaring agent
+        // must fall back to the external cross-model path.
+        let (is_native, line) = agent_delivery_line(
+            "keel_code_auditor",
+            "term:audit",
+            "Audit the change",
+            Some("code-auditor"),
+            Client::Codex.provides_native_subagents(),
+        );
+        assert!(!is_native);
+        assert!(line.starts_with("- keel_code_auditor"));
+    }
+
+    #[test]
+    fn agent_without_native_equivalent_stays_cross_model_even_on_claude_code() {
+        // keel_external_auditor is the opt-in cross-model second opinion: no
+        // `nativeSubagent`, so it stays the external path under any client.
+        let (is_native, line) = agent_delivery_line(
+            "keel_external_auditor",
+            "term:audit",
+            "Cross-model second opinion",
+            None,
+            Client::ClaudeCode.provides_native_subagents(),
+        );
+        assert!(!is_native, "no native equivalent → cross-model bucket");
+        assert!(line.starts_with("- keel_external_auditor"));
     }
 }
