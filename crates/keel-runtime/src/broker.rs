@@ -70,14 +70,10 @@ fn extract_last_json_object(content: &str) -> Option<&str> {
                 }
                 depth += 1;
             }
-            b'}' => {
-                if depth > 0 {
-                    depth -= 1;
-                    if depth == 0 {
-                        if let Some(s) = start {
-                            best = Some((s, i + 1));
-                        }
-                    }
+            b'}' if depth > 0 => {
+                depth -= 1;
+                if depth == 0 {
+                    best = start.take().map(|s| (s, i + 1));
                 }
             }
             _ => {}
@@ -179,8 +175,8 @@ impl AgentBroker {
                 // The reply may be a prose report ending with the JSON verdict;
                 // take the trailing JSON object. Falling back to the whole reply
                 // preserves the "empty stdout" error (serde: line 1 column 1).
-                let json_str =
-                    extract_last_json_object(&response.content).unwrap_or(response.content.as_str());
+                let json_str = extract_last_json_object(&response.content)
+                    .unwrap_or(response.content.as_str());
                 let value: serde_json::Value = serde_json::from_str(json_str)?;
                 if !validator.is_valid(&value) {
                     return Err(AgentBrokerError::InvalidContract);

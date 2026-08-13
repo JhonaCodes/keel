@@ -109,9 +109,14 @@ fn output_schema_is_injected_into_the_prompt_and_json_is_extracted_from_prose() 
             max_tokens: None,
         },
     )]);
-    let snapshot =
-        Snapshot::build_full(Vec::new(), BTreeMap::new(), BTreeMap::new(), agents, "now".to_string())
-            .unwrap();
+    let snapshot = Snapshot::build_full(
+        Vec::new(),
+        BTreeMap::new(),
+        BTreeMap::new(),
+        agents,
+        "now".to_string(),
+    )
+    .unwrap();
     let broker = AgentBroker::from_snapshot(&snapshot, root.path());
     let mut scheduler = AgentScheduler::in_memory(1).unwrap();
     // A realistic auditor reply: a prose report (that itself contains braces)
@@ -121,16 +126,27 @@ fn output_schema_is_injected_into_the_prompt_and_json_is_extracted_from_prose() 
     ));
 
     let result = broker
-        .invoke("session", "auditor", "inspect", &mut scheduler, &mut executor)
+        .invoke(
+            "session",
+            "auditor",
+            "inspect",
+            &mut scheduler,
+            &mut executor,
+        )
         .unwrap();
 
     // The verdict JSON is extracted from the trailing object, not the prose braces.
-    let output = result.output.expect("schema agent must yield validated output");
+    let output = result
+        .output
+        .expect("schema agent must yield validated output");
     assert_eq!(output.get("verdict").and_then(|v| v.as_str()), Some("GO"));
     // The schema was injected into the prompt the executor received.
     let prompt = &executor.requests()[0].messages[0].content;
     assert!(prompt.contains("verdict"), "prompt should carry the schema");
-    assert!(prompt.contains("JSON"), "prompt should instruct JSON-only output");
+    assert!(
+        prompt.contains("JSON"),
+        "prompt should instruct JSON-only output"
+    );
 }
 
 #[test]
@@ -149,15 +165,26 @@ fn agent_without_output_schema_gets_no_injection() {
             max_tokens: None,
         },
     )]);
-    let snapshot =
-        Snapshot::build_full(Vec::new(), BTreeMap::new(), BTreeMap::new(), agents, "now".to_string())
-            .unwrap();
+    let snapshot = Snapshot::build_full(
+        Vec::new(),
+        BTreeMap::new(),
+        BTreeMap::new(),
+        agents,
+        "now".to_string(),
+    )
+    .unwrap();
     let broker = AgentBroker::from_snapshot(&snapshot, root.path());
     let mut scheduler = AgentScheduler::in_memory(1).unwrap();
     let mut executor = MockModelExecutor::with_response(ModelResponse::text("looks good"));
 
     let result = broker
-        .invoke("session", "reviewer", "inspect", &mut scheduler, &mut executor)
+        .invoke(
+            "session",
+            "reviewer",
+            "inspect",
+            &mut scheduler,
+            &mut executor,
+        )
         .unwrap();
 
     assert!(result.output.is_none());

@@ -145,7 +145,10 @@ fn verdict_event_content_derives_gate_text_from_validated_output() {
     );
 
     let bare = json!({ "verdict": "NO-GO" });
-    assert_eq!(verdict_event_content(&bare).as_deref(), Some("VERDICT: NO-GO"));
+    assert_eq!(
+        verdict_event_content(&bare).as_deref(),
+        Some("VERDICT: NO-GO")
+    );
 
     let missing = json!({ "note": "no verdict field" });
     assert!(verdict_event_content(&missing).is_none());
