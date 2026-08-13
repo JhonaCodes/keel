@@ -340,3 +340,133 @@ fn agent_invoke_routes_to_a_local_cli_executor_and_validates_its_output() {
     drop(stdin);
     let _ = child.wait();
 }
+
+/// A local-CLI auditor that returns a GO verdict, plus a record-audit rule on
+/// `task.completed`: invoking the agent must record that verdict as evidence in
+/// the session's ledger, so the audit gate can see it — the same evidence the
+/// Task-tool hook records, now reachable via keel.agent.invoke.
+fn author_go_auditor(root: &Path) {
+    let bin = root.join("global/bin");
+    fs::create_dir_all(&bin).unwrap();
+    let script = bin.join("fake-go-auditor.sh");
+    fs::write(
+        &script,
+        "#!/bin/sh\ncat >/dev/null\nprintf 'Audit report: no issues.\\n{\"verdict\":\"GO\",\"note\":\"ship it\"}'\n",
+    )
+    .unwrap();
+    fs::set_permissions(&script, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+
+    let execs = root.join("global/executors");
+    fs::create_dir_all(&execs).unwrap();
+    fs::write(
+        execs.join("go-auditor-cli.yaml"),
+        r#"apiVersion: keel/v1alpha1
+kind: ModelExecutor
+metadata: { id: go-auditor-cli, version: 1.0.0 }
+spec:
+  config:
+    command: [sh, global/bin/fake-go-auditor.sh]
+"#,
+    )
+    .unwrap();
+
+    let agents = root.join("global/agents");
+    fs::create_dir_all(&agents).unwrap();
+    fs::write(
+        agents.join("go-auditor.yaml"),
+        r#"apiVersion: keel/v1alpha1
+kind: Agent
+metadata: { id: go-auditor }
+spec:
+  role: audit
+  executor: executor:go-auditor-cli
+  objective: Audit the diff for issues.
+  outputSchema: global/agents/verdict.schema.json
+"#,
+    )
+    .unwrap();
+    fs::write(
+        agents.join("verdict.schema.json"),
+        r#"{ "type": "object", "required": ["verdict"], "properties": { "verdict": { "type": "string" }, "note": { "type": "string" } } }"#,
+    )
+    .unwrap();
+
+    let rules = root.join("global/rules");
+    fs::create_dir_all(&rules).unwrap();
+    fs::write(
+        rules.join("record-audit.yaml"),
+        r#"apiVersion: keel/v1alpha1
+kind: Rule
+metadata: { id: record-audit, author: test, adrRef: adr:TEST-001, reviewAfter: P6M }
+spec:
+  on: [task.completed]
+  validate: { using: "builtin:text.contains", with: { value: "VERDICT: GO" } }
+  enforcement:
+    invalid: { decision: allow }
+    valid: { decision: allow }
+"#,
+    )
+    .unwrap();
+}
+
+#[test]
+fn agent_invoke_records_a_task_completed_verdict_for_the_gate() {
+    let ws = Workspace::new();
+    let root = ws.path().to_str().unwrap().to_string();
+
+    assert!(ws.run(&["init", &root, "--json"]).status.success());
+    author_go_auditor(ws.path());
+    let compile = ws.run(&["compile", "--workspace", &root]);
+    assert!(
+        compile.status.success(),
+        "compile: {}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+
+    let mut child = Command::new(keel_bin())
+        .args(["mcp", "--workspace", &root, "--session", "session-agent"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn keel mcp");
+    let mut stdin = child.stdin.take().unwrap();
+    let mut reader = BufReader::new(child.stdout.take().unwrap());
+    let rpc = |stdin: &mut dyn Write, reader: &mut dyn BufRead, req: Value| -> Value {
+        serde_json::to_writer(&mut *stdin, &req).unwrap();
+        stdin.write_all(b"\n").unwrap();
+        stdin.flush().unwrap();
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        serde_json::from_str(&line).unwrap()
+    };
+
+    let resp = rpc(
+        &mut stdin,
+        &mut reader,
+        json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+               "params":{"name":"keel.agent.invoke",
+                         "arguments":{"agent":"go-auditor","input":"diff --git a b"}}}),
+    );
+    let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        text.contains("VERDICT: GO"),
+        "invoke reflects the recorded verdict: {text}"
+    );
+
+    drop(stdin);
+    let _ = child.wait();
+
+    // The evidence landed in THIS session's ledger as record-audit invalid (=GO),
+    // exactly the row the commit gate keys on.
+    let files = keel_engine::workspace::WorkspaceFiles::empty(ws.path().to_path_buf());
+    let ledger = keel_engine::ledger::Ledger::open(&files.ledger_path()).unwrap();
+    let evidence = ledger.recorded_evidence("session-agent").unwrap();
+    assert!(
+        evidence.iter().any(|(kind, verdict)| matches!(
+            kind,
+            keel_core::event::EventKind::TaskCompleted
+        ) && matches!(verdict, keel_core::Verdict::Invalid)),
+        "task.completed GO evidence must be recorded: {evidence:?}"
+    );
+}

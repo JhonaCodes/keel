@@ -40,6 +40,52 @@ pub enum AgentBrokerError {
     Runtime(#[from] RuntimeError),
 }
 
+/// Returns the last top-level `{...}` object in `content`, if any. Brace
+/// matching is string-aware, so braces inside JSON strings do not break the
+/// span — this lets a governed agent print a prose report and END with the
+/// JSON object its `outputSchema` requires.
+fn extract_last_json_object(content: &str) -> Option<&str> {
+    let bytes = content.as_bytes();
+    let mut depth: i32 = 0;
+    let mut start: Option<usize> = None;
+    let mut best: Option<(usize, usize)> = None;
+    let mut in_str = false;
+    let mut escaped = false;
+    for (i, &b) in bytes.iter().enumerate() {
+        if in_str {
+            if escaped {
+                escaped = false;
+            } else if b == b'\\' {
+                escaped = true;
+            } else if b == b'"' {
+                in_str = false;
+            }
+            continue;
+        }
+        match b {
+            b'"' => in_str = true,
+            b'{' => {
+                if depth == 0 {
+                    start = Some(i);
+                }
+                depth += 1;
+            }
+            b'}' => {
+                if depth > 0 {
+                    depth -= 1;
+                    if depth == 0 {
+                        if let Some(s) = start {
+                            best = Some((s, i + 1));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    best.map(|(s, e)| &content[s..e])
+}
+
 pub struct AgentBroker {
     routes: BTreeMap<String, AgentRoute>,
     workspace_root: PathBuf,
@@ -95,9 +141,29 @@ impl AgentBroker {
             .ok_or(AgentBrokerError::ClaimLost)?;
         scheduler.start(&claimed.id)?;
         let execution = (|| {
-            let prompt = match &route.objective {
+            // Read the output contract once: it is used BOTH to steer the model
+            // (inject the schema into the prompt) and to validate the reply. keel
+            // itself never calls a provider API (D-012) — the schema travels in
+            // the prompt so the LOCAL CLI knows to emit JSON on its own.
+            let schema = match &route.output_schema {
+                Some(schema_path) => {
+                    let raw = std::fs::read_to_string(self.workspace_root.join(schema_path))?;
+                    Some(serde_json::from_str::<serde_json::Value>(&raw)?)
+                }
+                None => None,
+            };
+            let base_prompt = match &route.objective {
                 Some(objective) => format!("Objective: {objective}\n\nInput:\n{input}"),
                 None => input.to_string(),
+            };
+            let prompt = match &schema {
+                Some(schema) => format!(
+                    "{base_prompt}\n\n---\nWhen you are done, end your reply with a single line \
+                     containing ONLY a JSON object that matches this JSON Schema — no prose, \
+                     no code fences, and nothing after it:\n{}",
+                    serde_json::to_string(schema).unwrap_or_default()
+                ),
+                None => base_prompt,
             };
             let response = executor
                 .complete(ModelRequest::new(
@@ -107,12 +173,15 @@ impl AgentBroker {
                 .map_err(|error| RuntimeError::Executor {
                     message: error.to_string(),
                 })?;
-            let output = if let Some(schema_path) = &route.output_schema {
-                let raw_schema = std::fs::read_to_string(self.workspace_root.join(schema_path))?;
-                let schema: serde_json::Value = serde_json::from_str(&raw_schema)?;
-                let validator = jsonschema::validator_for(&schema)
+            let output = if let Some(schema) = &schema {
+                let validator = jsonschema::validator_for(schema)
                     .map_err(|error| AgentBrokerError::ContractSchema(error.to_string()))?;
-                let value: serde_json::Value = serde_json::from_str(&response.content)?;
+                // The reply may be a prose report ending with the JSON verdict;
+                // take the trailing JSON object. Falling back to the whole reply
+                // preserves the "empty stdout" error (serde: line 1 column 1).
+                let json_str =
+                    extract_last_json_object(&response.content).unwrap_or(response.content.as_str());
+                let value: serde_json::Value = serde_json::from_str(json_str)?;
                 if !validator.is_valid(&value) {
                     return Err(AgentBrokerError::InvalidContract);
                 }
