@@ -131,6 +131,11 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
     );
     env.insert("KEEL_SESSION".into(), session_id.clone());
     env.insert("KEEL_WORKSPACE".into(), root.display().to_string());
+    // Which client is being governed, so workspace tools (e.g. keel-catalog)
+    // can deliver agents the same way keel's native delivery does: a client with
+    // in-session subagents (Claude Code) gets the Task-subagent path for agents
+    // that declare `nativeSubagent`, not the external `keel.agent.invoke` CLI.
+    env.insert("KEEL_CLIENT".into(), opts.client.clone());
 
     // Convergence plane (P2): wire keel's MCP endpoint into the child so the
     // model discovers/loads its governed skills through keel, and announce it.

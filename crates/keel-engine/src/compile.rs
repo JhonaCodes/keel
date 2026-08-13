@@ -263,6 +263,7 @@ pub fn compile_layered(
                     id: a.metadata.id.clone(),
                     role: a.spec.role.clone(),
                     executor: executor_id,
+                    native_subagent: a.spec.native_subagent.clone(),
                     objective: a.spec.objective.clone(),
                     match_: compile_match(
                         a.spec.match_.as_ref(),

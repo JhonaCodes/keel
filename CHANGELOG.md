@@ -4,6 +4,32 @@ Starts from `0.11.0` forward — not a retroactive reconstruction of the
 whole project history (that lives in `git log`). Versions here track
 `Cargo.toml`'s workspace `version`.
 
+## 0.19.0
+
+- **Native in-session subagents for agent delivery (`nativeSubagent`)**: an
+  `Agent` may now declare `nativeSubagent: <name>`, the equivalent native subagent
+  in the launched client (e.g. Claude Code's `~/.claude/agents/<name>`). When the
+  governed client provides in-session subagents (Claude Code), keel delivers that
+  agent as an IN-SESSION `Task` subagent instead of steering the model to the
+  external `keel.agent.invoke` CLI:
+  - Schema + DSL + compiler carry the new optional field into the snapshot
+    (`CompiledAgent.native_subagent`), so a change to it is drift `keel lock
+    --verify` detects. `executor` stays required and is the fallback.
+  - `keel gate`'s routed catalog (`routed_catalog_block`) now splits agents into
+    two labelled sections — **Subagentes Task in-session** (spawn with the `Task`
+    tool; never `keel.agent.invoke`) for native-mapped agents under Claude Code,
+    and **Agentes cross-model** (opt-in `keel.agent.invoke`) for everything else.
+    The client is threaded through the delivery chain; `Client::provides_native_
+    subagents()` gates the behavior.
+  - `keel launch` exports `KEEL_CLIENT` into the child env so workspace tools
+    (e.g. `keel-catalog`) can deliver agents the same way keel's native delivery
+    does.
+  - Rationale: the external CLI path runs under `env_clear` and can hang the
+    mono-thread `keel mcp`; the default closure auditor and the everyday experts
+    (`code-auditor`, `flutter-dart-expert`, `rn-expert`, …) already exist as
+    native subagents and should run in-session. `keel.agent.invoke` is reserved
+    for genuine opt-in cross-model second opinions (`keel_external_auditor`).
+
 ## 0.16.0
 
 - **Opportune context delivery — deliver the right resource at the right moment
