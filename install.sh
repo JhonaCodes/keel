@@ -26,8 +26,18 @@ cd "$repo_dir"
 # broken install, fail-closed — not a degraded mode).
 cargo build --release --locked -p keel-cli -p keel-shim
 mkdir -p "$prefix/bin"
-install -m 0755 target/release/keel "$prefix/bin/keel"
-install -m 0755 target/release/keel-shim "$prefix/bin/keel-shim"
+# Stage then rename — NEVER write in place over the destination. On macOS
+# overwriting a Mach-O that a live process has mapped does not fail with
+# ETXTBSY: it silently invalidates the signature the kernel cached for that
+# vnode, and every later exec of the path dies with SIGKILL (CODESIGNING /
+# "Taskgated Invalid Signature") — an upgrade during a running `keel claude`
+# would brick the binary. `mv` within the same directory is rename(2): atomic,
+# lands on a fresh inode, and REPLACES a symlinked destination instead of
+# following it through onto the target's inode.
+for bin in keel keel-shim; do
+  install -m 0755 "target/release/$bin" "$prefix/bin/.$bin.new"
+  mv -f "$prefix/bin/.$bin.new" "$prefix/bin/$bin"
+done
 "$prefix/bin/keel" --version
 printf 'installed: %s\n' "$prefix/bin/keel"
 printf 'installed: %s\n' "$prefix/bin/keel-shim"

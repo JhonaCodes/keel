@@ -29,6 +29,22 @@ whole project history (that lives in `git log`). Versions here track
     (`code-auditor`, `flutter-dart-expert`, `rn-expert`, …) already exist as
     native subagents and should run in-session. `keel.agent.invoke` is reserved
     for genuine opt-in cross-model second opinions (`keel_external_auditor`).
+- **`install.sh` installs atomically (fixes `zsh: killed` after an upgrade)**:
+  the installer staged nothing and let `install` write straight onto
+  `$prefix/bin/keel`. On macOS overwriting a Mach-O that a live process has
+  mapped does NOT fail with `ETXTBSY` — it invalidates the code signature the
+  kernel cached for that vnode, so every subsequent exec of the path is
+  SIGKILLed (`CODESIGNING` / "Taskgated Invalid Signature") and `keel claude`
+  dies instantly with a bare `zsh: killed`. Confusingly `codesign -v` still
+  reports "valid on disk", because the bytes are fine and only the cached vnode
+  is poisoned. Upgrading while a `keel claude` session was running therefore
+  bricked the binary — and, if `$prefix/bin/keel` was a symlink, `install`
+  followed it and corrupted the link target instead of replacing the link.
+  Both binaries now stage to `.<name>.new` and `mv` into place: rename(2) is
+  atomic, lands on a fresh inode, and replaces a symlink rather than following
+  it. Recovery on an already-bricked install: `rm` the binary before copying —
+  the poisoned inode stays alive for running processes and the new path gets a
+  correctly cached signature.
 
 ## 0.16.0
 
