@@ -17,6 +17,34 @@ use crate::Verdict;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
+/// Structured audit evidence carried through `task.completed` events.
+///
+/// The scope is the canonical hash of the exact change set that was audited.
+/// Keeping it separate from the generic event/verdict pair prevents an audit
+/// for one change from authorizing a later, different change in the same
+/// session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuditEvidence {
+    pub verdict: String,
+    pub scope: String,
+    pub mode: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+}
+
+impl AuditEvidence {
+    /// Extracts the machine-readable audit marker emitted by Keel agents or
+    /// the in-session auditor. Human-readable audit text remains untouched.
+    pub fn from_content(content: &str) -> Option<Self> {
+        let raw = content
+            .lines()
+            .find_map(|line| line.strip_prefix("AUDIT_EVIDENCE:").map(str::trim))?;
+        serde_json::from_str(raw).ok()
+    }
+}
+
 /// The 17 reserved governance events (spec section 11.2), plus `context.compacted`
 /// — a SESSION-LAYER signal (not a governance event): it gates no action and
 /// produces no verdict; it tells the runtime the model's context was compacted
@@ -143,6 +171,16 @@ pub struct Event {
     /// pairs, so this does not grow with ledger size.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub recorded_evidence: Vec<(EventKind, Verdict)>,
+    /// Current change-set fingerprint for commit/PR commands, computed by the
+    /// client bridge immediately before rule evaluation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audit_scope: Option<String>,
+    /// Minimum audit mode required for the current change-set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audit_mode: Option<String>,
+    /// Structured audit evidence already recorded for this session.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recorded_audits: Vec<AuditEvidence>,
 }
 
 #[cfg(test)]

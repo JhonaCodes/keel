@@ -11,6 +11,7 @@
 //!
 //! This crate is a deliberate leaf: it knows neither the authoring DSL nor the engine.
 
+pub mod audit;
 pub mod event;
 mod hash;
 

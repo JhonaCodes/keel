@@ -22,7 +22,7 @@ use crate::snapshot::{
     CompiledBranch, CompiledPrecondition, CompiledRule, CompiledToolRef, EnvConstraint, Snapshot,
 };
 use crate::tools::{self, ExecContext};
-use keel_core::event::Event;
+use keel_core::event::{AuditEvidence, Event, EventKind};
 use keel_core::{Decision, OriginClass, Verdict};
 use std::path::Path;
 
@@ -75,6 +75,13 @@ impl Evaluation {
             self.findings.iter().map(|f| f.message.clone()).collect();
         if let Some(d) = &self.detail {
             detail_parts.push(d.clone());
+        }
+        if event.kind == EventKind::TaskCompleted
+            && let Some(content) = event.content.as_deref()
+            && let Some(audit) = AuditEvidence::from_content(content)
+            && let Ok(encoded) = serde_json::to_string(&audit)
+        {
+            detail_parts.push(format!("AUDIT_EVIDENCE: {encoded}"));
         }
         crate::ledger::LedgerEntry {
             id,
@@ -197,7 +204,7 @@ fn evaluate_rule(
                 declared,
                 started.elapsed().as_millis() as u64,
                 vec![],
-                Some(precondition_detail(pre)),
+                Some(precondition_detail(pre, event)),
                 mode,
             ));
         }
@@ -294,7 +301,7 @@ fn evaluate_rule(
 /// Actionable detail for a failed precondition. `skill.loaded` names the skill
 /// and how to satisfy it, so the block packet tells the model exactly what to
 /// do (load it through keel) instead of a bare "precondition failed".
-fn precondition_detail(pre: &CompiledPrecondition) -> String {
+fn precondition_detail(pre: &CompiledPrecondition, event: &Event) -> String {
     if let CompiledToolRef::Builtin(id) = &pre.using
         && id == "skill.loaded"
         && let Some(skill) = pre
@@ -305,6 +312,16 @@ fn precondition_detail(pre: &CompiledPrecondition) -> String {
     {
         return format!(
             "this action requires the keel skill `{skill}` — load it with keel.skills.load and follow it, then retry"
+        );
+    }
+    if let CompiledToolRef::Builtin(id) = &pre.using
+        && id == "audit.recorded_for_change"
+    {
+        let scope = event.audit_scope.as_deref().unwrap_or("unavailable");
+        let mode = event.audit_mode.as_deref().unwrap_or("focused");
+        let files = event.files.len();
+        return format!(
+            "this action requires a change-scoped audit before commit/PR — scope={scope}, mode={mode}, files={files}; load `keel_workflow_audit`, audit only the current diff, record `VERDICT: GO` with `AUDIT_EVIDENCE`, then retry"
         );
     }
     format!("precondition failed: {}", pre.using)

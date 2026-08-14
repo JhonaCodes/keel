@@ -17,6 +17,7 @@
 
 use anyhow::{Context, Result};
 use keel_core::Decision;
+use keel_core::audit::target_for_command;
 use keel_core::event::{Event, EventKind};
 use keel_engine::ledger::{Ledger, new_ev_id, now_ts};
 use keel_engine::packet;
@@ -90,9 +91,17 @@ impl Broker {
             .unwrap_or_default()
     }
 
+    fn recorded_audits(&self) -> Vec<keel_core::event::AuditEvidence> {
+        self.ledger
+            .recorded_audits(&self.session_id)
+            .unwrap_or_default()
+    }
+
     /// Evaluates one interposed command. Pure with respect to the socket —
     /// used directly by unit tests.
     pub fn decide(&self, req: &ShimRequest) -> Result<ShimResponse> {
+        let command = req.argv.join(" ");
+        let target = target_for_command(&self.root, Some(&command));
         let event = Event {
             kind: EventKind::CommandRequested,
             session_id: Some(self.session_id.clone()),
@@ -100,11 +109,14 @@ impl Broker {
             language: None,
             content: None,
             line: None,
-            command: Some(req.argv.join(" ")),
+            command: Some(command),
             env: self.env.clone(),
             files: Vec::new(),
             loaded_skills: self.loaded_skills(),
             recorded_evidence: self.recorded_evidence(),
+            audit_scope: target.as_ref().map(|target| target.scope.clone()),
+            audit_mode: target.as_ref().map(|target| target.mode.clone()),
+            recorded_audits: self.recorded_audits(),
         };
 
         let evals = evaluate_event(&self.snapshot, &event, &self.root, Mode::Enforce);

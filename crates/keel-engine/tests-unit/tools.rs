@@ -17,6 +17,9 @@ fn event_with(content: Option<&str>, command: Option<&str>) -> Event {
         files: vec![],
         loaded_skills: vec![],
         recorded_evidence: vec![],
+        audit_scope: None,
+        audit_mode: None,
+        recorded_audits: vec![],
     }
 }
 
@@ -198,6 +201,34 @@ fn precondition_evidence_recorded_gates_on_session_history() {
         &Default::default(),
         ctx()
     ));
+}
+
+#[test]
+fn audit_precondition_requires_matching_scope_and_sufficient_mode() {
+    let pre = CompiledPrecondition {
+        using: CompiledToolRef::Builtin("audit.recorded_for_change".into()),
+        with: Some(serde_json::json!({"min_mode": "extended"})),
+        on_fail_declared: keel_core::Decision::Block,
+    };
+    let mut ev = event_with(None, Some("git commit -m change"));
+    ev.audit_scope = Some("sha256:new".into());
+    ev.audit_mode = Some("extended".into());
+
+    ev.recorded_audits = vec![keel_core::event::AuditEvidence {
+        verdict: "GO".into(),
+        scope: "sha256:old".into(),
+        mode: "exhaustive".into(),
+        files: vec![],
+        note: None,
+    }];
+    assert!(!run_precondition(&pre, &ev, &Default::default(), ctx()));
+
+    ev.recorded_audits[0].scope = "sha256:new".into();
+    ev.recorded_audits[0].mode = "focused".into();
+    assert!(!run_precondition(&pre, &ev, &Default::default(), ctx()));
+
+    ev.recorded_audits[0].mode = "extended".into();
+    assert!(run_precondition(&pre, &ev, &Default::default(), ctx()));
 }
 
 /// FAIL-SAFE: missing binary → `unknown`, never a crash (section 6.4).

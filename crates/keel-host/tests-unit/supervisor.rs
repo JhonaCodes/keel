@@ -85,3 +85,33 @@ fn ignores_other_sessions_and_sub_threshold_findings() {
         "two findings do not oscillate"
     );
 }
+
+#[test]
+fn queued_suggestions_are_returned_only_when_the_supervisor_finishes() {
+    let temp = tempfile::tempdir().unwrap();
+    let ledger_path = temp.path().join("ledger.sqlite");
+    let ledger = Ledger::open(&ledger_path).unwrap();
+    for i in 0..3 {
+        ledger
+            .append(&invalid_entry(
+                &format!("ev_q{i}"),
+                "session-q",
+                "require-audit",
+                "lib/order.dart",
+            ))
+            .unwrap();
+    }
+
+    let shutdown = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let supervisor = spawn(ledger_path, "session-q".into(), shutdown.clone());
+    std::thread::sleep(POLL_INTERVAL + std::time::Duration::from_millis(100));
+    shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
+
+    let notices = supervisor.finish();
+    assert_eq!(
+        notices.len(),
+        1,
+        "suggestions are queued for safe rendering"
+    );
+    assert!(notices[0].contains("require-audit"));
+}

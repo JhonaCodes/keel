@@ -663,9 +663,10 @@ fn launch_resolves_the_registered_default_workspace_from_any_cwd() {
     let _ = fs::remove_dir_all(&home);
 }
 
-/// The supervisor (P3) surfaces a suggestion to the OPERATOR when the model
-/// oscillates — the same rule blocking three times in a session. It never
-/// writes into the model's stream. `--no-suggest` silences it.
+/// The supervisor (P3) queues a suggestion to the OPERATOR when the model
+/// oscillates — the same rule blocking three times in a session. It is emitted
+/// only after the child exits so it cannot corrupt the interactive PTY stream.
+/// `--no-suggest` silences it.
 #[test]
 fn the_supervisor_surfaces_an_oscillation_and_no_suggest_silences_it() {
     let workspace = Workspace::new();

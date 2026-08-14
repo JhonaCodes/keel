@@ -54,6 +54,23 @@
               "additionalProperties": { "type": "string" }
             },
             "files": { "type": "array", "items": { "type": "string" } }
+            ,"audit_scope": { "type": "string" }
+            ,"audit_mode": { "enum": ["focused", "extended", "exhaustive"] }
+            ,"recorded_audits": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["verdict", "scope", "mode"],
+                "additionalProperties": false,
+                "properties": {
+                  "verdict": { "type": "string" },
+                  "scope": { "type": "string" },
+                  "mode": { "enum": ["focused", "extended", "exhaustive"] },
+                  "files": { "type": "array", "items": { "type": "string" } },
+                  "note": { "type": "string" }
+                }
+              }
+            }
           }
         },
         "expect": {

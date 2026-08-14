@@ -213,6 +213,18 @@ enum Command {
         #[arg(long)]
         verify: bool,
     },
+    /// Print the authoritative change-set fingerprint required by the
+    /// change-scoped audit before commit or PR creation.
+    AuditScope {
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        /// `commit` uses the staged diff; `pr` uses the branch diff against base.
+        #[arg(long, default_value = "commit")]
+        target: String,
+        /// PR base branch. If omitted for a PR, Keel resolves origin/HEAD.
+        #[arg(long)]
+        base: Option<String>,
+    },
     /// Compliance plane (spec section 5.2, section 8): the SAME engine run in CI over the
     /// pinned lock. Where `locked` finally becomes a guarantee, because CI runs
     /// on infrastructure the developer does not control.
@@ -384,6 +396,11 @@ fn main() -> ExitCode {
             org,
         } => commands::bind(&workspace, project, org),
         Command::Lock { workspace, verify } => commands::lock(&workspace, verify),
+        Command::AuditScope {
+            workspace,
+            target,
+            base,
+        } => commands::audit_scope(&workspace, &target, base.as_deref()),
         Command::Ci { command } => match command {
             CiCommand::Resolve { workspace } => commands::ci_resolve(&workspace),
             CiCommand::Run { workspace } => commands::ci_run(&workspace),

@@ -160,6 +160,19 @@ impl Server {
                     }
                 },
                 {
+                    "name": "keel.audit.scope",
+                    "description": "Return the exact diff fingerprint, audit mode, and files that Keel will require before a commit or PR. Call this before auditing; never invent the scope.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "target": { "enum": ["commit", "pr"] },
+                            "base": { "type": "string" }
+                        },
+                        "required": ["target"],
+                        "additionalProperties": false
+                    }
+                },
+                {
                     "name": "keel.agent.invoke",
                     "description": "Ask Keel to run a governed agent (possibly on another model) and return its feedback. Cross-model, deterministic.",
                     "inputSchema": {
@@ -194,6 +207,14 @@ impl Server {
                 let command = args.get("command").and_then(Value::as_str);
                 let path = args.get("path").and_then(Value::as_str);
                 Ok(text_result(&self.rules_query(command, path)))
+            }
+            "keel.audit.scope" => {
+                let target = args
+                    .get("target")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| rpc_error(-32602, "missing audit target"))?;
+                let base = args.get("base").and_then(Value::as_str);
+                Ok(text_result(&self.audit_scope(target, base)?))
             }
             "keel.agent.invoke" => {
                 let agent = args
@@ -277,6 +298,22 @@ impl Server {
         } else {
             format!("Governed rules that may apply:\n{}", hits.join("\n"))
         }
+    }
+
+    fn audit_scope(&self, target: &str, base: Option<&str>) -> Result<String, Value> {
+        let scope = match target {
+            "commit" => keel_core::audit::target_for_commit(&self.root),
+            "pr" => keel_core::audit::target_for_pr(&self.root, base),
+            other => return Err(rpc_error(-32602, &format!("unknown audit target: {other}"))),
+        }
+        .ok_or_else(|| {
+            rpc_error(
+                -32000,
+                "could not compute audit scope; stage the commit or provide a reachable PR base",
+            )
+        })?;
+        serde_json::to_string(&scope)
+            .map_err(|error| rpc_error(-32603, &format!("serialize audit scope: {error}")))
     }
 
     /// Runs a governed agent and returns its feedback — cross-model by design:
@@ -379,6 +416,9 @@ impl Server {
             files: Vec::new(),
             loaded_skills: Vec::new(),
             recorded_evidence: Vec::new(),
+            audit_scope: None,
+            audit_mode: None,
+            recorded_audits: Vec::new(),
         };
         let evals = evaluate_event(&self.snapshot, &event, &self.root, Mode::Enforce);
         let mut written = 0usize;
@@ -405,11 +445,24 @@ impl Server {
 fn verdict_event_content(output: &Value) -> Option<String> {
     let verdict = output.get("verdict").and_then(Value::as_str)?;
     let note = output.get("note").and_then(Value::as_str).unwrap_or("");
-    Some(if note.is_empty() {
-        format!("VERDICT: {verdict}")
-    } else {
-        format!("VERDICT: {verdict}\n{note}")
-    })
+    let mut content = format!("VERDICT: {verdict}");
+    if output.get("scope").and_then(Value::as_str).is_some()
+        && output.get("mode").and_then(Value::as_str).is_some()
+    {
+        let evidence = serde_json::json!({
+            "verdict": verdict,
+            "scope": output.get("scope").and_then(Value::as_str).unwrap_or_default(),
+            "mode": output.get("mode").and_then(Value::as_str).unwrap_or_default(),
+            "files": output.get("files").cloned().unwrap_or_else(|| serde_json::json!([])),
+            "note": output.get("note").cloned().unwrap_or(serde_json::Value::Null),
+        });
+        content.push_str(&format!("\nAUDIT_EVIDENCE: {evidence}"));
+    }
+    if !note.is_empty() {
+        content.push('\n');
+        content.push_str(note);
+    }
+    Some(content)
 }
 
 /// Wraps text as an MCP `tools/call` result.

@@ -17,6 +17,7 @@
 
 use anyhow::{Context, Result};
 use keel_core::Decision;
+use keel_core::audit::target_for_command;
 use keel_core::event::{Event, EventKind};
 use keel_engine::ledger::{Ledger, new_ev_id, now_ts};
 use keel_engine::packet;
@@ -111,6 +112,17 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
         .as_ref()
         .and_then(|l| l.recorded_evidence(&session_id).ok())
         .unwrap_or_default();
+    event.recorded_audits = ledger
+        .as_ref()
+        .and_then(|l| l.recorded_audits(&session_id).ok())
+        .unwrap_or_default();
+    if let Some(target) = target_for_command(&files.root, event.command.as_deref()) {
+        event.audit_scope = Some(target.scope);
+        event.audit_mode = Some(target.mode);
+        if !target.files.is_empty() {
+            event.files = target.files;
+        }
+    }
     let evals = evaluate_event(&snapshot, &event, &files.root, Mode::Enforce);
 
     let mut worst = Decision::Allow;
@@ -509,6 +521,9 @@ fn parse_claude_code_hook(input: &str) -> Option<(Event, bool)> {
         files: vec![],
         loaded_skills: vec![],
         recorded_evidence: vec![], // populated by gate() before evaluate_event
+        audit_scope: None,
+        audit_mode: None,
+        recorded_audits: vec![], // populated by gate() before evaluate_event
     };
 
     let pre = hook == "PreToolUse";
@@ -688,6 +703,9 @@ fn parse_codex_hook(input: &str) -> Option<(Event, bool)> {
         files: vec![],
         loaded_skills: vec![],
         recorded_evidence: vec![],
+        audit_scope: None,
+        audit_mode: None,
+        recorded_audits: vec![],
     };
 
     let pre = hook == "PreToolUse";

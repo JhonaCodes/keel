@@ -3,6 +3,7 @@
 //! logic lives in keel-engine.
 
 use anyhow::{Context, Result, bail};
+use keel_core::audit::{target_for_commit, target_for_pr};
 use keel_core::event::Event;
 use keel_core::{Decision, Verdict};
 use keel_engine::ledger::{Ledger, LedgerEntry};
@@ -20,6 +21,22 @@ use std::process::ExitCode;
 // Evidence identity helpers live in keel-engine (the host broker needs them
 // too); the CLI re-exports them for its own modules.
 pub(crate) use keel_engine::ledger::{new_ev_id, now_ts};
+
+/// Prints the same audit target the commit/PR gates calculate. This gives an
+/// agent the exact scope before it audits, rather than teaching it to recreate
+/// a hash or discover it through a failed commit.
+pub fn audit_scope(root: &Path, target: &str, base: Option<&str>) -> Result<ExitCode> {
+    let scope = match target {
+        "commit" => target_for_commit(root),
+        "pr" => target_for_pr(root, base),
+        other => bail!("unknown audit target `{other}`; expected `commit` or `pr`"),
+    }
+    .context(
+        "could not compute audit scope; stage changes for commit or configure a reachable PR base",
+    )?;
+    println!("{}", serde_json::to_string(&scope)?);
+    Ok(ExitCode::SUCCESS)
+}
 
 // ─────────────────────────── init ───────────────────────────
 
@@ -769,6 +786,9 @@ pub fn doctor(root: &Path) -> Result<ExitCode> {
             files: vec![],
             loaded_skills: vec![],
             recorded_evidence: vec![],
+            audit_scope: None,
+            audit_mode: None,
+            recorded_audits: vec![],
         };
         let evals = evaluate_event(&snap, &synthetic, root, Mode::Passive);
         let over_review = evals

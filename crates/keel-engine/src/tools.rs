@@ -60,6 +60,7 @@ pub const BUILTIN_PRECONDITIONS: &[&str] = &[
     "flag.present",
     "skill.loaded",
     "evidence.recorded",
+    "audit.recorded_for_change",
 ];
 
 /// Runs a builtin DETECTOR. Returns only hit/no-hit: the detector never
@@ -197,6 +198,21 @@ pub fn run_precondition(
                         .iter()
                         .any(|(k, v)| *k == target_kind && target_verdict.is_none_or(|tv| tv == *v))
                 }
+                "audit.recorded_for_change" => {
+                    let Some(scope) = event.audit_scope.as_deref() else {
+                        return false;
+                    };
+                    let required_mode = with
+                        .and_then(|w| w.get("min_mode"))
+                        .and_then(|v| v.as_str())
+                        .or(event.audit_mode.as_deref())
+                        .unwrap_or("focused");
+                    event.recorded_audits.iter().any(|audit| {
+                        audit.verdict == "GO"
+                            && audit.scope == scope
+                            && mode_rank(&audit.mode) >= mode_rank(required_mode)
+                    })
+                }
                 _ => false,
             }
         }
@@ -204,6 +220,15 @@ pub fn run_precondition(
             Some(def) => run_external(def, event, ctx).verdict == Verdict::Valid,
             None => false, // no manifest, no evaluation → fail-closed
         },
+    }
+}
+
+fn mode_rank(mode: &str) -> u8 {
+    match mode.to_ascii_lowercase().as_str() {
+        "focused" => 1,
+        "extended" => 2,
+        "exhaustive" => 3,
+        _ => 0,
     }
 }
 

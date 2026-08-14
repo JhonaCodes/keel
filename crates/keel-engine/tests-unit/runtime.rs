@@ -77,6 +77,9 @@ fn edited(file: &str, content: &str) -> Event {
         files: vec![],
         loaded_skills: vec![],
         recorded_evidence: vec![],
+        audit_scope: None,
+        audit_mode: None,
+        recorded_audits: vec![],
     }
 }
 
@@ -275,6 +278,9 @@ fn env_violation_classifies_deny_and_allowlist() {
         files: vec![],
         loaded_skills: vec![],
         recorded_evidence: vec![],
+        audit_scope: None,
+        audit_mode: None,
+        recorded_audits: vec![],
     };
     let env = EnvConstraint {
         allow: vec!["local".into(), "docker-dev".into()],
@@ -431,6 +437,9 @@ fn commit_event(recorded: Vec<(EventKind, Verdict)>) -> Event {
         files: vec![],
         loaded_skills: vec![],
         recorded_evidence: recorded,
+        audit_scope: None,
+        audit_mode: None,
+        recorded_audits: vec![],
     }
 }
 

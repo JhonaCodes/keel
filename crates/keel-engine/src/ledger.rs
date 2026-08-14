@@ -18,7 +18,7 @@
 //! calls the runtime (⇏ runtime: the ledger is a sink — the runtime writes
 //! to it, never the other way around).
 
-use keel_core::event::EventKind;
+use keel_core::event::{AuditEvidence, EventKind};
 use keel_core::{Decision, OriginClass, Verdict};
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
@@ -373,6 +373,32 @@ impl Ledger {
             Ok((event_kind, verdict))
         })?;
         rows.collect()
+    }
+
+    /// Structured audit evidence recorded for a session. Older evidence rows
+    /// without the `AUDIT_EVIDENCE` marker are intentionally ignored: they
+    /// cannot prove which change set was audited.
+    pub fn recorded_audits(&self, session_id: &str) -> rusqlite::Result<Vec<AuditEvidence>> {
+        let mut stmt = self.conn.prepare(
+            r#"SELECT detail FROM evidence
+               WHERE session_id = ?1
+                 AND event_kind = '"task.completed"'
+                 AND detail IS NOT NULL
+               ORDER BY ts"#,
+        )?;
+        let rows = stmt.query_map(params![session_id], |row| {
+            let detail: String = row.get(0)?;
+            Ok(detail
+                .split_once("AUDIT_EVIDENCE:")
+                .map(|(_, raw)| raw.trim())
+                .and_then(|raw| serde_json::from_str::<AuditEvidence>(raw).ok()))
+        })?;
+        rows.filter_map(|row| match row {
+            Ok(Some(audit)) => Some(Ok(audit)),
+            Ok(None) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .collect()
     }
 
     pub fn count(&self) -> rusqlite::Result<u64> {

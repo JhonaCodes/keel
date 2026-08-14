@@ -168,6 +168,35 @@ fn recorded_evidence_is_distinct_and_scoped_to_the_session() {
 }
 
 #[test]
+fn recorded_audits_are_scoped_and_ignore_unstructured_go_text() {
+    let ledger = Ledger::open_in_memory().unwrap();
+    ledger
+        .append(&LedgerEntry {
+            event_kind: EventKind::TaskCompleted,
+            detail: Some("VERDICT: GO | AUDIT_EVIDENCE: {\"verdict\":\"GO\",\"scope\":\"sha256:new\",\"mode\":\"focused\",\"files\":[\"lib/a.dart\"]}".into()),
+            ..entry("ev_audit", "record-audit", Verdict::Invalid, "2026-01-01T00:00:00Z")
+        })
+        .unwrap();
+    ledger
+        .append(&LedgerEntry {
+            event_kind: EventKind::TaskCompleted,
+            detail: Some("VERDICT: GO".into()),
+            ..entry(
+                "ev_old",
+                "record-audit",
+                Verdict::Invalid,
+                "2026-01-01T00:00:01Z",
+            )
+        })
+        .unwrap();
+
+    let audits = ledger.recorded_audits("s1").unwrap();
+    assert_eq!(audits.len(), 1);
+    assert_eq!(audits[0].scope, "sha256:new");
+    assert_eq!(audits[0].mode, "focused");
+}
+
+#[test]
 fn human_decisions_are_recorded_with_human_class() {
     let ledger = Ledger::open_in_memory().unwrap();
     ledger

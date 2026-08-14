@@ -178,9 +178,9 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
         root.display()
     );
 
-    // Cognitive direction (P3): a supervisor watches the live ledger and
-    // surfaces suggestions (oscillation) to the operator's transcript — never
-    // into the model's input stream (that would interfere with its reasoning).
+    // Cognitive direction (P3): a supervisor watches the live ledger. It queues
+    // suggestions rather than writing to stderr while the child owns the PTY:
+    // concurrent terminal writers corrupt interactive TUIs and mouse handling.
     let supervisor_shutdown = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let supervisor = (!opts.no_suggest).then(|| {
         supervisor::spawn(
@@ -196,13 +196,22 @@ pub fn launch(opts: LaunchOptions) -> Result<ExitCode> {
     // Teardown: supervisor + broker down, ephemeral dir + socket gone; evidence
     // stays.
     supervisor_shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
-    if let Some(supervisor) = supervisor {
-        let _ = supervisor.join();
-    }
+    let supervisor_notices = if let Some(supervisor) = supervisor {
+        supervisor.finish()
+    } else {
+        Vec::new()
+    };
     handle.stop();
     let _ = join.join();
     let _ = std::fs::remove_dir_all(&host_dir);
     let _ = std::fs::remove_file(&socket_path);
+
+    // pty::run restored terminal mode and every background Keel writer is now
+    // stopped, so this is the only terminal output. Present queued cognitive
+    // direction without touching the child's ANSI/mouse-control byte stream.
+    for notice in supervisor_notices {
+        eprintln!("{notice}");
+    }
 
     let code = code?;
     Ok(if code == 0 {
@@ -601,6 +610,9 @@ function eventForTool(input, output) {{
     files: [],
     loaded_skills: [],
     recorded_evidence: [],
+    audit_scope: None,
+    audit_mode: None,
+    recorded_audits: [],
   }};
 
   if (tool === "bash") {{

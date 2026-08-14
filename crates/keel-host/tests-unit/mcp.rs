@@ -85,6 +85,7 @@ fn tools_list_exposes_the_convergence_tools() {
     assert!(names.contains(&"keel.skills.list"));
     assert!(names.contains(&"keel.skills.load"));
     assert!(names.contains(&"keel.rules.query"));
+    assert!(names.contains(&"keel.audit.scope"));
 }
 
 #[test]
@@ -148,6 +149,19 @@ fn verdict_event_content_derives_gate_text_from_validated_output() {
     assert_eq!(
         verdict_event_content(&go).as_deref(),
         Some("VERDICT: GO\nship it")
+    );
+
+    let scoped = json!({
+        "verdict": "GO",
+        "scope": "sha256:abc",
+        "mode": "focused",
+        "files": ["lib/a.dart"],
+        "note": "scoped"
+    });
+    assert!(
+        verdict_event_content(&scoped)
+            .as_deref()
+            .is_some_and(|content| content.contains("AUDIT_EVIDENCE:"))
     );
 
     let bare = json!({ "verdict": "NO-GO" });
