@@ -509,10 +509,18 @@ pub struct CompiledSkill {
         skip_serializing_if = "CompiledMatch::is_empty"
     )]
     pub match_: CompiledMatch,
-    /// Workspace-relative path to the compact variant.
+    /// Workspace-relative path to the compact variant, or `<inline>` when the
+    /// authored YAML embeds the body directly.
     pub compact: String,
+    /// Inline compact body. When present, delivery does not read a sidecar file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compact_content: Option<String>,
+    /// Workspace-relative path to the full variant, when authored as a sidecar.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full: Option<String>,
+    /// Inline full body. When present, delivery does not read a sidecar file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub full_content: Option<String>,
     /// Rejected/accepted pairs feeding the packet `exemplar` (section 10.4).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub examples: Vec<(String, String)>,

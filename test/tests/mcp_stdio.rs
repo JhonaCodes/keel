@@ -164,14 +164,11 @@ fn a_toy_client_lists_and_loads_a_governed_skill_over_stdio() {
     let _ = child.wait();
 }
 
-/// H-009's known gap, mitigated: before this, `full` was reachable only via
-/// P3 oscillation escalation — never wired to a live call site in
-/// production, so a skill's `full` content (e.g. keel_reactive_notifier's
-/// 27k-line reference) was effectively unreachable. `keel.skills.load` now
-/// accepts an explicit `full: true` and serves it directly, without needing
-/// to fake three oscillating findings first.
+/// A skill's `full` content is the authoritative context, so `keel.skills.load`
+/// serves it by default. The compact variant remains available only as an
+/// explicit preview (`full:false`).
 #[test]
-fn keel_skills_load_serves_full_content_on_explicit_request() {
+fn keel_skills_load_serves_full_content_by_default() {
     let ws = Workspace::new();
     let root = ws.path().to_str().unwrap().to_string();
 
@@ -210,30 +207,33 @@ fn keel_skills_load_serves_full_content_on_explicit_request() {
         json!({"jsonrpc":"2.0","id":0,"method":"initialize"}),
     );
 
-    // Default (full omitted) → compact, unchanged behavior — regression.
+    // Explicit full=false → compact preview.
     let compact = rpc(
         &mut stdin,
         &mut reader,
         json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
-               "params":{"name":"keel.skills.load","arguments":{"id":"access-patterns"}}}),
+               "params":{"name":"keel.skills.load","arguments":{"id":"access-patterns","full":false}}}),
     );
     let compact_text = compact["result"]["content"][0]["text"].as_str().unwrap();
     assert!(
         compact_text.contains("(compact)") && compact_text.contains("USE the query builder"),
-        "default request must still serve compact: {compact_text}"
+        "explicit full:false must serve the compact preview: {compact_text}"
     );
 
-    // Explicit full=true → the full variant, not compact.
-    let full = rpc(
+    // Default (full omitted) → full authoritative skill context.
+    let full_default = rpc(
         &mut stdin,
         &mut reader,
         json!({"jsonrpc":"2.0","id":2,"method":"tools/call",
-               "params":{"name":"keel.skills.load","arguments":{"id":"access-patterns","full":true}}}),
+               "params":{"name":"keel.skills.load","arguments":{"id":"access-patterns"}}}),
     );
-    let full_text = full["result"]["content"][0]["text"].as_str().unwrap();
+    let full_default_text = full_default["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap();
     assert!(
-        full_text.contains("(full)") && full_text.contains("FULL: every query-builder method"),
-        "explicit full:true must serve the full variant, not compact: {full_text}"
+        full_default_text.contains("(full)")
+            && full_default_text.contains("FULL: every query-builder method"),
+        "default request must serve the full variant, not compact: {full_default_text}"
     );
 
     drop(stdin);

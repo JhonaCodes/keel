@@ -12,7 +12,11 @@ fn server_with_skill() -> (Server, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
     std::fs::create_dir_all(root.join("skills")).unwrap();
-    std::fs::write(root.join("skills/access.md"), "USE the query builder.").unwrap();
+    std::fs::write(
+        root.join("skills/access.md"),
+        "Preview: query-builder skill.",
+    )
+    .unwrap();
 
     let mut skills = BTreeMap::new();
     skills.insert(
@@ -23,7 +27,9 @@ fn server_with_skill() -> (Server, tempfile::TempDir) {
             match_: Default::default(),
             version: "0.1.0".into(),
             compact: "skills/access.md".into(),
+            compact_content: None,
             full: None,
+            full_content: Some("FULL: USE the query builder with every edge case.".into()),
             examples: vec![],
         },
     );
@@ -95,8 +101,8 @@ fn list_then_load_delivers_content_and_records_a_receipt() {
         json!({ "id": "access-patterns" }),
     );
     assert!(
-        loaded.contains("USE the query builder"),
-        "the skill content is delivered: {loaded}"
+        loaded.contains("FULL: USE the query builder"),
+        "the full skill content is delivered by default: {loaded}"
     );
 
     // Keel — not the model's word — recorded the delivery.
@@ -105,7 +111,7 @@ fn list_then_load_delivers_content_and_records_a_receipt() {
 
     // Second list reflects the loaded state.
     let relisting = call(&mut server, "keel.skills.list", json!({}));
-    assert!(relisting.contains("loaded:Compact"), "state: {relisting}");
+    assert!(relisting.contains("loaded:Full"), "state: {relisting}");
 }
 
 /// With no agent declared, invoke reports it honestly rather than pretending.

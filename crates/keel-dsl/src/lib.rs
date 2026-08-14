@@ -288,11 +288,13 @@ pub struct SkillDoc {
     pub spec: SkillSpec,
 }
 
-/// Operational knowledge with loading levels (spec section 14.12): `compact.md` is
-/// delivered on first activation; `full.md` on oscillation (section 6.5). The
-/// rejected/accepted `examples` feed the packet `exemplar` (section 10.4) — a block
-/// whose message is open to interpretation reproduces the failure mode the
-/// system exists to prevent.
+/// Operational knowledge with loading levels (spec section 14.12): `compact`
+/// is only a discovery/preview index; `full` is the authoritative context
+/// delivered by default when a model loads the skill.
+/// Prefer inline YAML literal content; legacy `_keel.md` sidecar paths are
+/// still accepted. The rejected/accepted `examples` feed the packet `exemplar`
+/// (section 10.4) — a block whose message is open to interpretation reproduces
+/// the failure mode the system exists to prevent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SkillSpec {
@@ -306,9 +308,9 @@ pub struct SkillSpec {
     /// skill routes with zero authoring; `match` only augments/refines.
     #[serde(default, rename = "match", skip_serializing_if = "Option::is_none")]
     pub match_: Option<MatchSpec>,
-    /// Workspace-relative path to the compact variant.
+    /// Compact variant body, or a legacy workspace-relative `_keel.md` path.
     pub compact: String,
-    /// Workspace-relative path to the full variant (optional).
+    /// Full variant body, or a legacy workspace-relative `_keel.md` path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

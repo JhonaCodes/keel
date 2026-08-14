@@ -5,16 +5,14 @@
 //! context economy ladder:
 //!
 //! ```text
-//! nothing at start → compact on first activation → full on escalation
+//! nothing at start → full on normal load → compact only for explicit preview
 //! ```
 //!
 //! A skill already loaded is NOT re-sent when the same momentum arises again
-//! — the agent has it in context. Escalation to `full` has two triggers: an
-//! explicit on-demand request (`keel.skills.load {full: true}`) or oscillation
-//! (section 6.5): three repeated findings at the same rule+location mean the
-//! agent lost or is ignoring the context. `deliver_skills` treats both the
-//! same way — it never re-sends what a session already has at the requested
-//! level or higher.
+//! — the agent has it in context. `compact` is a catalog/preview variant; it is
+//! not the authoritative instruction body. `full` is the real context a model
+//! should follow when a skill matters. `deliver_skills` never re-sends what a
+//! session already has at the requested level or higher.
 //!
 //! INVARIANT 16: this state is append-only in spirit — it only ever records
 //! what was delivered; it cannot touch enforcement, scope, validation or
@@ -92,17 +90,15 @@ impl SessionStore {
 /// Resolves what a rule's `load.skills` should DELIVER to the session right
 /// now, updating the state. Returns the payload chunks for the packet.
 ///
-/// `escalate` asks for the `full` variant — either because the caller
-/// explicitly requested it (`keel.skills.load {full: true}`, H-009's mitigation
-/// PR's known gap) or because P3 detected oscillation (section 6.5, not yet
-/// wired to a live call site — see `PLAN_MAESTRO.md`). `deliver_skills` does
-/// not need to know WHICH reason applies, only THAT full was asked for.
+/// `escalate` asks for the `full` variant. Normal MCP loading passes `true`;
+/// explicit preview paths pass `false`. Oscillation can still pass `true`, but
+/// it is no longer the primary route to full context.
 ///
 /// | Situation | Delivery |
 /// |---|---|
-/// | not loaded, no escalation | compact content + exemplar; mark compact |
+/// | not loaded, explicit preview | compact content + exemplar; mark compact |
 /// | loaded compact, no escalation | one-line reference only (no re-send) |
-/// | escalating, not at full yet | FULL content; mark full |
+/// | normal load / escalating, not at full yet | FULL content; mark full |
 /// | loaded full | reference only |
 pub fn deliver_skills(
     snapshot: &Snapshot,
@@ -140,8 +136,7 @@ pub fn deliver_skills(
         match current {
             Some(level) if level >= desired => {
                 // Already in the agent's context: don't burn tokens re-sending
-                // (the user's rule: only re-deliver when context is lost —
-                // which surfaces as oscillation and is handled below).
+                // (the user's rule: only deliver a skill body once per level).
                 payload.push(format!("skill {skill_id} already loaded ({level:?})"));
                 // section 10.4: a BLOCK packet must still carry the exemplar even
                 // when the skill body is already loaded — the rejected/accepted
@@ -161,16 +156,39 @@ pub fn deliver_skills(
 }
 
 fn render_skill(skill: &CompiledSkill, root: &Path, level: SkillLevel) -> String {
-    let (label, path) = match (level, &skill.full) {
-        (SkillLevel::Full, Some(full)) => ("full", full.as_str()),
+    let (label, content) = match (level, skill.full_content.as_ref(), &skill.full) {
+        (SkillLevel::Full, Some(content), _) => ("full", content.clone()),
+        (SkillLevel::Full, None, Some(full)) => (
+            "full",
+            std::fs::read_to_string(root.join(full)).unwrap_or_else(|_| {
+                format!("(skill file `{full}` missing — see compile warnings)")
+            }),
+        ),
         // Escalation requested but no full variant exists: compact is the
         // best available — say so instead of silently downgrading.
-        (SkillLevel::Full, None) => ("full-unavailable-using-compact", skill.compact.as_str()),
-        (SkillLevel::Compact, _) => ("compact", skill.compact.as_str()),
+        (SkillLevel::Full, None, None) => (
+            "full-unavailable-using-compact",
+            skill.compact_content.as_ref().cloned().unwrap_or_else(|| {
+                std::fs::read_to_string(root.join(&skill.compact)).unwrap_or_else(|_| {
+                    format!(
+                        "(skill file `{}` missing — see compile warnings)",
+                        skill.compact
+                    )
+                })
+            }),
+        ),
+        (SkillLevel::Compact, _, _) => (
+            "compact",
+            skill.compact_content.as_ref().cloned().unwrap_or_else(|| {
+                std::fs::read_to_string(root.join(&skill.compact)).unwrap_or_else(|_| {
+                    format!(
+                        "(skill file `{}` missing — see compile warnings)",
+                        skill.compact
+                    )
+                })
+            }),
+        ),
     };
-
-    let content = std::fs::read_to_string(root.join(path))
-        .unwrap_or_else(|_| format!("(skill file `{path}` missing — see compile warnings)"));
 
     let mut out = format!(
         "--- skill {} ({label}) ---\n{}",

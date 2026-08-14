@@ -112,4 +112,4 @@ CI does not depend on the daemon or the developer's local MCP: it starts its eph
 
 ## 9. Context Economy (Reference)
 
-Three levels of loading: nothing at start; compact on demand; full only on oscillation or request. The runtime does not expose hundreds of tools simultaneously: it activates only capabilities applicable to the current state. A child agent receives independent and scoped context; neither is the parent's conversation copied by default, nor is the child's complete result added to the parent's context: the validated artifact and a synthesis appropriate to the phase are returned.
+Three levels of loading: nothing at start; compact only as discovery/preview; full by default when a skill is loaded or autoloaded. The runtime does not expose hundreds of tools simultaneously: it activates only capabilities applicable to the current state. A child agent receives independent and scoped context; neither is the parent's conversation copied by default, nor is the child's complete result added to the parent's context: the validated artifact and a synthesis appropriate to the phase are returned.

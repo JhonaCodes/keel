@@ -18,8 +18,29 @@ fn snapshot_with_skill(root: &Path) -> Snapshot {
             match_: Default::default(),
             version: "0.1.0".into(),
             compact: "skills/compact.md".into(),
+            compact_content: None,
             full: Some("skills/full.md".into()),
+            full_content: None,
             examples: vec![("bad()".into(), "good()".into())],
+        },
+    );
+    Snapshot::build(vec![], BTreeMap::new(), skills, "t".into()).unwrap()
+}
+
+fn snapshot_with_inline_skill() -> Snapshot {
+    let mut skills = BTreeMap::new();
+    skills.insert(
+        "inline-patterns".to_string(),
+        CompiledSkill {
+            id: "inline-patterns".into(),
+            description: None,
+            match_: Default::default(),
+            version: "0.1.0".into(),
+            compact: "<inline>".into(),
+            compact_content: Some("USE the inline pattern.".into()),
+            full: None,
+            full_content: Some("FULL inline guide.".into()),
+            examples: vec![],
         },
     );
     Snapshot::build(vec![], BTreeMap::new(), skills, "t".into()).unwrap()
@@ -31,8 +52,8 @@ fn tmp() -> PathBuf {
     dir
 }
 
-/// The L2 core: first activation delivers compact+exemplar; the second
-/// does NOT re-send; oscillation escalates to full.
+/// The L2 core still supports an explicit compact preview; the second preview
+/// does NOT re-send; a full request upgrades the session.
 #[test]
 fn deliver_once_then_reference_then_escalate() {
     let root = tmp();
@@ -40,7 +61,7 @@ fn deliver_once_then_reference_then_escalate() {
     let mut state = SessionState::default();
     let refs = vec!["skill:access-patterns#compact".to_string()];
 
-    // 1st: full compact content + exemplar.
+    // 1st explicit preview: compact content + exemplar.
     let p1 = deliver_skills(&snap, &root, &mut state, &refs, false, false);
     assert!(p1[0].contains("USE the approved pattern"));
     assert!(p1[0].contains("rejected: bad()"));
@@ -51,11 +72,11 @@ fn deliver_once_then_reference_then_escalate() {
     assert!(p2[0].contains("already loaded"));
     assert!(!p2[0].contains("USE the approved pattern"));
 
-    // Oscillation: escalate to FULL even though compact was loaded.
+    // Full request: upgrade to authoritative content even though compact was loaded.
     let p3 = deliver_skills(&snap, &root, &mut state, &refs, true, false);
     assert!(p3[0].contains("FULL guide"));
 
-    // After full, even oscillating: reference only.
+    // After full, another full request: reference only.
     let p4 = deliver_skills(&snap, &root, &mut state, &refs, true, false);
     assert!(p4[0].contains("already loaded"));
 
@@ -85,6 +106,23 @@ fn block_reattaches_exemplar_even_when_skill_already_loaded() {
             .any(|c| c.contains("rejected: bad()") && c.contains("accepted: good()")),
         "a block must re-attach the exemplar even when the skill is loaded: {p:?}"
     );
+    std::fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn inline_skill_content_is_delivered_without_sidecar_files() {
+    let root = tmp();
+    let snap = snapshot_with_inline_skill();
+    let mut state = SessionState::default();
+    let refs = vec!["skill:inline-patterns#compact".to_string()];
+
+    let compact = deliver_skills(&snap, &root, &mut state, &refs, false, false);
+    assert!(compact[0].contains("USE the inline pattern."));
+
+    let mut escalated = SessionState::default();
+    let full = deliver_skills(&snap, &root, &mut escalated, &refs, true, false);
+    assert!(full[0].contains("FULL inline guide."));
+
     std::fs::remove_dir_all(&root).ok();
 }
 

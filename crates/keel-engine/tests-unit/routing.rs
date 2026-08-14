@@ -91,7 +91,9 @@ fn skill(id: &str, terms: &[&str], context: &[&str], autoload: bool) -> Compiled
             autoload,
         },
         compact: format!("{id}.md"),
+        compact_content: None,
         full: None,
+        full_content: None,
         examples: vec![],
     }
 }

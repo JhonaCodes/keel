@@ -139,7 +139,7 @@ impl Server {
                 },
                 {
                     "name": "keel.skills.load",
-                    "description": "Load a governed skill's content into your context by id. Keel records the delivery. Use the id from keel.skills.list. Set full:true for the deeper reference variant when the skill declares one (compact is the default).",
+                    "description": "Load a governed skill's authoritative context into your context by id. Keel records the delivery. Use the id from keel.skills.list. Full context is the default when the skill declares it; set full:false only when you explicitly need the compact preview.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -187,7 +187,7 @@ impl Server {
                     .get("id")
                     .and_then(Value::as_str)
                     .ok_or_else(|| rpc_error(-32602, "missing skill id"))?;
-                let full = args.get("full").and_then(Value::as_bool).unwrap_or(false);
+                let full = args.get("full").and_then(Value::as_bool).unwrap_or(true);
                 Ok(text_result(&self.skills_load(id, full)))
             }
             "keel.rules.query" => {

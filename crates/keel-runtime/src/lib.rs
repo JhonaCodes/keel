@@ -405,27 +405,32 @@ impl RuntimeHost {
         workspace_root: &Path,
     ) -> Result<(), RuntimeError> {
         for skill in snapshot.skills.values() {
-            let compact_path = workspace_root.join(&skill.compact);
-            let compact = std::fs::read_to_string(&compact_path).map_err(|error| {
-                RuntimeError::SkillContentRead {
-                    skill_id: skill.id.clone(),
-                    path: skill.compact.clone(),
-                    message: error.to_string(),
+            let compact = match &skill.compact_content {
+                Some(content) => content.clone(),
+                None => {
+                    let compact_path = workspace_root.join(&skill.compact);
+                    std::fs::read_to_string(&compact_path).map_err(|error| {
+                        RuntimeError::SkillContentRead {
+                            skill_id: skill.id.clone(),
+                            path: skill.compact.clone(),
+                            message: error.to_string(),
+                        }
+                    })?
                 }
-            })?;
-            let full = skill
-                .full
-                .as_ref()
-                .map(|path| {
+            };
+            let full = match (&skill.full_content, &skill.full) {
+                (Some(content), _) => Some(content.clone()),
+                (None, Some(path)) => Some(
                     std::fs::read_to_string(workspace_root.join(path)).map_err(|error| {
                         RuntimeError::SkillContentRead {
                             skill_id: skill.id.clone(),
                             path: path.clone(),
                             message: error.to_string(),
                         }
-                    })
-                })
-                .transpose()?;
+                    })?,
+                ),
+                (None, None) => None,
+            };
             self.register_skill(SkillDefinition::new(
                 skill.id.clone(),
                 skill.version.clone(),
@@ -800,7 +805,9 @@ mod tests {
                 match_: Default::default(),
                 version: "1.2.0".to_string(),
                 compact: "compact.md".to_string(),
+                compact_content: None,
                 full: None,
+                full_content: None,
                 examples: Vec::new(),
             },
         );
@@ -816,6 +823,37 @@ mod tests {
         assert_eq!(receipt.session_id, "session-2");
         assert_eq!(receipt.reason.as_deref(), Some("reference requirement"));
         assert!(!receipt.read_at.is_empty());
+    }
+
+    #[test]
+    fn snapshot_hydrates_inline_skills_inside_keel_runtime() {
+        let root = tempfile::tempdir().unwrap();
+        let mut skills = BTreeMap::new();
+        skills.insert(
+            "architecture.review".to_string(),
+            CompiledSkill {
+                id: "architecture.review".to_string(),
+                description: None,
+                match_: Default::default(),
+                version: "1.2.0".to_string(),
+                compact: "<inline>".to_string(),
+                compact_content: Some("Inline Keel guidance".to_string()),
+                full: None,
+                full_content: Some("Inline full Keel guidance".to_string()),
+                examples: Vec::new(),
+            },
+        );
+        let snapshot = Snapshot::build(Vec::new(), BTreeMap::new(), skills, "now".into()).unwrap();
+        let mut host = RuntimeHost::from_snapshot("session-2", &snapshot, root.path()).unwrap();
+        host.require_skill("architecture.review");
+        let receipt = host
+            .read_skill(SkillReadRequest::compact(
+                "architecture.review",
+                "investigation",
+            ))
+            .unwrap();
+
+        assert_eq!(receipt.content, "Inline Keel guidance");
     }
 
     #[test]

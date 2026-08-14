@@ -195,16 +195,11 @@ Abierto, no perdido, no activo ahora mismo:
   pidió). Los 6 call sites de test en `tests-unit/session.rs` no necesitaron
   cambios (usan booleanos posicionales, el rename no rompe nada). Test nuevo
   end-to-end en `test/tests/mcp_stdio.rs`
-  (`keel_skills_load_serves_full_content_on_explicit_request`, RED
-  confirmado antes — `full` no existía en el schema — GREEN después):
-  `keel.skills.load` sin `full` sigue sirviendo compact (regresión
-  explícita); con `full: true` sirve el contenido `full`, etiquetado
-  `(full)`. Verificado además contra el binario real instalado, con el caso
-  real que motivó el pedido: `keel_reactive_notifier` en `keel-workflow`
-  (recién migrado, H-012) — `keel mcp` por stdio, `keel.skills.load` sin
-  `full` devuelve 11,679 caracteres `(compact)`; con `full: true` devuelve
-  758,931 caracteres `(full)` con las 60 fuentes de ReactiveNotifier
-  intactas. `keel-workflow` recompila/testea/lockea sin drift.
+  (`keel_skills_load_serves_full_content_by_default`): `keel.skills.load`
+  sin `full` sirve el contenido `full` por defecto cuando existe; `full:false`
+  queda como preview compacta explícita. Verificado contra el binario real con
+  skills inline en `keel-workflow`: el contexto real vive en `spec.full`, no en
+  `spec.compact`. `keel-workflow` recompila/testea/lockea sin drift.
   **Explícitamente fuera de este ítem** (no se tocó): cablear el
   escalamiento automático real desde el supervisor P3 — requeriría
   señalización cross-proceso (el supervisor corre separado del servidor
@@ -467,9 +462,10 @@ Abierto, no perdido, no activo ahora mismo:
   `keel_tdd`. Distinto del `Tool` (que sí funciona: el autor escribe la ruta
   completa relativa al workspace a mano en el YAML). Fix: `compile_layered`
   ahora recibe la raíz del workspace y re-ancla `compact`/`full` a esa raíz
-  al compilar (`crates/keel-engine/src/compile.rs`), sin cambiar la
-  convención de autoría (`compact: skills/x_keel.md`, relativo a la capa,
-  sigue siendo lo que se escribe a mano). Verificado: `cargo test --workspace
+  al compilar (`crates/keel-engine/src/compile.rs`). Nota 2026-08-14: la
+  convención preferida posterior es autorar `compact: |` / `full: |` inline
+  dentro del YAML; las rutas `skills/x_keel.md` quedan como compatibilidad
+  heredada. Verificado: `cargo test --workspace
   --locked` (incluye un caso de `test/tests/mcp_stdio.rs` que tenía la
   convención de ruta mal escrita, compensando el bug — corregido también),
   `cargo clippy -D warnings`, `cargo fmt --check`, y verificación mecánica
@@ -553,7 +549,7 @@ Abierto, no perdido, no activo ahora mismo:
 - **H-001** (workflow de 8 fases, `PhaseController` no conectado) →
   SUPERADO: la taxonomía RCCA (`Investigation/Planning/.../Delivery`,
   `crates/keel-runtime/src/phase.rs`) queda descartada, no reemplazada por
-  código de motor — la fase TDD/SDD real de jflow (RED/GREEN/AUDIT/VERIFY)
+  código de motor — la fase TDD/SDD real de Keel (RED/GREEN/AUDIT/VERIFY)
   se deriva íntegra como Reglas de contenido en `keel-workflow` (ver H-010
   en "Cerrado/superado"), sin ningún `Phase` enum en el SDK.
   `PhaseController`/`RuntimeHost` siguen sin importarse en el camino de

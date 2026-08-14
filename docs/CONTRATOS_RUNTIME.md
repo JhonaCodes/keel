@@ -63,8 +63,8 @@ The concrete sequence implemented by `PhaseController`/`RuntimeStore` today
 (`investigation -> planning -> implementation -> verification -> audit ->
 resolution -> acceptance -> delivery`) predates the parent-runtime pivot and
 is NOT wired into production (`keel-host`/`keel-cli` don't import
-`RuntimeHost`). It is being replaced by a phase design authored with jflow's
-real vocabulary (analysis/red/green/refactor/audit/verify/done), derived as
+`RuntimeHost`). It is being replaced by a phase design authored with Keel's
+actual workflow vocabulary (analysis/red/green/refactor/audit/verify/done), derived as
 events from ledger evidence rather than tracked as separate state — see
 `planificacion/ordenes_trabajo/PLAN_MAESTRO.md#H-010`. The artifact-per-phase
 CONTRACT SHAPE described below is durable and architecture-agnostic; only the

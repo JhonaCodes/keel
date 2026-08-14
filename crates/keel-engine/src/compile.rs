@@ -62,7 +62,7 @@ pub enum CompileError {
     )]
     DuplicateId(String),
     #[error(
-        "skill `{skill}`: content file `{path}` must end in `_keel.md` — keel skills carry that suffix so their provenance (delivered by keel) is legible wherever they are read"
+        "skill `{skill}`: legacy content file `{path}` must end in `_keel.md` — prefer inline YAML content; sidecar files carry that suffix so their provenance (delivered by keel) is legible wherever they are read"
     )]
     SkillNaming { skill: String, path: String },
     #[error("rule `{rule}`: unresolvable reference `{reference}` — {hint}")]
@@ -116,6 +116,10 @@ pub struct CompileLayer<'a> {
     pub files: &'a WorkspaceFiles,
 }
 
+fn inline_skill_body(value: &str) -> Option<String> {
+    value.contains('\n').then(|| value.trim_end().to_string())
+}
+
 /// Compiles a single flat workspace into an immutable snapshot. A flat
 /// workspace is one composition layer, so this is `compile_layered` over a
 /// one-element chain — the same code path, no special case.
@@ -164,22 +168,24 @@ pub fn compile_layered(
             if !seen.insert(skill.metadata.id.clone()) {
                 return Err(CompileError::DuplicateId(skill.metadata.id.clone()));
             }
-            // Naming condition: a skill's content files MUST end in `_keel.md`,
-            // so their provenance (delivered BY keel) is legible wherever they
-            // are read. Enforced at compile so every skill that ever enters a
-            // workspace follows it — it is a rule, not a convention.
-            for path in [Some(&skill.spec.compact), skill.spec.full.as_ref()]
+            // Naming condition: legacy sidecar content files MUST end in
+            // `_keel.md`, so their provenance (delivered BY keel) is legible
+            // wherever they are read. Inline YAML bodies are already inside the
+            // governed document and do not need a filename suffix.
+            for value in [Some(&skill.spec.compact), skill.spec.full.as_ref()]
                 .into_iter()
                 .flatten()
             {
-                if !path.ends_with("_keel.md") {
+                if inline_skill_body(value).is_none() && !value.ends_with("_keel.md") {
                     return Err(CompileError::SkillNaming {
                         skill: skill.metadata.id.clone(),
-                        path: path.clone(),
+                        path: value.clone(),
                     });
                 }
             }
-            if !layer.files.root.join(&skill.spec.compact).exists() {
+            if inline_skill_body(&skill.spec.compact).is_none()
+                && !layer.files.root.join(&skill.spec.compact).exists()
+            {
                 warnings.push(format!(
                     "skill `{}`: compact file `{}` not found in the workspace — delivery will degrade to a reference",
                     skill.metadata.id, skill.spec.compact
@@ -203,6 +209,8 @@ pub fn compile_layered(
             let resolve = |relative: &str| -> String {
                 layer_prefix.join(relative).to_string_lossy().into_owned()
             };
+            let compact_content = inline_skill_body(&skill.spec.compact);
+            let full_content = skill.spec.full.as_deref().and_then(inline_skill_body);
             skills.insert(
                 skill.metadata.id.clone(),
                 CompiledSkill {
@@ -218,8 +226,18 @@ pub fn compile_layered(
                         &skill.metadata.id,
                         skill.spec.description.as_deref(),
                     ),
-                    compact: resolve(&skill.spec.compact),
-                    full: skill.spec.full.as_deref().map(resolve),
+                    compact: compact_content
+                        .as_ref()
+                        .map(|_| "<inline>".to_string())
+                        .unwrap_or_else(|| resolve(&skill.spec.compact)),
+                    compact_content,
+                    full: skill
+                        .spec
+                        .full
+                        .as_deref()
+                        .filter(|full| inline_skill_body(full).is_none())
+                        .map(resolve),
+                    full_content,
                     examples: skill
                         .spec
                         .examples

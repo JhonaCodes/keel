@@ -21,7 +21,7 @@ use keel_core::event::{Event, EventKind};
 use keel_engine::ledger::{Ledger, new_ev_id, now_ts};
 use keel_engine::packet;
 use keel_engine::runtime::{Mode, evaluate_event};
-use keel_engine::snapshot::Snapshot;
+use keel_engine::snapshot::{CompiledSkill, Snapshot};
 use keel_engine::workspace::WorkspaceFiles;
 use keel_runtime::RuntimeStore;
 use std::io::Read;
@@ -395,12 +395,17 @@ fn routed_catalog_block(
         }
     }
 
-    // Autoload: inject the compact content of strongly-matched opt-in skills.
+    // Autoload: inject the full content of strongly-matched opt-in skills.
+    // If Keel decides a skill is relevant enough to push automatically, the
+    // model needs the authoritative instructions, not only the compact preview.
     for s in routed.skills.iter().filter(|s| s.autoload) {
-        if let Some(compact) = snapshot.skills.get(&s.id).map(|c| &c.compact)
-            && let Ok(content) = std::fs::read_to_string(root.join(compact))
+        if let Some(skill) = snapshot.skills.get(&s.id)
+            && let Some((label, content)) = autoload_skill_content(skill, root)
         {
-            lines.push(format!("\n── skill cargada: {} ──\n{content}", s.id));
+            lines.push(format!(
+                "\n── skill cargada: {} ({label}) ──\n{content}",
+                s.id
+            ));
         }
     }
 
@@ -409,6 +414,23 @@ fn routed_catalog_block(
             .to_string(),
     );
     Some(lines.join("\n"))
+}
+
+fn autoload_skill_content(skill: &CompiledSkill, root: &Path) -> Option<(&'static str, String)> {
+    if let Some(content) = &skill.full_content {
+        return Some(("full", content.clone()));
+    }
+    if let Some(full) = &skill.full
+        && let Ok(content) = std::fs::read_to_string(root.join(full))
+    {
+        return Some(("full", content));
+    }
+    if let Some(content) = &skill.compact_content {
+        return Some(("compact", content.clone()));
+    }
+    std::fs::read_to_string(root.join(&skill.compact))
+        .ok()
+        .map(|content| ("compact", content))
 }
 
 /// Decides how a routed agent is delivered and renders its catalog line.
@@ -504,7 +526,7 @@ fn parse_claude_code_hook(input: &str) -> Option<(Event, bool)> {
                     // RED/GREEN evidence: a `test.completed` event whose content
                     // carries the pass/fail signal (from the real exit code) so
                     // an authored rule classifies it and the ledger records it —
-                    // the port of jflow's evidence-capture. Nothing is decided
+                    // the port of legacy evidence-capture. Nothing is decided
                     // here; the event just carries the observed truth.
                     if !pre && command.as_deref().is_some_and(is_test_runner) {
                         let mut ev = mk(EventKind::TestCompleted);
@@ -786,7 +808,7 @@ fn is_test_runner(command: &str) -> bool {
 }
 
 /// Builds the `content` of a synthesized `test.completed` event from the hook's
-/// `tool_response`. The exit code is authoritative (jflow's rule); when it is
+/// `tool_response`. The exit code is authoritative (Keel's rule); when it is
 /// absent, fall back to failure signatures in the output. The word `FAILED` is
 /// present in the content exactly when the run failed, so a companion rule
 /// (`builtin:text.contains { value: FAILED }`) classifies it Invalid.
@@ -1140,7 +1162,7 @@ mod tests {
     // H-009: a completed `Task` (Claude Code's subagent tool — code-auditor,
     // edu-revisor, any GO/NO-GO reviewer) had no arm at all — it fell to the
     // generic `other` handler, which ignores PostToolUse entirely. That
-    // blocked a faithful port of jflow's verify-before-close pattern (a Stop
+    // blocked a faithful port of the verify-before-close pattern (a Stop
     // gate requiring recorded audit evidence): nothing ever synthesized that
     // evidence from a real subagent run.
     // Mitigation for the risk flagged after H-009: no assumption about a real

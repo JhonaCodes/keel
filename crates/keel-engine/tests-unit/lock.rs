@@ -79,7 +79,7 @@ fn verify_rejects_platform_binding_drift() {
 fn knowledge_checkpoints_are_persisted_but_never_compared_as_drift() {
     let s = empty_snapshot();
     let mut checkpoints = BTreeMap::new();
-    checkpoints.insert("knowledge:jflow-memory".to_string(), "sha256:aaa".into());
+    checkpoints.insert("knowledge:project-memory".to_string(), "sha256:aaa".into());
     let lock = Lock::generate(&binding(), &s, "0.1.0", checkpoints.clone());
     assert_eq!(
         lock.knowledge_checkpoints, checkpoints,

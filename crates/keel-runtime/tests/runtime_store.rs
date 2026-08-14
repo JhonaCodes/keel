@@ -73,7 +73,9 @@ fn durable_host_hydrates_skills_from_the_compiled_snapshot() {
             match_: Default::default(),
             version: "1.0.0".to_string(),
             compact: "compact.md".to_string(),
+            compact_content: None,
             full: None,
+            full_content: None,
             examples: Vec::new(),
         },
     );

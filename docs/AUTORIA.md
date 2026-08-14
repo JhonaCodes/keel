@@ -186,8 +186,10 @@ spec:
 
 ## Skill — knowledge Keel delivers to the model
 
-Folders: `global/skills/<name>.yaml` + content `.md` files. The model loads it
-via `keel.skills.load` (MCP); Keel registers the receipt.
+Folders: `global/skills/<name>.yaml`. The skill preview/index lives directly in
+the YAML under `spec.compact`; the real, authoritative skill body lives under
+`spec.full`. Keel compiles both inline fields into the snapshot and delivers
+`full` by default via `keel.skills.load` (MCP), then registers the receipt.
 
 ```yaml
 apiVersion: keel/v1alpha1
@@ -199,17 +201,23 @@ spec:
     terms: [coderabbit]                           # explicit alias — the disambiguator
     context: [github_pr]                          # structured object type
     autoload: false                               # true → inject on a strong match
-  compact: global/skills/keel_review_pr_coderabbit_keel.md   # short variant (first delivery)
-  full: global/skills/keel_review_pr_coderabbit_full_keel.md # optional: scales on oscillation
+  compact: |                                      # short preview/index for discovery
+    Resolve CodeRabbit review comments with evidence.
+    Full context lives in spec.full and should be loaded before execution.
+  full: |                                         # authoritative skill instructions
+    Full operating procedure goes here.
   examples:                                        # optional: pairs for packet exemplar
     - ["skim the PR by hand", "resolve each CodeRabbit thread"]
 ```
 
-- **CONDITION (enforced on compile):** a skill's content files MUST end with
-  `_keel.md`. A `compact`/`full` that doesn't comply is a compile error
-  (`SkillNaming`). The suffix makes provenance legible — delivered BY Keel —
-  wherever content is read.
-- The `.md` is free text; Keel delivers it as-is to context.
+- **Preferred form:** use YAML literal blocks (`compact: |`, `full: |`) so the
+  manifest and the model-facing guidance stay in one governed artifact.
+- **Semantics:** `compact` is only the discovery preview. `full` is the real
+  instruction payload a model must follow when the skill matters.
+- **Legacy compatibility:** `compact`/`full` may still point at `_keel.md`
+  sidecar files. When using sidecars, the filename suffix is enforced by
+  `SkillNaming` so provenance remains legible.
+- The content is free text; Keel delivers it as-is to context.
 - A rule can request it: `enforcement.invalid.load.skills: ["skill:keel_review_pr_coderabbit"]`.
 - **`description` (recommended):** a one-line summary that flows into the compiled
   snapshot, so Keel can EXPOSE a catalog to the model (D-013) and DERIVE routing
@@ -217,7 +225,7 @@ spec:
 - **`match` (optional, D-014):** declares WHEN this skill applies. `terms` are
   explicit aliases weighted above derived words (the lever that disambiguates
   siblings); `context` is a structured object type (`github_pr`, `github_issue`,
-  `linear_ticket`, `jira_issue`); `autoload: true` injects the compact content on
+  `linear_ticket`, `jira_issue`); `autoload: true` injects the full content on
   a strong match instead of only exposing it. Omit it entirely and Keel still
   routes the skill from terms derived off its `id` + `description`.
 

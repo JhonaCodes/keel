@@ -106,7 +106,7 @@ Acceptance/Delivery`) — that sequence predates the parent-runtime pivot,
 has no RED/GREEN concept, and `PhaseController`/`RuntimeHost` are not
 imported by `keel-host`/`keel-cli` in production today (verifiable with
 `grep -rln "RuntimeHost" --include="*.rs" .`). The real, currently-planned
-phase design is authored fresh with jflow's actual vocabulary
+phase design is authored fresh with Keel's actual workflow vocabulary
 (analysis/red/green/refactor/audit/verify/done), derived as events from
 accumulated ledger evidence rather than a separately-tracked state file —
 see `planificacion/ordenes_trabajo/PLAN_MAESTRO.md#H-010`.

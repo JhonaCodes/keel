@@ -267,6 +267,32 @@ fn a_skill_content_file_must_end_in_keel_md() {
     assert!(compile(&ok, "t".into()).is_ok());
 }
 
+#[test]
+fn a_skill_can_embed_compact_and_full_content_inline() {
+    let files = files_from_yaml(
+        r#"
+apiVersion: keel/v1alpha1
+kind: Skill
+metadata: { id: inline-guide, version: 0.1.0 }
+spec:
+  compact: |
+    Use this short guide.
+  full: |
+    Use this full guide.
+"#,
+    );
+    let snap = compile(&files, "t".into()).unwrap().snapshot;
+    let skill = snap.skills.get("inline-guide").unwrap();
+
+    assert_eq!(skill.compact, "<inline>");
+    assert_eq!(
+        skill.compact_content.as_deref(),
+        Some("Use this short guide.")
+    );
+    assert_eq!(skill.full, None);
+    assert_eq!(skill.full_content.as_deref(), Some("Use this full guide."));
+}
+
 /// The optional `description` (for the exposed catalog, D-013) flows through to
 /// the compiled skill in the snapshot.
 #[test]
