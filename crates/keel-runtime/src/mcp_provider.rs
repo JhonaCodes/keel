@@ -27,12 +27,16 @@ pub enum McpProviderError {
     ReservedName,
 }
 
-/// Resolves every `kind: MCPProvider` component in the compiled snapshot into
-/// an `McpServerSpec`, `${VAR}`-resolving `config.env` the same way
-/// `executor_env` does for a `ModelExecutor` (`resolve_env_map`). Errors
-/// loudly on a provider missing `config.command` or reusing the reserved
-/// `keel` id — an authored provider that cannot be run is a mistake to
-/// surface, not something to silently skip (unlike an unmapped hook shape).
+/// Resolves every explicitly enabled `kind: MCPProvider` component in the
+/// compiled snapshot into an `McpServerSpec`, `${VAR}`-resolving `config.env`
+/// the same way `executor_env` does for a `ModelExecutor` (`resolve_env_map`).
+/// Providers are fail-closed: `config.enabled: true` is required. An omitted
+/// or false value keeps an optional provider in the governed workspace without
+/// injecting it into every launched client.
+/// Errors loudly on an enabled provider missing `config.command` or reusing the
+/// reserved `keel` id — an authored enabled provider that cannot be run is a
+/// mistake to surface, not something to silently skip (unlike an unmapped hook
+/// shape).
 pub fn compiled_mcp_providers(
     components: &BTreeMap<String, CompiledComponent>,
 ) -> Result<Vec<McpServerSpec>, McpProviderError> {
@@ -40,6 +44,15 @@ pub fn compiled_mcp_providers(
         .values()
         .filter(|c| c.kind == "mcp-provider")
         .map(|component| {
+            if component
+                .config
+                .as_ref()
+                .and_then(|c| c.get("enabled"))
+                .and_then(|enabled| enabled.as_bool())
+                != Some(true)
+            {
+                return Ok(None);
+            }
             if component.id == "keel" {
                 return Err(McpProviderError::ReservedName);
             }
@@ -62,12 +75,13 @@ pub fn compiled_mcp_providers(
                 .and_then(|e| e.as_object())
                 .map(resolve_env_map)
                 .unwrap_or_default();
-            Ok(McpServerSpec {
+            Ok(Some(McpServerSpec {
                 name: component.id.clone(),
                 command,
                 env,
-            })
+            }))
         })
+        .filter_map(|result| result.transpose())
         .collect()
 }
 
@@ -104,6 +118,7 @@ mod tests {
         let (key, component) = provider(
             "linear",
             serde_json::json!({
+                "enabled": true,
                 "command": ["npx", "-y", "@linear/mcp-server"],
                 "env": { "LINEAR_API_KEY": "${KEEL_TEST_LINEAR_KEY}" }
             }),
@@ -128,9 +143,21 @@ mod tests {
     }
 
     #[test]
+    fn provider_without_explicit_enabled_is_not_wired() {
+        let mut components = BTreeMap::new();
+        let (key, component) = provider(
+            "optional",
+            serde_json::json!({"command": ["npx", "-y", "optional-mcp"]}),
+        );
+        components.insert(key, component);
+
+        assert_eq!(compiled_mcp_providers(&components).unwrap(), Vec::new());
+    }
+
+    #[test]
     fn a_provider_with_no_command_errors_instead_of_disappearing() {
         let mut components = BTreeMap::new();
-        let (key, component) = provider("broken", serde_json::json!({}));
+        let (key, component) = provider("broken", serde_json::json!({"enabled": true}));
         components.insert(key, component);
 
         assert_eq!(
@@ -140,9 +167,27 @@ mod tests {
     }
 
     #[test]
+    fn disabled_provider_is_not_wired() {
+        let mut components = BTreeMap::new();
+        let (key, component) = provider(
+            "workflow-local",
+            serde_json::json!({
+                "enabled": false,
+                "command": ["npx", "-y", "mcp-remote", "http://127.0.0.1:8765/mcp"]
+            }),
+        );
+        components.insert(key, component);
+
+        assert_eq!(compiled_mcp_providers(&components).unwrap(), Vec::new());
+    }
+
+    #[test]
     fn a_provider_named_keel_is_rejected_as_reserved() {
         let mut components = BTreeMap::new();
-        let (key, component) = provider("keel", serde_json::json!({"command": ["x"]}));
+        let (key, component) = provider(
+            "keel",
+            serde_json::json!({"enabled": true, "command": ["x"]}),
+        );
         components.insert(key, component);
 
         assert_eq!(

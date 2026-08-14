@@ -254,11 +254,14 @@ fn wire_convergence(
     let root_str = root.display().to_string();
 
     if let Some(mcp) = &manifest.mcp {
-        // Every configured `MCPProvider` (H-011) wires in ALONGSIDE keel's own
-        // entry, unconditionally — the same way "keel" itself always is.
-        // `wire_convergence` runs at launch time, before any prompt/tool
-        // "moment" text exists to route a `match` block against (D-014), so
-        // there is nothing to condition provider wiring on yet.
+        // Every explicitly enabled `MCPProvider` (H-011) wires in ALONGSIDE
+        // keel's own entry. Providers are fail-closed: `config.enabled: true`
+        // is required to stay active. Optional/local providers remain in the
+        // governed workspace without slowing or hanging every launched client.
+        // `wire_convergence`
+        // runs at launch time, before any prompt/tool "moment" text exists to
+        // route a `match` block against (D-014), so provider selection cannot
+        // be prompt-conditional here.
         let mut servers = vec![keel_runtime::McpServerSpec {
             name: "keel".to_string(),
             command: vec![
@@ -714,11 +717,25 @@ mod tests {
                 requirements: vec![],
                 capabilities: vec![],
                 config: Some(serde_json::json!({
+                    "enabled": true,
                     "command": ["sh", "fake-linear-mcp.sh"],
                     "env": { "LINEAR_API_KEY": "${KEEL_TEST_LINEAR_KEY}" }
                 })),
             },
         );
+        components
+    }
+
+    fn disabled_linear_provider() -> BTreeMap<String, CompiledComponent> {
+        let mut components = linear_provider();
+        components
+            .get_mut("mcp-provider:linear")
+            .expect("linear provider")
+            .config = Some(serde_json::json!({
+            "enabled": false,
+            "command": ["sh", "fake-linear-mcp.sh"],
+            "env": { "LINEAR_API_KEY": "${KEEL_TEST_LINEAR_KEY}" }
+        }));
         components
     }
 
@@ -911,6 +928,49 @@ mod tests {
     }
 
     #[test]
+    fn claude_convergence_skips_disabled_mcp_provider() {
+        // SAFETY: single-threaded test-only variable name.
+        unsafe {
+            std::env::set_var("KEEL_TEST_LINEAR_KEY", "sk-linear-test");
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let host_dir = root.join("host");
+        std::fs::create_dir_all(&host_dir).unwrap();
+
+        let manifest = AdapterManifest::for_client("claude").unwrap();
+        let mut env = BTreeMap::new();
+        let argv = wire_convergence(
+            manifest.command.clone(),
+            &mut env,
+            &manifest,
+            ConvergenceContext {
+                host_dir: &host_dir,
+                root,
+                session_id: "session-test",
+                skill_ids: &[],
+                components: &disabled_linear_provider(),
+            },
+        )
+        .unwrap();
+
+        let mcp_path = argv
+            .iter()
+            .find(|a| a.ends_with("mcp.json"))
+            .expect("a --mcp-config-style flag value pointing at the written file");
+        let config: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(mcp_path).unwrap()).unwrap();
+        assert!(
+            config["mcpServers"]["keel"]["command"].is_string(),
+            "keel's own entry must still be present: {config}"
+        );
+        assert!(
+            config["mcpServers"]["linear"].is_null(),
+            "disabled provider must not be injected into the client MCP config: {config}"
+        );
+    }
+
+    #[test]
     fn codex_convergence_wires_a_configured_mcp_provider_alongside_keel() {
         unsafe {
             std::env::set_var("KEEL_TEST_LINEAR_KEY", "sk-linear-test");
@@ -1010,7 +1070,7 @@ mod tests {
                 inline: None,
                 requirements: vec![],
                 capabilities: vec![],
-                config: Some(serde_json::json!({})),
+                config: Some(serde_json::json!({"enabled": true})),
             },
         );
         let temp = tempfile::tempdir().unwrap();
