@@ -175,16 +175,12 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
     }
 
     // Opportune delivery (D-016): a pre-action tool moment that did NOT block is
-    // the moment to hand the model the relevant rules/skills/agents/knowledge —
-    // "you're about to touch this, keel has these". Uses the file content / the
-    // command as the moment text; emits `additionalContext` without a permission
-    // decision, so the client's own approval flow is untouched.
-    if preventable
-        && matches!(
-            event.kind,
-            EventKind::FileEdited | EventKind::CommandRequested | EventKind::ToolRequested
-        )
-    {
+    // the moment to hand the model relevant context when it is about to edit a
+    // file or call a governed external tool. Plain shell commands stay quiet on
+    // the allow path: routing `flutter analyze ...` or `rg ...` through the full
+    // catalog is token-noisy and usually redundant because prompt/file-edit
+    // events already delivered the governing context.
+    if preventable && should_emit_opportune_delivery(event.kind) {
         let moment = event
             .content
             .as_deref()
@@ -202,6 +198,10 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+fn should_emit_opportune_delivery(kind: EventKind) -> bool {
+    matches!(kind, EventKind::FileEdited | EventKind::ToolRequested)
 }
 
 /// Assembles the context keel delivers at a MOMENT (D-013/D-014/D-016):
@@ -1053,6 +1053,16 @@ mod tests {
         })
         .to_string();
         assert!(parse_claude_code_hook(&payload).is_none());
+    }
+
+    #[test]
+    fn opportune_delivery_skips_shell_commands_to_avoid_token_noise() {
+        assert!(
+            !should_emit_opportune_delivery(EventKind::CommandRequested),
+            "allowed Bash commands are still gated, but should not receive routed catalog context"
+        );
+        assert!(should_emit_opportune_delivery(EventKind::FileEdited));
+        assert!(should_emit_opportune_delivery(EventKind::ToolRequested));
     }
 
     #[test]
