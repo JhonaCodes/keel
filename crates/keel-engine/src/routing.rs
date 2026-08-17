@@ -48,29 +48,50 @@ pub const DERIVE_STOPWORDS: &[&str] = &[
 /// layer, not to Flutter — a Dart backend file is not a Flutter file — while
 /// `flutter`/`widget`/`pubspec` mark the framework. Ambiguous short tokens are
 /// left out on purpose: `rs` would fire on any Dart file importing `logger_rs`.
-pub const CONTEXT_CUES: &[(&str, &str)] = &[
+/// `(cue, context, promotable_at_compile_time)`.
+///
+/// The flag matters because the same table is read from both ends. At RUN time
+/// every cue applies: they describe the MOMENT. At COMPILE time a cue found in
+/// a capability's own id/description promotes that capability to the context —
+/// which is right for a ticket-shaped object (an agent named `keel_linear_
+/// ticket` really is about Linear tickets) and wrong for a technology, because
+/// in a Flutter workspace nearly every capability's prose says "flutter". That
+/// would hand the top weight to almost everything and flatten the ranking it
+/// exists to sharpen. A capability that wants a platform context declares it.
+pub const CONTEXT_CUES: &[(&str, &str, bool)] = &[
     // Ticket-shaped objects.
-    ("pr", "github_pr"),
-    ("pull", "github_pr"),
-    ("issue", "github_issue"),
-    ("linear", "linear_ticket"),
-    ("ticket", "linear_ticket"),
-    ("jira", "jira_issue"),
-    // Technology platforms.
-    ("dart", "platform/dart"),
-    ("flutter", "platform/flutter"),
-    ("widget", "platform/flutter"),
-    ("pubspec", "platform/flutter"),
-    ("rust", "platform/rust"),
-    ("cargo", "platform/rust"),
+    ("pr", "github_pr", true),
+    ("pull", "github_pr", true),
+    ("issue", "github_issue", true),
+    ("linear", "linear_ticket", true),
+    ("ticket", "linear_ticket", true),
+    ("jira", "jira_issue", true),
+    // Technology platforms — moment-only, never self-promoted.
+    ("dart", "platform/dart", false),
+    ("flutter", "platform/flutter", false),
+    ("widget", "platform/flutter", false),
+    ("pubspec", "platform/flutter", false),
+    ("rust", "platform/rust", false),
+    ("cargo", "platform/rust", false),
 ];
 
-/// The structured object type a cue word implies, if any.
+/// The structured object type a cue word implies, if any. Every cue counts:
+/// this is the run-time reading, over the moment's own text.
 pub fn context_for_term(term: &str) -> Option<&'static str> {
     CONTEXT_CUES
         .iter()
-        .find(|(cue, _)| *cue == term)
-        .map(|(_, ctx)| *ctx)
+        .find(|(cue, _, _)| *cue == term)
+        .map(|(_, ctx, _)| *ctx)
+}
+
+/// The context a cue implies when found in a CAPABILITY's own id/description,
+/// which is a claim about itself rather than an observation about the moment.
+/// Only the ticket-shaped cues qualify — see [`CONTEXT_CUES`].
+pub fn self_context_for_term(term: &str) -> Option<&'static str> {
+    CONTEXT_CUES
+        .iter()
+        .find(|(cue, _, promotable)| *cue == term && *promotable)
+        .map(|(_, ctx, _)| *ctx)
 }
 
 /// Tokenizes free text into lowercase terms (len > 1, no stop-words), splitting

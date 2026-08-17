@@ -75,6 +75,19 @@ fn detect_contexts_reads_the_technology_off_a_code_moment() {
 }
 
 #[test]
+fn a_technology_cue_is_not_self_promoted_at_compile_time() {
+    // A ticket-shaped cue in a capability's own id/description is a claim about
+    // itself and promotes it to that context. A technology cue is not: in a
+    // Flutter workspace almost every description says "flutter", so promoting
+    // it would give nearly everything the top weight and flatten the ranking.
+    assert_eq!(self_context_for_term("linear"), Some("linear_ticket"));
+    assert_eq!(self_context_for_term("flutter"), None);
+    assert_eq!(self_context_for_term("dart"), None);
+    // Run-time reading over the moment's text still sees every cue.
+    assert_eq!(context_for_term("flutter"), Some("platform/flutter"));
+}
+
+#[test]
 fn ambiguous_short_tokens_do_not_leak_a_platform() {
     // `logger_rs` is a Dart package: `rs` must never imply Rust, or every Dart
     // file using it would route the Rust layer.
