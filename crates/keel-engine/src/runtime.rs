@@ -320,8 +320,28 @@ fn precondition_detail(pre: &CompiledPrecondition, event: &Event) -> String {
         let scope = event.audit_scope.as_deref().unwrap_or("unavailable");
         let mode = event.audit_mode.as_deref().unwrap_or("focused");
         let files = event.files.len();
+        // Naming the files turns a hash into an instruction. Without them the
+        // session has to go rediscover what it is being asked to audit, and the
+        // cheapest way out of that is signing a scope nobody read.
+        let listed = if event.files.is_empty() {
+            String::new()
+        } else {
+            let head = event
+                .files
+                .iter()
+                .take(20)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ");
+            let rest = event.files.len().saturating_sub(20);
+            if rest > 0 {
+                format!(" ({head}, and {rest} more)")
+            } else {
+                format!(" ({head})")
+            }
+        };
         return format!(
-            "this action requires a change-scoped audit before commit/PR — scope={scope}, mode={mode}, files={files}; load `keel_workflow_audit`, audit only the current diff, record `VERDICT: GO` with `AUDIT_EVIDENCE`, then retry"
+            "this action requires a change-scoped audit before commit/PR — scope={scope}, mode={mode}, files={files}{listed}; audit exactly that change-set with `keel_workflow_audit`, running the auditor as an IN-SESSION SUBAGENT (not a new session), then record `VERDICT: GO` with `AUDIT_EVIDENCE` echoing this scope and retry"
         );
     }
     format!("precondition failed: {}", pre.using)

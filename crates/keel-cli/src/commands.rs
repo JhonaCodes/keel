@@ -26,9 +26,14 @@ pub(crate) use keel_engine::ledger::{new_ev_id, now_ts};
 /// agent the exact scope before it audits, rather than teaching it to recreate
 /// a hash or discover it through a failed commit.
 pub fn audit_scope(root: &Path, target: &str, base: Option<&str>) -> Result<ExitCode> {
+    // Same repo the gate will fingerprint — the workspace is only the fallback.
+    // Printing a scope computed from a different tree than the gate compares is
+    // worse than printing nothing: it invites signing a hash for the wrong diff.
+    let repo = keel_core::audit::repo_root(None).unwrap_or_else(|| root.to_path_buf());
+    let repo = repo.as_path();
     let scope = match target {
-        "commit" => target_for_commit(root),
-        "pr" => target_for_pr(root, base),
+        "commit" => target_for_commit(repo),
+        "pr" => target_for_pr(repo, base),
         other => bail!("unknown audit target `{other}`; expected `commit` or `pr`"),
     }
     .context(

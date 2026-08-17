@@ -2,7 +2,7 @@
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -10,6 +10,43 @@ pub struct AuditTarget {
     pub scope: String,
     pub mode: String,
     pub files: Vec<String>,
+}
+
+/// The repository whose change-set an audit gate must fingerprint: the one the
+/// client is working in, which is almost never the governance workspace.
+///
+/// The workspace path is where the RULES live. Using it as the diff target too
+/// meant that in any other repo the gate fingerprinted the wrong tree — usually
+/// the workspace's empty staged change-set, a constant hash that any session can
+/// sign without auditing a line of what it is shipping.
+///
+/// Resolution order, first git toplevel wins: an explicit hint (the client hook
+/// payload's `cwd`), `KEEL_CLIENT_CWD`, `PWD` (survives a chdir into the
+/// workspace), then the process directory. Callers fall back to the workspace
+/// only when none of these resolve.
+pub fn repo_root(hint: Option<&str>) -> Option<PathBuf> {
+    let from_env = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
+    let candidates = [
+        hint.map(str::to_string),
+        from_env("KEEL_CLIENT_CWD"),
+        from_env("PWD"),
+        std::env::current_dir()
+            .ok()
+            .map(|p| p.to_string_lossy().into_owned()),
+    ];
+    for candidate in candidates.into_iter().flatten() {
+        let path = Path::new(&candidate);
+        if !path.is_dir() {
+            continue;
+        }
+        if let Some(top) = git(path, &["rev-parse", "--show-toplevel"]) {
+            let top = top.trim();
+            if !top.is_empty() {
+                return Some(PathBuf::from(top));
+            }
+        }
+    }
+    None
 }
 
 pub fn target_for_command(root: &Path, command: Option<&str>) -> Option<AuditTarget> {
@@ -43,6 +80,7 @@ pub fn target_for_pr(root: &Path, base: Option<&str>) -> Option<AuditTarget> {
         Some(base) => base.to_string(),
         None => pr_base(root, &[])?,
     };
+    let base = remote_tracking(root, &base);
     target_from_patch(git(
         root,
         &[
@@ -149,6 +187,25 @@ fn pr_base(root: &Path, tokens: &[String]) -> Option<String> {
     head.strip_prefix("origin/").map(str::to_string)
 }
 
+/// Prefers `origin/<base>` over a bare `<base>`. A local base branch that has
+/// not been pulled in a while silently inflates the diff — in the case that
+/// exposed this, a 4-file branch fingerprinted as 46 files against a stale local
+/// `master`, so the audit and the gate could never agree. Names that already
+/// carry a remote, and bases with no remote counterpart, are left untouched.
+fn remote_tracking(root: &Path, base: &str) -> String {
+    if base.contains('/') {
+        return base.to_string();
+    }
+    let remote = format!("origin/{base}");
+    match git(
+        root,
+        &["rev-parse", "--verify", &format!("{remote}^{{commit}}")],
+    ) {
+        Some(_) => remote,
+        None => base.to_string(),
+    }
+}
+
 fn git(root: &Path, args: &[&str]) -> Option<String> {
     let output = Command::new("git")
         .args(args)
@@ -191,5 +248,35 @@ mod tests {
             classify(&["lib/auth/session.dart".into()], "+a"),
             "exhaustive"
         );
+    }
+
+    #[test]
+    fn a_qualified_base_is_left_alone() {
+        // Already carries a remote (or is a full ref) — rewriting it would
+        // point the diff somewhere the caller did not ask for.
+        let here = Path::new(".");
+        assert_eq!(remote_tracking(here, "origin/master"), "origin/master");
+        assert_eq!(
+            remote_tracking(here, "refs/heads/topic"),
+            "refs/heads/topic"
+        );
+    }
+
+    #[test]
+    fn a_base_with_no_remote_counterpart_stays_local() {
+        assert_eq!(
+            remote_tracking(Path::new("."), "no-such-branch-9f3a2c"),
+            "no-such-branch-9f3a2c"
+        );
+    }
+
+    #[test]
+    fn repo_root_resolves_a_hint_and_rejects_a_non_directory() {
+        // Runs inside this repository, so the process fallback must resolve.
+        let root = repo_root(None).expect("keel is a git repository");
+        assert!(root.join(".git").exists());
+        // A hint that is not a directory is skipped, not fatal: resolution
+        // continues down the chain rather than losing the audit target.
+        assert_eq!(repo_root(Some("/definitely/not/a/dir")), Some(root));
     }
 }
