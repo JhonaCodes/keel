@@ -125,6 +125,15 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
     let audit_root =
         keel_core::audit::repo_root(client_cwd.as_deref()).unwrap_or_else(|| files.root.clone());
     if let Some(target) = target_for_command(&audit_root, event.command.as_deref()) {
+        // A GO attests to a CHANGE-SET, not to who observed it, and the scope is
+        // the hash of that patch. Adding the scope-keyed rows means evidence
+        // recorded under another session id still counts, instead of vanishing
+        // into the ledger while the gate reports "no audit".
+        if let Some(ledger) = &ledger
+            && let Ok(mut for_scope) = ledger.audits_for_scope(&target.scope)
+        {
+            event.recorded_audits.append(&mut for_scope);
+        }
         event.audit_scope = Some(target.scope);
         event.audit_mode = Some(target.mode);
         if !target.files.is_empty() {

@@ -4,6 +4,23 @@ Starts from `0.11.0` forward — not a retroactive reconstruction of the
 whole project history (that lives in `git log`). Versions here track
 `Cargo.toml`'s workspace `version`.
 
+## 0.19.2
+
+- **Audit evidence is keyed on the change-set, not on the session.** The scope is
+  `sha256(patch)`: it identifies the diff, so a GO for it is evidence whoever
+  observed it. Keying the lookup on `session_id` meant correct evidence recorded
+  under a different id than the one the gate evaluates simply vanished — `observe`
+  accepted it, the ledger stored it, and the gate kept reporting "no audit". The
+  usual way out of that dead end was signing the same scope again, which is how a
+  safety net teaches people to sign things twice. `Ledger::audits_for_scope` adds
+  the scope-keyed rows on top of the session's own, in both enforcement paths.
+
+- **The shim broker had the workspace/repo conflation too.** `Broker::decide`
+  computed `target_for_command` against the workspace root, so a `git commit`
+  interposed by the shim inside a governed session fingerprinted the governance
+  repo, exactly like the hook bridge did before 0.19.1. It now resolves the repo
+  from the shim request's `cwd`, with the workspace as fallback.
+
 ## 0.19.1
 
 - **The audit gates fingerprint the repo being shipped, not the workspace.**

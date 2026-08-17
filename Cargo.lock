@@ -709,7 +709,7 @@ dependencies = [
 
 [[package]]
 name = "keel-cli"
-version = "0.19.1"
+version = "0.19.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -727,7 +727,7 @@ dependencies = [
 
 [[package]]
 name = "keel-core"
-version = "0.19.1"
+version = "0.19.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -737,7 +737,7 @@ dependencies = [
 
 [[package]]
 name = "keel-dsl"
-version = "0.19.1"
+version = "0.19.2"
 dependencies = [
  "jsonschema",
  "keel-core",
@@ -749,7 +749,7 @@ dependencies = [
 
 [[package]]
 name = "keel-engine"
-version = "0.19.1"
+version = "0.19.2"
 dependencies = [
  "globset",
  "jiff",
@@ -768,7 +768,7 @@ dependencies = [
 
 [[package]]
 name = "keel-host"
-version = "0.19.1"
+version = "0.19.2"
 dependencies = [
  "anyhow",
  "keel-core",
@@ -784,7 +784,7 @@ dependencies = [
 
 [[package]]
 name = "keel-runtime"
-version = "0.19.1"
+version = "0.19.2"
 dependencies = [
  "jiff",
  "jsonschema",
@@ -800,7 +800,7 @@ dependencies = [
 
 [[package]]
 name = "keel-shim"
-version = "0.19.1"
+version = "0.19.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -808,7 +808,7 @@ dependencies = [
 
 [[package]]
 name = "keel-tests"
-version = "0.19.1"
+version = "0.19.2"
 dependencies = [
  "keel-core",
  "keel-dsl",

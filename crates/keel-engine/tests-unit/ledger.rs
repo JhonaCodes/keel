@@ -197,6 +197,41 @@ fn recorded_audits_are_scoped_and_ignore_unstructured_go_text() {
 }
 
 #[test]
+fn audits_for_scope_find_evidence_recorded_under_any_session() {
+    // The scope is the hash of the patch: it identifies the change-set, not the
+    // observer. A GO landing under a different session id than the one the gate
+    // evaluates used to be swallowed silently — recorded, and still blocking.
+    let ledger = Ledger::open_in_memory().unwrap();
+    ledger
+        .append(&LedgerEntry {
+            event_kind: EventKind::TaskCompleted,
+            session_id: Some("some-other-session".into()),
+            detail: Some("VERDICT: GO | AUDIT_EVIDENCE: {\"verdict\":\"GO\",\"scope\":\"sha256:target\",\"mode\":\"extended\",\"files\":[\"lib/a.dart\"]}".into()),
+            ..entry("ev_other", "record-audit", Verdict::Invalid, "2026-01-01T00:00:00Z")
+        })
+        .unwrap();
+    ledger
+        .append(&LedgerEntry {
+            event_kind: EventKind::TaskCompleted,
+            session_id: Some("some-other-session".into()),
+            detail: Some("VERDICT: GO | AUDIT_EVIDENCE: {\"verdict\":\"GO\",\"scope\":\"sha256:unrelated\",\"mode\":\"focused\",\"files\":[]}".into()),
+            ..entry("ev_unrelated", "record-audit", Verdict::Invalid, "2026-01-01T00:00:01Z")
+        })
+        .unwrap();
+
+    // Session-keyed lookup misses it — that was the whole failure mode.
+    assert!(ledger.recorded_audits("s1").unwrap().is_empty());
+
+    let found = ledger.audits_for_scope("sha256:target").unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].scope, "sha256:target");
+    assert_eq!(found[0].mode, "extended");
+
+    // Still keyed on the change-set: another scope is not evidence for this one.
+    assert!(ledger.audits_for_scope("sha256:absent").unwrap().is_empty());
+}
+
+#[test]
 fn human_decisions_are_recorded_with_human_class() {
     let ledger = Ledger::open_in_memory().unwrap();
     ledger

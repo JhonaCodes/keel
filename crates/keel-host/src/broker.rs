@@ -91,17 +91,33 @@ impl Broker {
             .unwrap_or_default()
     }
 
-    fn recorded_audits(&self) -> Vec<keel_core::event::AuditEvidence> {
-        self.ledger
+    /// This session's audits, plus every GO recorded for `scope` whatever
+    /// session observed it: the scope is the hash of the patch, so it identifies
+    /// the change-set, not the observer. See `Ledger::audits_for_scope`.
+    fn recorded_audits(&self, scope: Option<&str>) -> Vec<keel_core::event::AuditEvidence> {
+        let mut audits = self
+            .ledger
             .recorded_audits(&self.session_id)
-            .unwrap_or_default()
+            .unwrap_or_default();
+        if let Some(scope) = scope
+            && let Ok(mut for_scope) = self.ledger.audits_for_scope(scope)
+        {
+            audits.append(&mut for_scope);
+        }
+        audits
     }
 
     /// Evaluates one interposed command. Pure with respect to the socket —
     /// used directly by unit tests.
     pub fn decide(&self, req: &ShimRequest) -> Result<ShimResponse> {
         let command = req.argv.join(" ");
-        let target = target_for_command(&self.root, Some(&command));
+        // The shim reports the directory the command was launched from, and that
+        // is the repo whose change-set is at stake. `self.root` is the workspace
+        // — the rules live there, not the code being shipped — so it is only the
+        // fallback. Same defect the hook bridge had.
+        let audit_root =
+            keel_core::audit::repo_root(req.cwd.as_deref()).unwrap_or_else(|| self.root.clone());
+        let target = target_for_command(&audit_root, Some(&command));
         let event = Event {
             kind: EventKind::CommandRequested,
             session_id: Some(self.session_id.clone()),
@@ -116,7 +132,7 @@ impl Broker {
             recorded_evidence: self.recorded_evidence(),
             audit_scope: target.as_ref().map(|target| target.scope.clone()),
             audit_mode: target.as_ref().map(|target| target.mode.clone()),
-            recorded_audits: self.recorded_audits(),
+            recorded_audits: self.recorded_audits(target.as_ref().map(|t| t.scope.as_str())),
         };
 
         let evals = evaluate_event(&self.snapshot, &event, &self.root, Mode::Enforce);
