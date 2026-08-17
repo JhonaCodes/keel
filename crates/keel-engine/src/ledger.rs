@@ -378,6 +378,38 @@ impl Ledger {
     /// Structured audit evidence recorded for a session. Older evidence rows
     /// without the `AUDIT_EVIDENCE` marker are intentionally ignored: they
     /// cannot prove which change set was audited.
+    /// Every GO recorded for one change-set fingerprint, whatever session
+    /// observed it.
+    ///
+    /// The scope is `sha256(patch)`: it identifies the diff, not the observer.
+    /// Keying the lookup on the session instead made correct evidence vanish
+    /// whenever it landed under a different session id than the one the gate
+    /// evaluates — `observe` accepts it, the ledger stores it, and the gate
+    /// keeps blocking as if nothing had been recorded. Silent, and the usual
+    /// way out of it is signing the scope a second time.
+    pub fn audits_for_scope(&self, scope: &str) -> rusqlite::Result<Vec<AuditEvidence>> {
+        let mut stmt = self.conn.prepare(
+            r#"SELECT detail FROM evidence
+               WHERE event_kind = '"task.completed"'
+                 AND detail IS NOT NULL
+                 AND instr(detail, ?1) > 0
+               ORDER BY ts"#,
+        )?;
+        let rows = stmt.query_map(params![scope], |row| {
+            let detail: String = row.get(0)?;
+            Ok(detail
+                .split_once("AUDIT_EVIDENCE:")
+                .map(|(_, raw)| raw.trim())
+                .and_then(|raw| serde_json::from_str::<AuditEvidence>(raw).ok()))
+        })?;
+        rows.filter_map(|row| match row {
+            Ok(Some(audit)) => Some(Ok(audit)),
+            Ok(None) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .collect()
+    }
+
     pub fn recorded_audits(&self, session_id: &str) -> rusqlite::Result<Vec<AuditEvidence>> {
         let mut stmt = self.conn.prepare(
             r#"SELECT detail FROM evidence
