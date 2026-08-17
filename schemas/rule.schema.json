@@ -68,7 +68,9 @@
             "additionalProperties": false,
             "properties": {
               "using": { "$ref": "#/$defs/toolRef" },
-              "with": {},
+              "with": {
+                "description": "Parameters for the precondition. `builtin:skill.loaded` takes `{id}`. `builtin:evidence.recorded` takes `{event}` plus optional `{verdict}` and `{rule}` — name the recorder rule in `rule` whenever more than one recorder classifies the same event kind, or any of them will satisfy this gate. `builtin:audit.recorded_for_change` takes optional `{min_mode}`. `builtin:env.present` takes `{name}`, `builtin:flag.present` takes `{flag}`."
+              },
               "onFail": { "enum": ["deny", "block", "review"] }
             }
           }

@@ -424,7 +424,7 @@ fn precondition_gate_rule() -> CompiledRule {
     }
 }
 
-fn commit_event(recorded: Vec<(EventKind, Verdict)>) -> Event {
+fn commit_event(recorded: Vec<(EventKind, Verdict, String)>) -> Event {
     Event {
         kind: EventKind::CommandRequested,
         session_id: Some("s".into()),
@@ -450,7 +450,11 @@ fn commit_event(recorded: Vec<(EventKind, Verdict)>) -> Event {
 #[test]
 fn precondition_gate_allows_when_precondition_passes() {
     let s = snap(vec![precondition_gate_rule()]);
-    let ev = commit_event(vec![(EventKind::TaskCompleted, Verdict::Invalid)]);
+    let ev = commit_event(vec![(
+        EventKind::TaskCompleted,
+        Verdict::Invalid,
+        "global.record-audit".into(),
+    )]);
     let evs = evaluate_event(&s, &ev, Path::new("/ws"), Mode::Enforce);
     assert_eq!(evs.len(), 1);
     assert_eq!(evs[0].verdict, Verdict::Valid);

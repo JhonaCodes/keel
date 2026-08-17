@@ -169,12 +169,71 @@ fn precondition_evidence_recorded_gates_on_session_history() {
     assert!(!run_precondition(&pre, &ev, &Default::default(), ctx()));
 
     // Exact (event_kind, verdict) pair recorded → passes.
-    ev.recorded_evidence = vec![(EventKind::TestCompleted, Verdict::Invalid)];
+    ev.recorded_evidence = vec![(
+        EventKind::TestCompleted,
+        Verdict::Invalid,
+        "global.record-test-result".into(),
+    )];
     assert!(run_precondition(&pre, &ev, &Default::default(), ctx()));
 
     // Same event_kind, different verdict → does not satisfy the gate.
-    ev.recorded_evidence = vec![(EventKind::TestCompleted, Verdict::Valid)];
+    ev.recorded_evidence = vec![(
+        EventKind::TestCompleted,
+        Verdict::Valid,
+        "global.record-test-result".into(),
+    )];
     assert!(!run_precondition(&pre, &ev, &Default::default(), ctx()));
+
+    // Naming the recorder makes the requirement specific: two rules classifying
+    // the SAME event kind (an implementation audit and a test-quality audit,
+    // both on task.completed) must not satisfy each other's gate.
+    let test_audit_pre = CompiledPrecondition {
+        using: CompiledToolRef::Builtin("evidence.recorded".into()),
+        with: Some(serde_json::json!({
+            "event": "task.completed",
+            "verdict": "invalid",
+            "rule": "global.record-test-audit",
+        })),
+        on_fail_declared: keel_core::Decision::Block,
+    };
+    ev.recorded_evidence = vec![(
+        EventKind::TaskCompleted,
+        Verdict::Invalid,
+        "global.record-audit".into(),
+    )];
+    assert!(
+        !run_precondition(&test_audit_pre, &ev, &Default::default(), ctx()),
+        "an implementation audit must NOT satisfy the test-audit gate"
+    );
+    ev.recorded_evidence.push((
+        EventKind::TaskCompleted,
+        Verdict::Invalid,
+        "global.record-test-audit".into(),
+    ));
+    assert!(
+        run_precondition(&test_audit_pre, &ev, &Default::default(), ctx()),
+        "the named recorder's evidence satisfies it"
+    );
+
+    // Omitting `rule` keeps the pre-existing behaviour: any recorder counts.
+    let any_rule_pre = CompiledPrecondition {
+        using: CompiledToolRef::Builtin("evidence.recorded".into()),
+        with: Some(serde_json::json!({"event": "task.completed", "verdict": "invalid"})),
+        on_fail_declared: keel_core::Decision::Block,
+    };
+    assert!(run_precondition(
+        &any_rule_pre,
+        &ev,
+        &Default::default(),
+        ctx()
+    ));
+
+    // Restore the test.completed evidence for the assertions below.
+    ev.recorded_evidence = vec![(
+        EventKind::TestCompleted,
+        Verdict::Invalid,
+        "global.record-test-result".into(),
+    )];
 
     // Omitting `verdict` in the rule matches any verdict for that event_kind.
     let any_verdict_pre = CompiledPrecondition {

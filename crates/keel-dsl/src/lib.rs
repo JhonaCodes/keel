@@ -374,6 +374,16 @@ pub struct AgentSpec {
         skip_serializing_if = "Option::is_none"
     )]
     pub native_subagent: Option<String>,
+    /// How this agent reaches a model when the parent client offers in-session
+    /// subagents. `in-session` (the default) spawns it inside the running
+    /// session — by `nativeSubagent` name when declared, otherwise carrying its
+    /// own `objective` as the contract. `cross-model` reserves it for the
+    /// external `keel.agent.invoke` CLI, which is the point for an agent whose
+    /// value IS running under a different model (a second opinion), and the
+    /// wrong default for an everyday expert or auditor: that CLI runs under
+    /// `env_clear` (no HOME, no auth, no TTY) and hangs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deliver: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub objective: Option<String>,
     /// Declarative routing (D-014): when this agent APPLIES to a prompt. Same

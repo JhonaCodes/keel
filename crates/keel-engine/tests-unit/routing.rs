@@ -50,6 +50,39 @@ fn detect_contexts_reads_urls_and_cue_words() {
 }
 
 #[test]
+fn detect_contexts_reads_the_technology_off_a_code_moment() {
+    // The moment text for a file edit is the file's content or its path. A
+    // Flutter source resolves the framework straight off its imports, which is
+    // what lets a `context: [platform/flutter]` block score at all.
+    let ctx = detect_contexts(
+        "import 'package:flutter/material.dart';\nclass X extends StatelessWidget {}",
+    );
+    assert!(
+        ctx.contains("platform/flutter"),
+        "flutter import → framework"
+    );
+    assert!(ctx.contains("platform/dart"), "and the language layer");
+
+    let ctx2 = detect_contexts("lib/features/orders/order_view_model.dart");
+    assert!(
+        ctx2.contains("platform/dart"),
+        "a bare .dart path is the language, NOT the framework: {ctx2:?}"
+    );
+    assert!(!ctx2.contains("platform/flutter"));
+
+    let ctx3 = detect_contexts("crates/keel-engine/Cargo.toml");
+    assert!(ctx3.contains("platform/rust"));
+}
+
+#[test]
+fn ambiguous_short_tokens_do_not_leak_a_platform() {
+    // `logger_rs` is a Dart package: `rs` must never imply Rust, or every Dart
+    // file using it would route the Rust layer.
+    let ctx = detect_contexts("import 'package:logger_rs/logger_rs.dart';");
+    assert!(!ctx.contains("platform/rust"), "got {ctx:?}");
+}
+
+#[test]
 fn score_weights_context_above_term_above_derived() {
     let prompt = words("review this pr for coderabbit");
     let ctx = detect_contexts("review this pr for coderabbit"); // → github_pr

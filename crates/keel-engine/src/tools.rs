@@ -180,10 +180,19 @@ pub fn run_precondition(
                     // Generic counterpart of `skill.loaded` for any event
                     // kind (not just skills): the action is allowed only if
                     // this session already has a ledger entry for `event`
-                    // (and, if given, matching `verdict`). Same source of
-                    // truth as skill.loaded — a field the broker/gate
+                    // (and, if given, matching `verdict` and `rule`). Same
+                    // source of truth as skill.loaded — a field the broker/gate
                     // populated on `Event` BEFORE evaluation, never a live
                     // query from inside the runtime (⇏ dsl/store boundary).
+                    //
+                    // `rule` is what makes the requirement specific. Two
+                    // recorder rules classifying the same event kind (say an
+                    // implementation audit and a test-quality audit, both on
+                    // `task.completed`) are indistinguishable by kind+verdict,
+                    // so without it either one satisfies BOTH gates. Naming the
+                    // recorder demands the evidence this gate actually needs.
+                    // Omitted → matches any recorder, the pre-existing
+                    // behaviour, so rules written before this stay correct.
                     let Some(target_kind) = with
                         .and_then(|w| w.get("event"))
                         .and_then(|v| serde_json::from_value::<EventKind>(v.clone()).ok())
@@ -193,10 +202,12 @@ pub fn run_precondition(
                     let target_verdict = with
                         .and_then(|w| w.get("verdict"))
                         .and_then(|v| serde_json::from_value::<Verdict>(v.clone()).ok());
-                    event
-                        .recorded_evidence
-                        .iter()
-                        .any(|(k, v)| *k == target_kind && target_verdict.is_none_or(|tv| tv == *v))
+                    let target_rule = with.and_then(|w| w.get("rule")).and_then(|v| v.as_str());
+                    event.recorded_evidence.iter().any(|(k, v, rule)| {
+                        *k == target_kind
+                            && target_verdict.is_none_or(|tv| tv == *v)
+                            && target_rule.is_none_or(|tr| tr == rule)
+                    })
                 }
                 "audit.recorded_for_change" => {
                     let Some(scope) = event.audit_scope.as_deref() else {

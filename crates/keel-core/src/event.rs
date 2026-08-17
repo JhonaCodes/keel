@@ -162,15 +162,22 @@ pub struct Event {
     /// cognitive activation as a hard gate). Empty when unknown.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub loaded_skills: Vec<String>,
-    /// Distinct (event_kind, verdict) pairs already recorded in the ledger
-    /// for this session at request time (populated by the broker/gate from
-    /// `Ledger::recorded_evidence`). Lets a rule REQUIRE evidence of a past
-    /// event via the `evidence.recorded` precondition — the generic
+    /// Distinct (event_kind, verdict, rule_id) triples already recorded in the
+    /// ledger for this session at request time (populated by the broker/gate
+    /// from `Ledger::recorded_evidence`). Lets a rule REQUIRE evidence of a
+    /// past event via the `evidence.recorded` precondition — the generic
     /// counterpart of `loaded_skills` for any event kind, not just skills.
-    /// Bounded by construction: at most `#EventKind * #Verdict` distinct
-    /// pairs, so this does not grow with ledger size.
+    ///
+    /// The `rule_id` is what makes the requirement SPECIFIC. Several recorder
+    /// rules classify the same event kind (an audit verdict, a test-quality
+    /// verdict, …), so `(kind, verdict)` alone cannot tell them apart and any
+    /// one of them would satisfy every gate. Carrying the recorder's id lets a
+    /// gate demand the evidence IT needs.
+    ///
+    /// Bounded by construction: at most `#EventKind * #Verdict * #Rule`
+    /// distinct triples, so this does not grow with ledger size.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub recorded_evidence: Vec<(EventKind, Verdict)>,
+    pub recorded_evidence: Vec<(EventKind, Verdict, String)>,
     /// Current change-set fingerprint for commit/PR commands, computed by the
     /// client bridge immediately before rule evaluation.
     #[serde(default, skip_serializing_if = "Option::is_none")]

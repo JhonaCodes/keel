@@ -36,13 +36,33 @@ pub const DERIVE_STOPWORDS: &[&str] = &[
 /// Keyword → structured object type. Deterministic and documented: a `context`
 /// is only inferred from these explicit cues, never guessed, so the
 /// highest-weight signal stays predictable and auditable.
+///
+/// Two families live here. TICKET-shaped cues answer "what object is this
+/// about". TECHNOLOGY cues answer "what platform is this code", which is what
+/// lets a `platforms/<tech>/` layer's agents and skills win the top weight on a
+/// code moment: without them a `context: [platform/flutter]` block could never
+/// fire, since the moment text for a file edit is the file's own path/content
+/// and carried no platform signal at all.
+///
+/// The technology cues are deliberately narrow. `dart` maps to the LANGUAGE
+/// layer, not to Flutter — a Dart backend file is not a Flutter file — while
+/// `flutter`/`widget`/`pubspec` mark the framework. Ambiguous short tokens are
+/// left out on purpose: `rs` would fire on any Dart file importing `logger_rs`.
 pub const CONTEXT_CUES: &[(&str, &str)] = &[
+    // Ticket-shaped objects.
     ("pr", "github_pr"),
     ("pull", "github_pr"),
     ("issue", "github_issue"),
     ("linear", "linear_ticket"),
     ("ticket", "linear_ticket"),
     ("jira", "jira_issue"),
+    // Technology platforms.
+    ("dart", "platform/dart"),
+    ("flutter", "platform/flutter"),
+    ("widget", "platform/flutter"),
+    ("pubspec", "platform/flutter"),
+    ("rust", "platform/rust"),
+    ("cargo", "platform/rust"),
 ];
 
 /// The structured object type a cue word implies, if any.
@@ -75,6 +95,10 @@ pub fn derive_terms(texts: &[&str]) -> Vec<String> {
 /// The structured object types a prompt references. Two deterministic sources:
 /// explicit URLs (a GitHub PR/issue link, a Linear link) and the cue words of
 /// [`CONTEXT_CUES`]. Highest-precision routing signal.
+///
+/// Called with the moment text, which on a file edit is the file's content or
+/// its path — so the technology cues resolve the platform straight off an
+/// `import 'package:flutter/...'` or a `lib/foo.dart` path.
 pub fn detect_contexts(prompt: &str) -> BTreeSet<String> {
     let low = prompt.to_ascii_lowercase();
     let mut ctx = BTreeSet::new();

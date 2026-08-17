@@ -463,10 +463,13 @@ fn agent_invoke_records_a_task_completed_verdict_for_the_gate() {
     let ledger = keel_engine::ledger::Ledger::open(&files.ledger_path()).unwrap();
     let evidence = ledger.recorded_evidence("session-agent").unwrap();
     assert!(
-        evidence.iter().any(|(kind, verdict)| matches!(
+        evidence.iter().any(|(kind, verdict, _rule)| matches!(
             kind,
             keel_core::event::EventKind::TaskCompleted
-        ) && matches!(verdict, keel_core::Verdict::Invalid)),
+        ) && matches!(
+            verdict,
+            keel_core::Verdict::Invalid
+        )),
         "task.completed GO evidence must be recorded: {evidence:?}"
     );
 }

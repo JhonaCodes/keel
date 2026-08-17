@@ -374,13 +374,14 @@ fn routed_catalog_block(
     }
 
     if !routed.agents.is_empty() {
-        // Two distinct delivery paths (the whole point of this block): an agent
-        // that declares `nativeSubagent` and runs under a client with native
-        // subagents (Claude Code) is spawned IN-SESSION via the Task tool — fast,
-        // no `env_clear`, cannot hang the mono-thread `keel mcp`. Everything else
-        // (no native equivalent, or a client without subagents) stays the
-        // external `keel.agent.invoke` CLI path, which is the opt-in cross-model
-        // second opinion — never the default closure auditor.
+        // Two distinct delivery paths (the whole point of this block): under a
+        // client with native subagents (Claude Code) EVERY agent is spawned
+        // IN-SESSION via the Task tool — fast, no `env_clear`, cannot hang the
+        // mono-thread `keel mcp`. Those that declare `nativeSubagent` are named;
+        // the rest travel with their own contract (see `agent_delivery_line`).
+        // Only a client WITHOUT in-session subagents falls back to the external
+        // `keel.agent.invoke` CLI path, the opt-in cross-model second opinion —
+        // never the default expert or closure auditor.
         let native_ok = client.provides_native_subagents();
         let mut in_session = Vec::new();
         let mut cross_model = Vec::new();
@@ -388,7 +389,9 @@ fn routed_catalog_block(
             let component = snapshot.agents.get(&a.id);
             let obj = component.and_then(|c| c.objective.as_deref()).unwrap_or("");
             let native = component.and_then(|c| c.native_subagent.as_deref());
-            let (is_native, line) = agent_delivery_line(&a.id, &a.trigger, obj, native, native_ok);
+            let deliver = component.and_then(|c| c.deliver.as_deref());
+            let (is_native, line) =
+                agent_delivery_line(&a.id, &a.trigger, obj, native, deliver, native_ok);
             if is_native {
                 in_session.push(line);
             } else {
@@ -397,7 +400,7 @@ fn routed_catalog_block(
         }
         if !in_session.is_empty() {
             lines.push(
-                "\nSubagentes Task in-session (spawneá con la tool Task subagent_type=<nombre>; NUNCA keel.agent.invoke — eso lanza un CLI externo que se cuelga):".to_string(),
+                "\nSubagentes Task in-session (NUNCA keel.agent.invoke — eso lanza un CLI externo que se cuelga). El que nombra un subagente se spawnea con Task subagent_type=<nombre>; el que trae contrato se spawnea como Task genérico usando ese texto como instrucciones:".to_string(),
             );
             lines.extend(in_session);
         }
@@ -464,27 +467,55 @@ fn autoload_skill_content(skill: &CompiledSkill, root: &Path) -> Option<(&'stati
 
 /// Decides how a routed agent is delivered and renders its catalog line.
 ///
-/// Returns `(is_in_session, line)`. An agent that declares a `native_subagent`
-/// AND runs under a client that provides native subagents (`native_ok`) is
-/// delivered IN-SESSION as a Task subagent — the line names the native subagent
-/// and points at the Task tool, NEVER `keel.agent.invoke`. Otherwise it stays
-/// the external cross-model `keel.agent.invoke` path (opt-in second opinion).
+/// Returns `(is_in_session, line)`. Under a client that provides native
+/// subagents (`native_ok`) EVERY agent is delivered IN-SESSION, in one of two
+/// shapes:
+///
+/// - it declares a `native_subagent` → the line names that subagent, to spawn
+///   with `Task subagent_type=<name>`;
+/// - it does not → the line carries the agent's OWN CONTRACT (its `objective`,
+///   already in the snapshot) to spawn as a generic Task with that text as its
+///   instructions.
+///
+/// The second shape is what keeps a workspace whose agents live entirely in
+/// keel's own `.yaml` — with no client-side subagent files to name — from
+/// falling through to `keel.agent.invoke`. That external CLI runs under
+/// `env_clear` (no HOME, no auth, no TTY) and hangs, so it is the wrong default
+/// for an everyday expert or auditor.
+///
+/// An agent OPTS IN to that external path with `deliver: cross-model`, which is
+/// the point for one whose value IS running under a different model (a second
+/// opinion). A client without in-session subagents falls back to it regardless.
 fn agent_delivery_line(
     id: &str,
     trigger: &str,
     obj: &str,
     native_subagent: Option<&str>,
+    deliver: Option<&str>,
     native_ok: bool,
 ) -> (bool, String) {
     let sep = if obj.is_empty() { "" } else { ": " };
+    if !native_ok || deliver == Some("cross-model") {
+        return (false, format!("- {id} [{trigger}]{sep}{obj}"));
+    }
     match native_subagent {
-        Some(name) if native_ok => (
+        Some(name) => (
             true,
             format!(
                 "- {name} [{trigger}]{sep}{obj} (subagente Task in-session; procede del agente keel {id})"
             ),
         ),
-        _ => (false, format!("- {id} [{trigger}]{sep}{obj}")),
+        // No client-side subagent to name: hand over the contract itself.
+        None if obj.is_empty() => (
+            true,
+            format!("- {id} [{trigger}] (agente keel sin contrato declarado)"),
+        ),
+        None => (
+            true,
+            format!(
+                "- {id} [{trigger}] (agente keel sin subagente nativo: spawneá un Task genérico con ESTE contrato como instrucciones)\n  ── contrato de {id} ──\n{obj}"
+            ),
+        ),
     }
 }
 
@@ -1413,6 +1444,7 @@ mod tests {
             "term:audit",
             "Audit the change",
             Some("code-auditor"),
+            None,
             Client::ClaudeCode.provides_native_subagents(),
         );
         assert!(is_native, "must route to the in-session Task bucket");
@@ -1424,6 +1456,45 @@ mod tests {
     }
 
     #[test]
+    fn agent_without_native_subagent_is_delivered_in_session_with_its_contract() {
+        // The everyday case for a workspace whose agents live only in keel's
+        // own `.yaml`: no client-side subagent file to name. It must still be
+        // delivered in-session, carrying its contract — never handed to
+        // `keel.agent.invoke`, which hangs under `env_clear`.
+        let (is_native, line) = agent_delivery_line(
+            "keel_rn_expert",
+            "term:reactive_notifier",
+            "Autoridad ReactiveNotifier 2.18.1: ZERO DI en ViewModels.",
+            None,
+            None,
+            Client::ClaudeCode.provides_native_subagents(),
+        );
+        assert!(is_native, "must route to the in-session Task bucket");
+        assert!(
+            line.contains("ZERO DI en ViewModels"),
+            "the contract travels with the line: {line}"
+        );
+        assert!(
+            !line.contains("keel.agent.invoke"),
+            "the in-session line must never mention the external CLI"
+        );
+    }
+
+    #[test]
+    fn agent_without_contract_still_stays_in_session() {
+        let (is_native, line) = agent_delivery_line(
+            "keel_bare_agent",
+            "term:bare",
+            "",
+            None,
+            None,
+            Client::ClaudeCode.provides_native_subagents(),
+        );
+        assert!(is_native);
+        assert!(!line.contains("keel.agent.invoke"));
+    }
+
+    #[test]
     fn native_agent_under_codex_falls_back_to_cross_model() {
         // Codex has no native subagents → even a `nativeSubagent`-declaring agent
         // must fall back to the external cross-model path.
@@ -1432,6 +1503,7 @@ mod tests {
             "term:audit",
             "Audit the change",
             Some("code-auditor"),
+            None,
             Client::Codex.provides_native_subagents(),
         );
         assert!(!is_native);
@@ -1439,17 +1511,20 @@ mod tests {
     }
 
     #[test]
-    fn agent_without_native_equivalent_stays_cross_model_even_on_claude_code() {
-        // keel_external_auditor is the opt-in cross-model second opinion: no
-        // `nativeSubagent`, so it stays the external path under any client.
+    fn agent_declaring_cross_model_stays_external_even_on_claude_code() {
+        // keel_external_auditor is the opt-in cross-model second opinion: its
+        // whole value is running under a DIFFERENT model, so `deliver:
+        // cross-model` keeps it on the external path even where in-session
+        // subagents exist. This is the one case the external CLI is for.
         let (is_native, line) = agent_delivery_line(
             "keel_external_auditor",
             "term:audit",
             "Cross-model second opinion",
             None,
+            Some("cross-model"),
             Client::ClaudeCode.provides_native_subagents(),
         );
-        assert!(!is_native, "no native equivalent → cross-model bucket");
+        assert!(!is_native, "deliver: cross-model → external bucket");
         assert!(line.starts_with("- keel_external_auditor"));
     }
 }
