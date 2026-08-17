@@ -301,9 +301,12 @@ impl Server {
     }
 
     fn audit_scope(&self, target: &str, base: Option<&str>) -> Result<String, Value> {
+        // The repo the session is working in, not the workspace holding the
+        // rules; `self.root` is only the fallback. See `audit::repo_root`.
+        let repo = keel_core::audit::repo_root(None).unwrap_or_else(|| self.root.clone());
         let scope = match target {
-            "commit" => keel_core::audit::target_for_commit(&self.root),
-            "pr" => keel_core::audit::target_for_pr(&self.root, base),
+            "commit" => keel_core::audit::target_for_commit(&repo),
+            "pr" => keel_core::audit::target_for_pr(&repo, base),
             other => return Err(rpc_error(-32602, &format!("unknown audit target: {other}"))),
         }
         .ok_or_else(|| {

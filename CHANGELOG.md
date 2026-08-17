@@ -4,6 +4,40 @@ Starts from `0.11.0` forward — not a retroactive reconstruction of the
 whole project history (that lives in `git log`). Versions here track
 `Cargo.toml`'s workspace `version`.
 
+## 0.19.1
+
+- **The audit gates fingerprint the repo being shipped, not the workspace.**
+  `keel gate` computed the change-set from the `--workspace` path, which is where
+  the RULES live. Since `keel launch` wires the hook pinned to that path, in every
+  project except the governance workspace itself the gate audited the wrong tree:
+
+  - With the workspace clean, `--target commit` resolved to its empty staged
+    change-set — a constant hash (`files: []`) that any session could sign without
+    auditing a line of what it was shipping. The gate looked enforced and was not.
+  - With the workspace on an unmerged branch, `--target pr` demanded an audit of
+    *those* files before allowing a PR in an unrelated repo — unsatisfiable without
+    a false attestation in the ledger.
+
+  `audit::repo_root` now resolves the client's repository (hook payload `cwd`, then
+  `KEEL_CLIENT_CWD`, `PWD`, the process directory; first git toplevel wins) and
+  `keel gate`, `keel audit-scope` and the MCP `keel.audit.scope` all compute against
+  it. The workspace stays the fallback, so a payload without a usable cwd behaves as
+  before rather than losing the gate. `.keel/project.yaml` was never consulted for
+  this and still is not — the binding selects composition layers, not the diff.
+
+- **PR bases resolve against the remote ref.** `target_for_pr` now prefers
+  `origin/<base>` over a bare `<base>`. A local base branch that has not been pulled
+  silently inflates the diff: in the case that exposed this, a 4-file branch
+  fingerprinted as 46 files against a stale local `master`, so the audit and the
+  gate could never agree on a scope. Qualified names and bases with no remote
+  counterpart are left untouched.
+
+- **The block packet names the change-set.** The `audit.recorded_for_change`
+  precondition now lists the files (first 20, then a count) and states that the
+  auditor runs as an in-session subagent. A bare hash makes rediscovering the scope
+  the session's problem, and the cheapest way out of that is signing something
+  nobody read.
+
 ## 0.19.0
 
 - **Native in-session subagents for agent delivery (`nativeSubagent`)**: an

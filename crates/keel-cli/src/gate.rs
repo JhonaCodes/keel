@@ -116,7 +116,15 @@ pub fn gate(root: &Path, client: Client, session_flag: Option<String>) -> Result
         .as_ref()
         .and_then(|l| l.recorded_audits(&session_id).ok())
         .unwrap_or_default();
-    if let Some(target) = target_for_command(&files.root, event.command.as_deref()) {
+    // The audit target is the repo the CLIENT is in, not the workspace. Those
+    // are different directories in every project except this one, and taking
+    // the workspace meant the gate fingerprinted a tree nobody was shipping.
+    // `files.root` stays the fallback so a payload without a usable cwd behaves
+    // as before rather than losing the gate entirely.
+    let client_cwd = client_cwd_from_payload(&input);
+    let audit_root =
+        keel_core::audit::repo_root(client_cwd.as_deref()).unwrap_or_else(|| files.root.clone());
+    if let Some(target) = target_for_command(&audit_root, event.command.as_deref()) {
         event.audit_scope = Some(target.scope);
         event.audit_mode = Some(target.mode);
         if !target.files.is_empty() {
@@ -490,6 +498,19 @@ fn parse(client: Client, input: &str) -> Option<(Event, bool)> {
         Client::ClaudeCode => parse_claude_code_hook(input),
         Client::Codex => parse_codex_hook(input),
     }
+}
+
+/// The client's working directory as reported by the hook payload. Read
+/// dialect-agnostically: every client that reports one calls it `cwd`, and a
+/// payload without it simply falls through to the environment-based resolution
+/// in `audit::repo_root`.
+fn client_cwd_from_payload(input: &str) -> Option<String> {
+    serde_json::from_str::<serde_json::Value>(input)
+        .ok()?
+        .get("cwd")?
+        .as_str()
+        .filter(|cwd| !cwd.is_empty())
+        .map(str::to_string)
 }
 
 /// Translates a Claude Code hook payload into a keel event + preventability
@@ -921,6 +942,37 @@ fn capture_raw_for_debug(path: Option<&str>, client: Client, raw: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_clients_cwd_is_read_from_the_payload() {
+        // The gate fingerprints the repo the client is in. Losing this is not a
+        // cosmetic regression: it silently sends the audit target back to the
+        // governance workspace, where the change-set is empty and any session
+        // can sign it without auditing what it ships.
+        let payload = serde_json::json!({
+            "hook_event_name": "PreToolUse",
+            "session_id": "s1",
+            "cwd": "/work/app",
+            "tool_name": "Bash",
+            "tool_input": { "command": "gh pr create --base master" }
+        })
+        .to_string();
+        assert_eq!(
+            client_cwd_from_payload(&payload).as_deref(),
+            Some("/work/app")
+        );
+    }
+
+    #[test]
+    fn a_payload_without_a_usable_cwd_falls_through() {
+        let absent = serde_json::json!({ "hook_event_name": "PreToolUse" }).to_string();
+        assert_eq!(client_cwd_from_payload(&absent), None);
+
+        let empty = serde_json::json!({ "hook_event_name": "PreToolUse", "cwd": "" }).to_string();
+        assert_eq!(client_cwd_from_payload(&empty), None);
+
+        assert_eq!(client_cwd_from_payload("not json"), None);
+    }
 
     #[test]
     fn test_runner_detection_covers_the_common_ecosystems() {
