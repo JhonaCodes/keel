@@ -151,20 +151,60 @@ fn recorded_evidence_is_distinct_and_scoped_to_the_session() {
         .unwrap();
 
     let mut s1 = ledger.recorded_evidence("s1").unwrap();
-    s1.sort_by_key(|(k, v)| (format!("{k:?}"), format!("{v:?}")));
+    s1.sort_by_key(|(k, v, r)| (format!("{k:?}"), format!("{v:?}"), r.clone()));
     assert_eq!(
         s1,
         vec![
-            (EventKind::FileEdited, Verdict::Valid),
-            (EventKind::TestCompleted, Verdict::Invalid),
+            (EventKind::FileEdited, Verdict::Valid, "r2".to_string()),
+            (EventKind::TestCompleted, Verdict::Invalid, "r1".to_string()),
         ]
     );
 
     let s2 = ledger.recorded_evidence("s2").unwrap();
-    assert_eq!(s2, vec![(EventKind::TestCompleted, Verdict::Invalid)]);
+    assert_eq!(
+        s2,
+        vec![(EventKind::TestCompleted, Verdict::Invalid, "r1".to_string())]
+    );
 
     let unknown = ledger.recorded_evidence("no-such-session").unwrap();
     assert!(unknown.is_empty());
+}
+
+/// Two recorder rules classifying the SAME event kind with the same verdict are
+/// distinct evidence, not one collapsed row — otherwise a gate demanding one of
+/// them would be satisfied by the other.
+#[test]
+fn recorded_evidence_keeps_recorders_apart() {
+    let ledger = Ledger::open_in_memory().unwrap();
+    for (id, rule) in [
+        ("ev_impl", "global.record-audit"),
+        ("ev_test", "global.record-test-audit"),
+    ] {
+        ledger
+            .append(&LedgerEntry {
+                event_kind: EventKind::TaskCompleted,
+                ..entry(id, rule, Verdict::Invalid, "2026-01-01T00:00:00Z")
+            })
+            .unwrap();
+    }
+
+    let mut got = ledger.recorded_evidence("s1").unwrap();
+    got.sort_by_key(|(_, _, r)| r.clone());
+    assert_eq!(
+        got,
+        vec![
+            (
+                EventKind::TaskCompleted,
+                Verdict::Invalid,
+                "global.record-audit".to_string()
+            ),
+            (
+                EventKind::TaskCompleted,
+                Verdict::Invalid,
+                "global.record-test-audit".to_string()
+            ),
+        ]
+    );
 }
 
 #[test]

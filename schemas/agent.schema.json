@@ -36,6 +36,10 @@
           "minLength": 1,
           "description": "Optional name of an equivalent native subagent in the launched client (e.g. Claude Code's `~/.claude/agents/<name>`). When the parent client provides native subagents (client=claude-code), Keel delivers this agent as an IN-SESSION Task subagent instead of spawning the external `executor` CLI. The `executor` remains the fallback for clients without native subagents and for explicit cross-model second opinions."
         },
+        "deliver": {
+          "enum": ["in-session", "cross-model"],
+          "description": "How this agent reaches a model when the launched client offers in-session subagents. Default `in-session`: spawned inside the running session — by `nativeSubagent` name when declared, otherwise carrying its own `objective` as the contract. Use `cross-model` ONLY for an agent whose value IS running under a different model (a second opinion): it reserves the agent for the external `keel.agent.invoke` CLI, which runs under `env_clear` (no HOME, no auth, no TTY) and is the wrong default for an everyday expert or auditor."
+        },
         "objective": { "type": "string" },
         "match": {
           "type": "object",

@@ -282,6 +282,7 @@ pub fn compile_layered(
                     role: a.spec.role.clone(),
                     executor: executor_id,
                     native_subagent: a.spec.native_subagent.clone(),
+                    deliver: a.spec.deliver.clone(),
                     objective: a.spec.objective.clone(),
                     match_: compile_match(
                         a.spec.match_.as_ref(),
@@ -843,8 +844,12 @@ fn compile_match(
 ) -> CompiledMatch {
     let derived = crate::routing::derive_terms(&[id, blurb.unwrap_or("")]);
     let mut context: Vec<String> = authored.map(|m| m.context.clone()).unwrap_or_default();
+    // A cue in the capability's OWN id/description is a claim about itself, so
+    // only the self-promotable cues count here (a technology cue must be
+    // authored, or every capability in a Flutter workspace would claim
+    // `platform/flutter` at the top weight).
     for term in &derived {
-        if let Some(ctx) = crate::routing::context_for_term(term)
+        if let Some(ctx) = crate::routing::self_context_for_term(term)
             && !context.iter().any(|c| c == ctx)
         {
             context.push(ctx.to_string());

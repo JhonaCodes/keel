@@ -582,6 +582,13 @@ pub struct CompiledAgent {
     /// Task subagent instead of the external `executor` CLI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_subagent: Option<String>,
+    /// `in-session` (default) or `cross-model`. Decides whether this agent is
+    /// spawned inside the running session — by `native_subagent` name, or
+    /// carrying its `objective` as the contract — or reserved for the external
+    /// `keel.agent.invoke` CLI. Only an agent whose value IS a different model
+    /// belongs on the latter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deliver: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub objective: Option<String>,
     /// Resolved routing signal (D-014): authored `match` + derived terms.

@@ -4,6 +4,43 @@ Starts from `0.11.0` forward — not a retroactive reconstruction of the
 whole project history (that lives in `git log`). Versions here track
 `Cargo.toml`'s workspace `version`.
 
+## Unreleased
+
+- **An agent without a client-side subagent no longer falls off a cliff.**
+  `agent_delivery_line` split agents on `nativeSubagent`: declare it and you got
+  an in-session Task, omit it and you were sent to `keel.agent.invoke` — the
+  external CLI that runs under `env_clear` (no HOME, no auth, no TTY) and hangs,
+  the very path the 0.19.0 notes say must not be the default auditor. So the
+  everyday experts of a workspace whose agents live only in keel's own `.yaml`,
+  with no `~/.claude/agents/<name>` to point at, were advertised exclusively
+  through a route that cannot complete. Under a client with in-session subagents
+  every agent is now delivered in-session: named when it declares
+  `nativeSubagent`, otherwise carrying its own `objective` as the contract to
+  spawn a generic Task with — the snapshot already held that text, keel simply
+  was not handing it over. `spec.deliver: cross-model` opts an agent back onto
+  the external path, which is the point for one whose value IS a second opinion
+  from a different model (`keel_external_auditor`); everything else defaults to
+  `in-session`.
+
+- **Routing can see what technology a code moment is.** `detect_contexts` knew
+  six cues, all ticket-shaped (`pr`, `linear`, `jira`, …), so a `context:
+  [platform/flutter]` block — the highest weight in the scorer — could never
+  fire on a file edit, and a `platforms/<tech>/` layer's agents and skills were
+  left competing on weight-1 derived terms. It now also reads `dart`, `flutter`,
+  `widget`, `pubspec`, `rust` and `cargo` off the moment text, which on a file
+  edit is the file's own path or content. `dart` maps to the language layer, not
+  to Flutter: a Dart backend file is not a Flutter file. Ambiguous short tokens
+  stay out — `rs` would have fired the Rust layer on every Dart file importing
+  `logger_rs`.
+
+- **`evidence.recorded` can name the recorder.** It matched on `(event_kind,
+  verdict)` alone, and `Ledger::recorded_evidence` discarded the `rule_id` the
+  evidence table already stores and indexes. Two recorder rules classifying the
+  same event kind — an implementation audit and a test-quality audit, both on
+  `task.completed` — were therefore indistinguishable, and either one satisfied
+  both gates. The precondition takes an optional `rule`; omitted, it behaves
+  exactly as before, so existing rules keep their meaning.
+
 ## 0.19.2
 
 - **Audit evidence is keyed on the change-set, not on the session.** The scope is

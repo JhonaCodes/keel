@@ -340,22 +340,27 @@ impl Ledger {
         rows.collect()
     }
 
-    /// Distinct `(event_kind, verdict)` pairs recorded for a session — the
-    /// read side of the `evidence.recorded` precondition (spec-adjacent to
-    /// `skill.loaded`): the broker/gate populates `Event::recorded_evidence`
+    /// Distinct `(event_kind, verdict, rule_id)` triples recorded for a session
+    /// — the read side of the `evidence.recorded` precondition (spec-adjacent
+    /// to `skill.loaded`): the broker/gate populates `Event::recorded_evidence`
     /// from this before evaluation, so a rule can require evidence of a past
-    /// event without the runtime ever querying the ledger itself. `DISTINCT`
-    /// bounds the result at `#EventKind * #Verdict` regardless of ledger size.
+    /// event without the runtime ever querying the ledger itself.
+    ///
+    /// `rule_id` comes along because it is the only thing that distinguishes
+    /// two recorder rules classifying the SAME event kind; without it every
+    /// evidence gate is satisfied by any one of them. `DISTINCT` bounds the
+    /// result at `#EventKind * #Verdict * #Rule` regardless of ledger size.
     pub fn recorded_evidence(
         &self,
         session_id: &str,
-    ) -> rusqlite::Result<Vec<(EventKind, Verdict)>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT DISTINCT event_kind, verdict FROM evidence WHERE session_id = ?1")?;
+    ) -> rusqlite::Result<Vec<(EventKind, Verdict, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT event_kind, verdict, rule_id FROM evidence WHERE session_id = ?1",
+        )?;
         let rows = stmt.query_map(params![session_id], |row| {
             let ek: String = row.get(0)?;
             let v: String = row.get(1)?;
+            let rule_id: String = row.get(2)?;
             let event_kind: EventKind = serde_json::from_str(&ek).map_err(|e| {
                 rusqlite::Error::FromSqlConversionFailure(
                     0,
@@ -370,7 +375,7 @@ impl Ledger {
                     Box::new(e),
                 )
             })?;
-            Ok((event_kind, verdict))
+            Ok((event_kind, verdict, rule_id))
         })?;
         rows.collect()
     }
